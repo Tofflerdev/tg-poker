@@ -1,0 +1,23 @@
+{
+  "compilerOptions": {
+    /* Основные параметры */
+    "target": "ES2022",                       /* Современный синтаксис (под Node 18+) */
+    "module": "NodeNext",                     /* Поддержка ESM */
+    "moduleResolution": "NodeNext",           /* Поиск модулей как в ESM */
+    "rootDir": "./server",                    /* Где исходники TypeScript */
+    "outDir": "./dist",                       /* Куда собирать JS */
+
+    /* Типизация */
+    "strict": true,                           /* Строгий режим */
+    "esModuleInterop": true,                  /* Упрощает работу с CommonJS модулями */
+    "forceConsistentCasingInFileNames": true,
+
+    /* Поддержка кастомных типов */
+    "typeRoots": ["./types", "./node_modules/@types"],
+
+    /* Удобства */
+    "skipLibCheck": true                      /* Не проверять типы в node_modules */
+  },
+  "include": ["server", "types"],             /* Берём исходники и типы */
+  "exclude": ["node_modules", "dist"]         /* Игнорируем мусор */
+}
