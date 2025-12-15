@@ -1,35 +1,29 @@
 import React from "react";
 import SeatsDisplay from "./SeatsDisplay";
 import CommunityCards from "./CommunityCards";
-
-interface Player {
-  id: string;
-  seat?: number; // у наблюдателей места нет
-  hand: string[];
-}
+import { Player, Spectator } from "../../../types/index";
 
 interface TableProps {
-  seats?: (Player | null)[];      // делаем необязательными
-  spectators?: Player[];          // делаем необязательными
+  seats?: (Player | null)[];
+  spectators?: Spectator[];
   mySeat: number | null;
+  communityCards?: string[];
+  currentPlayer?: number | null;
+  onSit: (seat: number) => void;
+  // стили (опционально)
   tableWidth?: number;
   tableHeight?: number;
-  seatSize?: number;
-  seatOffset?: number;
-  communityCards?: string[];      // делаем необязательными
-  onSit: (seat: number) => void;
 }
 
 const Table: React.FC<TableProps> = ({
-  seats = [],                      // дефолт — пустой массив
-  spectators = [],                 // дефолт — пустой массив
+  seats = [],
+  spectators = [],
   mySeat,
+  communityCards = [],
+  currentPlayer,
+  onSit,
   tableWidth = 700,
   tableHeight = 400,
-  seatSize = 120,
-  seatOffset = 50,
-  communityCards = [],             // дефолт — пустой массив
-  onSit,
 }) => {
   return (
     <>
@@ -44,18 +38,15 @@ const Table: React.FC<TableProps> = ({
           border: "10px solid brown",
         }}
       >
-        {/* Игроки вокруг стола */}
         <SeatsDisplay
           seats={seats}
           mySeat={mySeat}
           tableWidth={tableWidth}
           tableHeight={tableHeight}
-          seatSize={seatSize}
-          seatOffset={seatOffset}
+          currentPlayer={currentPlayer}
           onSit={onSit}
         />
 
-        {/* Community Cards в центре стола */}
         <div
           style={{
             position: "absolute",
@@ -68,21 +59,15 @@ const Table: React.FC<TableProps> = ({
         </div>
       </div>
 
-      {/* Наблюдатели под столом */}
       <div style={{ marginTop: 20 }}>
-        <h3>Наблюдатели</h3>
+        <h3>Наблюдатели ({spectators.length})</h3>
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-          {spectators.map((s) => (
+          {spectators.map((s, i) => (
             <div
-              key={s.id}
-              style={{
-                padding: "5px 10px",
-                background: "#555",
-                borderRadius: 5,
-                color: "#fff",
-              }}
+              key={s.id + i}
+              style={{ padding: "5px 10px", background: "#555", borderRadius: 5, color: "#fff" }}
             >
-              {s.id}
+              {s.id.substring(0, 5)}...
             </div>
           ))}
         </div>

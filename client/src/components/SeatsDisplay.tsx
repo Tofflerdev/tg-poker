@@ -1,11 +1,6 @@
 import React from "react";
 import HandDisplay from "./HandDisplay";
-
-interface Player {
-  id: string;
-  seat?: number; // у наблюдателей может не быть места
-  hand: string[];
-}
+import { Player } from "../../../types/index";
 
 interface SeatsDisplayProps {
   seats: (Player | null)[];
@@ -13,7 +8,7 @@ interface SeatsDisplayProps {
   tableWidth: number;
   tableHeight: number;
   seatSize?: number;
-  seatOffset?: number;
+  currentPlayer?: number | null; // Кто сейчас ходит?
   onSit: (seat: number) => void;
 }
 
@@ -23,9 +18,11 @@ const SeatsDisplay: React.FC<SeatsDisplayProps> = ({
   tableWidth,
   tableHeight,
   seatSize = 120,
-  seatOffset = 50,
+  currentPlayer,
   onSit,
 }) => {
+  const seatOffset = 50;
+
   return (
     <>
       {seats.map((player, i) => {
@@ -37,6 +34,8 @@ const SeatsDisplay: React.FC<SeatsDisplayProps> = ({
 
         const isFree = !player;
         const canSit = isFree && mySeat === null;
+        // Подсветка активного игрока желтым бордером
+        const isActive = currentPlayer === i; 
 
         return (
           <div
@@ -48,8 +47,10 @@ const SeatsDisplay: React.FC<SeatsDisplayProps> = ({
               width: seatSize,
               height: seatSize,
               borderRadius: 12,
-              background: canSit ? "#4a7a4a" : isFree ? "#3a5a3a" : "#444",
-              border: `2px solid ${canSit ? "#aaffaa" : isFree ? "#777" : "#555"}`,
+              background: canSit ? "#4a7a4a" : isFree ? "#3a5a3a" : "#222",
+              border: isActive 
+                ? "4px solid #FFD700" // Золотая рамка для активного
+                : `2px solid ${canSit ? "#aaffaa" : isFree ? "#777" : "#444"}`,
               display: "flex",
               flexDirection: "column",
               alignItems: "center",
@@ -57,22 +58,29 @@ const SeatsDisplay: React.FC<SeatsDisplayProps> = ({
               color: "white",
               textAlign: "center",
               cursor: canSit ? "pointer" : "default",
-              transition: "background 0.2s, border 0.2s",
-            }}
-            onMouseEnter={(e) => {
-              if (canSit) e.currentTarget.style.background = "#5fbf5f";
-            }}
-            onMouseLeave={(e) => {
-              if (canSit) e.currentTarget.style.background = "#4a7a4a";
+              transition: "all 0.3s",
+              boxShadow: isActive ? "0 0 15px #FFD700" : "none"
             }}
             onClick={() => canSit && onSit(i)}
           >
             {player ? (
-              <HandDisplay cards={player.hand} title={`Player`} />
+              <>
+                {/* Карты */}
+                <div style={{ transform: "scale(0.8)", marginBottom: -10 }}>
+                   <HandDisplay cards={player.hand} size={60} />
+                </div>
+                
+                {/* Инфо об игроке */}
+                <div style={{ fontSize: 12, marginTop: 5 }}>
+                    <div>Stack: {player.chips}</div>
+                    {player.bet > 0 && <div style={{color: '#aaaaff'}}>Bet: {player.bet}</div>}
+                    {player.folded && <div style={{color: '#ff6666'}}>FOLD</div>}
+                </div>
+              </>
             ) : (
               <>
-                <div>Место свободно</div>
-                {canSit && <div style={{ marginTop: 5 }}>Сесть</div>}
+                <div style={{fontSize: 12}}>Empty</div>
+                {canSit && <div style={{ marginTop: 2, fontWeight: 'bold' }}>SIT</div>}
               </>
             )}
           </div>

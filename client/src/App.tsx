@@ -2,46 +2,38 @@ import React, { useEffect, useState } from "react";
 import { io, Socket } from "socket.io-client";
 import GameControls from "./components/GameControls";
 import Table from "./components/Table";
+// 👇 IMPORT ИЗ ОБЩИХ ТИПОВ (без .js для Vite/Webpack)
+import { GameState, ShowdownResult, ClientEvents, ServerEvents } from "../../types/index";
 
-interface Player {
-  id: string;
-  seat?: number;
-  hand: string[];
-}
-
-interface GameState {
-  seats: (Player | null)[];
-  spectators: Player[];
-  communityCards: string[];
-}
-
-interface ShowdownResult {
-  results: any[];
-  winners: any[];
-}
-
-const socket: Socket = io("http://localhost:3000");
+// Типизация сокета
+const socket: Socket<ServerEvents, ClientEvents> = io("http://localhost:3000");
 
 const App: React.FC = () => {
   const [state, setState] = useState<GameState>({
     seats: Array(6).fill(null),
     spectators: [],
     communityCards: [],
+    pot: 0,
+    currentBet: 0,
+    currentPlayer: null,
+    dealerPosition: 0,
+    smallBlind: 0,
+    bigBlind: 0,
+    stage: 'waiting'
   });
+  
   const [showdown, setShowdown] = useState<ShowdownResult | null>(null);
   const [mySeat, setMySeat] = useState<number | null>(null);
 
   useEffect(() => {
-    socket.on("state", (gameState: GameState) => {
+    socket.on("state", (gameState) => {
       setState(gameState);
       setShowdown(null);
     });
 
-    socket.on("showdown", (result: ShowdownResult) => setShowdown(result));
+    socket.on("showdown", (result) => setShowdown(result));
+    socket.on("errorMessage", (msg) => alert(msg));
 
-    socket.on("errorMessage", (msg: string) => alert(msg));
-
-    // 🚀 сразу при подключении запросим актуальное состояние
     socket.emit("getState");
 
     return () => {
@@ -67,6 +59,13 @@ const App: React.FC = () => {
       }}
     >
       <h1 style={{ textAlign: "center" }}>♠️ Poker MVP React</h1>
+      
+      {/* Отображаем банк и стадию */}
+      <div style={{ textAlign: "center", marginBottom: 10 }}>
+        <div>Pot: <strong>{state.pot}</strong></div>
+        <div>Stage: {state.stage}</div>
+      </div>
+
       <GameControls socket={socket} />
 
       <Table
@@ -74,6 +73,7 @@ const App: React.FC = () => {
         spectators={state.spectators}
         mySeat={mySeat}
         communityCards={state.communityCards}
+        currentPlayer={state.currentPlayer} // Передаем, чтобы подсветить
         onSit={handleSit}
       />
 

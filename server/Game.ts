@@ -1,33 +1,13 @@
 import Deck from "./Deck.js";
 import pkg from "pokersolver";
+import { Player, GameState, GameStage, Spectator } from "../types/index.js";
 const { Hand } = pkg;
 
-export interface Player {
-  id: string;
-  seat: number;
-  hand: string[];
-  chips: number;           // стек игрока
-  bet: number;             // текущая ставка в раунде
-  folded: boolean;         // сбросил карты
-  allIn: boolean;          // пошел ва-банк
-}
 
-export interface GameState {
-  seats: (Player | null)[];
-  spectators: { id: string }[];
-  communityCards: string[];
-  pot: number;
-  currentBet: number;
-  currentPlayer: number | null;
-  dealerPosition: number;
-  smallBlind: number;
-  bigBlind: number;
-  stage: 'waiting' | 'preflop' | 'flop' | 'turn' | 'river' | 'showdown';
-}
 
 export default class Game {
   private seats: (Player | null)[] = Array(6).fill(null);
-  private spectators: { id: string }[] = [];
+  private spectators: Spectator[] = [];
   private communityCards: string[] = [];
   private deck: Deck | null = null;
   
@@ -37,7 +17,7 @@ export default class Game {
   private dealerPosition: number = 0;
   private smallBlind: number = 10;
   private bigBlind: number = 20;
-  private stage: GameState['stage'] = 'waiting';
+  private stage: GameStage = 'waiting';
   private lastRaisePosition: number | null = null;
 
   // Добавление игрока
