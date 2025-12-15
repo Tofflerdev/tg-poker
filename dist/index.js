@@ -48,7 +48,7 @@ io.on("connection", (socket) => {
         });
     };
     // Новый клиент по умолчанию становится наблюдателем
-    game.addPlayer(socket.id);
+    game.addSpectator(socket.id);
     // Клиент сам может запросить состояние
     socket.on("getState", () => {
         updateState();
