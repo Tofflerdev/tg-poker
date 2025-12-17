@@ -1,6 +1,6 @@
 import Deck from "./Deck.js";
 import pkg from "pokersolver";
-import { Player, GameState, GameStage, Spectator } from "../types/index.js";
+import { Player, GameState, GameStage, Spectator, ShowdownResult } from "../types/index.js";
 const { Hand } = pkg;
 
 
@@ -20,6 +20,8 @@ export default class Game {
   private stage: GameStage = 'waiting';
   private lastRaisePosition: number | null = null;
 
+  public lastShowdown: ShowdownResult | null = null;
+
   // Добавление игрока
   addPlayer(id: string, seat: number, chips: number = 1000): boolean {
     if (seat < 0 || seat >= this.seats.length) return false;
@@ -36,6 +38,7 @@ export default class Game {
       bet: 0,
       folded: false,
       allIn: false,
+      acted: false,
     };
     this.seats[seat] = player;
     return true;
@@ -61,6 +64,7 @@ export default class Game {
     this.currentPlayer = null;
     this.stage = 'waiting';
     this.lastRaisePosition = null;
+    this.lastShowdown = null;
     
     this.seats.forEach((p) => {
       if (p) {
@@ -68,13 +72,15 @@ export default class Game {
         p.bet = 0;
         p.folded = false;
         p.allIn = false;
+        p.acted = false;
       }
     });
   }
 
   start() {
-    const activePlayers = this.getActivePlayers();
-    if (activePlayers.length < 2) {
+    const playersCanPlay = this.seats.filter(p => p !== null && p.chips > 0);
+    
+    if (playersCanPlay.length < 2) {
       throw new Error("Нужно минимум 2 игрока");
     }
 
@@ -130,6 +136,7 @@ export default class Game {
     if (!player) return false;
 
     player.folded = true;
+    player.acted = true;
     this.nextPlayer();
     return true;
   }
@@ -139,6 +146,7 @@ export default class Game {
     if (!player) return false;
     if (player.bet < this.currentBet) return false; // нельзя чекать, нужно коллировать
 
+    player.acted = true;
     this.nextPlayer();
     return true;
   }
@@ -156,19 +164,20 @@ export default class Game {
 
     if (player.chips === 0) player.allIn = true;
 
+    player.acted = true;
     this.nextPlayer();
     return true;
   }
 
-  raise(playerId: string, amount: number): boolean {
+   raise(playerId: string, amount: number): boolean {
     const player = this.getCurrentPlayerIfValid(playerId);
     if (!player) return false;
 
     const toCall = this.currentBet - player.bet;
     const totalBet = toCall + amount;
 
-    if (totalBet > player.chips) return false; // недостаточно фишек
-    if (amount < this.bigBlind) return false; // минимальный рейз = BB
+    if (totalBet > player.chips) return false;
+    if (amount < this.bigBlind) return false;
 
     player.chips -= totalBet;
     player.bet += totalBet;
@@ -177,7 +186,13 @@ export default class Game {
 
     if (player.chips === 0) player.allIn = true;
 
-    this.lastRaisePosition = player.seat;
+    // ОБНОВЛЕННАЯ ЛОГИКА:
+    // Райзер походил, но все остальные теперь должны ответить заново
+    this.seats.forEach(p => {
+        if (p) p.acted = false; 
+    });
+    player.acted = true; 
+
     this.nextPlayer();
     return true;
   }
@@ -191,10 +206,14 @@ export default class Game {
     player.chips = 0;
     this.pot += allInAmount;
     player.allIn = true;
+    player.acted = true; // <---
 
     if (player.bet > this.currentBet) {
       this.currentBet = player.bet;
-      this.lastRaisePosition = player.seat;
+      // Если это рейз, сбрасываем acted у других
+      this.seats.forEach(p => {
+          if (p && p !== player) p.acted = false;
+      });
     }
 
     this.nextPlayer();
@@ -215,30 +234,42 @@ export default class Game {
 
   private isBettingRoundComplete(): boolean {
     const activePlayers = this.getActivePlayers();
-    
-    // Все игроки (кроме all-in) сделали ход и уравняли ставку
     const playersWhoCanAct = activePlayers.filter(p => !p.allIn);
     
     if (playersWhoCanAct.length === 0) return true;
     
-    const allBetsEqual = playersWhoCanAct.every(p => p.bet === this.currentBet);
-    const allActed = this.currentPlayer === this.lastRaisePosition || playersWhoCanAct.length === 1;
-    
-    return allBetsEqual && allActed;
+    // Проверяем:
+    // 1. Все ставки равны текущей
+    // 2. У всех стоит флаг acted = true
+    return playersWhoCanAct.every(p => p.bet === this.currentBet && p.acted);
   }
 
   private nextStage() {
-    // Сброс ставок игроков
+    // Сброс ставок И флагов acted
     this.seats.forEach(p => {
-      if (p) p.bet = 0;
+      if (p) {
+        p.bet = 0;
+        p.acted = false; // <--- Новый раунд, никто еще не ходил
+      }
     });
     this.currentBet = 0;
 
     const activePlayers = this.getActivePlayers();
-    
     if (activePlayers.length === 1) {
-      // Все сбросили, победитель забирает банк
-      this.awards([activePlayers[0]]);
+      const winner = activePlayers[0];
+      this.awards([winner]);
+
+      // Создаем искусственный результат "showdown", чтобы фронтенд понял, что игра окончена
+      this.lastShowdown = {
+        results: [], // Пустой список результатов, т.к. карты не сравнивались
+        winners: [{ 
+          id: winner.id, 
+          descr: "Win by Fold" // Описание победы
+        }],
+      };
+
+      // Переключаем стадию, чтобы появилась кнопка "Next Hand"
+      this.stage = 'showdown';
       return;
     }
 
@@ -261,8 +292,8 @@ export default class Game {
         return;
     }
 
+    // Начинает игрок слева от дилера
     this.currentPlayer = this.getNextPlayer(this.dealerPosition);
-    this.lastRaisePosition = this.currentPlayer;
   }
 
   flop() {
@@ -299,11 +330,11 @@ export default class Game {
 
     this.awards(winners.map(w => w.player));
 
-    return {
+    this.lastShowdown = {
       results: results.map(r => ({
         id: r.player.id,
         seat: r.player.seat,
-        hand: r.player.hand,
+        hand: r.player.hand, 
         descr: r.descr,
         rank: r.rank,
       })),
@@ -312,6 +343,11 @@ export default class Game {
         descr: w.descr,
       })),
     };
+
+    this.stage = 'showdown'; 
+    this.currentPlayer = null;
+
+    return this.lastShowdown;
   }
 
   private awards(winners: Player[]) {
@@ -320,7 +356,6 @@ export default class Game {
       w.chips += share;
     });
     this.pot = 0;
-    this.stage = 'waiting';
     this.currentPlayer = null;
     
     // Передвижение дилера

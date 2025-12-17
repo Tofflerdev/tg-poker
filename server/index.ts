@@ -19,41 +19,46 @@ app.get("/", (_req, res) => {
 io.on("connection", (socket) => {
   console.log("Player connected:", socket.id);
 
- const updateState = function () {
-    let state = game.getState()
-    let s = structuredClone(state)
-    let players: string[] = [];
-    s.seats.filter((p) => p !== null).map((p) => {
-      if (p.id !== null ) {
-        players.push(p.id)
-      }
-    })
-    s.spectators.map((p) => {
-      if (p.id !== null ) {
-        players.push(p.id)
-      }
-    })
+   const updateState = function () {
+    const state = game.getState();
+    const s = structuredClone(state); // Полная копия состояния
 
+    // Получаем список ID всех подключенных (игроки + зрители)
+    const players: string[] = [];
+    s.seats.forEach(p => { if (p) players.push(p.id) });
+    s.spectators.forEach(p => { players.push(p.id) });
+
+    // Рассылаем каждому персональное состояние
     players.forEach((id) => {
-      let playerSeats: any[] = []
-      s.seats.map((pl) => {
-        let p = structuredClone(pl)
-        if (p !== null && p.id !== id && p.hand.length > 0) {
-          p.hand = ["back","back"]
+      // Скрываем карты чужих игроков
+      const maskedSeats = s.seats.map(p => {
+        if (!p) return null;
+
+        // Если это не я и у игрока есть карты
+        if (p.id !== id && p.hand.length > 0) {
+          // МЫ СКРЫВАЕМ КАРТЫ, ЕСЛИ:
+          // 1. Сейчас НЕ шоудаун
+          // 2. ИЛИ игрок сбросил карты (folded) — даже если сейчас шоудаун
+          if (s.stage !== 'showdown' || p.folded) {
+            return { ...p, hand: ["back", "back"] };
+          }
         }
-        playerSeats.push(p)
-      })
-      let playerState = {
-        seats: playerSeats,
-        spectators: s.spectators,
-        communityCards: s.communityCards,
-      }
-      console.log(`Sending state to id# ${id}...`)
-      console.log(playerState)
-      io.to(id).emit("state", playerState )
-    })
-    
-  }
+        
+        return p;
+      });
+
+      // Формируем объект ответа, сохраняя ВСЕ поля (stage, pot, etc)
+      const playerState = {
+        ...s, // <--- ВАЖНО: копируем все поля (stage, currentPlayer, pot...)
+        seats: maskedSeats,
+      };
+
+      io.to(id).emit("state", playerState);
+      
+      // Для отладки (в консоль сервера)
+      // console.log(`Sent state to ${id}, stage: ${playerState.stage}, current: ${playerState.currentPlayer}`);
+    });
+  };
 
   // Новый клиент по умолчанию становится наблюдателем
   game.addSpectator(socket.id);
@@ -73,29 +78,50 @@ io.on("connection", (socket) => {
     updateState();
   });
 
+    // Вспомогательная функция для обработки хода
+  const handleAction = (actionFn: () => boolean, errorMessage: string) => {
+    const success = actionFn();
+    if (!success) {
+      socket.emit("errorMessage", errorMessage);
+      return;
+    }
+
+    // Если после хода наступил Showdown — отправляем результаты всем
+    if (game.getState().stage === 'showdown' && game.lastShowdown) {
+      io.emit("showdown", game.lastShowdown);
+    }
+    
+    updateState();
+  };
+
+  socket.on("fold", () => {
+    handleAction(() => game.fold(socket.id), "Невозможно выполнить Fold");
+  });
+
+  socket.on("check", () => {
+    handleAction(() => game.check(socket.id), "Невозможно выполнить Check");
+  });
+
+  socket.on("call", () => {
+    handleAction(() => game.call(socket.id), "Невозможно выполнить Call");
+  });
+
+  socket.on("raise", (amount: number) => {
+    handleAction(() => game.raise(socket.id, amount), "Невозможно выполнить Raise");
+  });
+
   socket.on("reset", () => {
     game.reset();
     updateState();
   });
 
   socket.on("start", () => {
-    game.start();
-    updateState();
-  });
-
-  socket.on("flop", () => {
-    game.flop();
-    updateState();
-  });
-
-  socket.on("turn", () => {
-    game.turn();
-    updateState();
-  });
-
-  socket.on("river", () => {
-    game.river();
-    updateState();
+    try {
+      game.start();
+      updateState();
+    } catch (e: any) {
+      socket.emit("errorMessage", e.message);
+    }
   });
 
   socket.on("showdown", () => {

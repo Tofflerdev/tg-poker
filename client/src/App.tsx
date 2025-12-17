@@ -28,7 +28,9 @@ const App: React.FC = () => {
   useEffect(() => {
     socket.on("state", (gameState) => {
       setState(gameState);
-      setShowdown(null);
+      if (gameState.stage !== 'showdown') {
+        setShowdown(null);
+      }
     });
 
     socket.on("showdown", (result) => setShowdown(result));
@@ -66,7 +68,11 @@ const App: React.FC = () => {
         <div>Stage: {state.stage}</div>
       </div>
 
-      <GameControls socket={socket} />
+      <GameControls 
+        socket={socket} 
+        gameState={state} 
+        mySeat={mySeat} 
+      />
 
       <Table
         seats={state.seats}
@@ -79,6 +85,29 @@ const App: React.FC = () => {
 
       <h2>Showdown</h2>
       <pre>{showdown ? JSON.stringify(showdown, null, 2) : "—"}</pre>
+
+            {/* --- Debug Reset Button --- */}
+      <button
+        onClick={() => {
+          if (confirm("Вы уверены? Это сбросит текущую раздачу.")) {
+            socket.emit("reset");
+          }
+        }}
+        style={{
+          position: "absolute",
+          top: 20,
+          right: 20,
+          background: "transparent",
+          border: "1px solid #d9534f",
+          color: "#d9534f",
+          padding: "5px 10px",
+          borderRadius: 4,
+          cursor: "pointer",
+          fontSize: 12,
+        }}
+      >
+        ⚠️ Reset
+      </button>
     </div>
   );
 };

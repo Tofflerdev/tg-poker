@@ -11,6 +11,7 @@ export interface Player {
   bet: number;    // Текущая ставка в раунде
   folded: boolean;
   allIn: boolean;
+  acted: boolean;
 }
 
 export interface Spectator {
