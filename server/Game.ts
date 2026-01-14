@@ -31,7 +31,7 @@ export default class Game {
   addPlayer(id: string, seat: number, chips: number = 1000): boolean {
     if (seat < 0 || seat >= this.seats.length) return false;
     if (this.seats[seat]) return false;
-    if (this.stage !== 'waiting') return false; // нельзя добавлять во время игры
+    if (this.stage !== 'waiting' && this.stage !== 'showdown') return false; // нельзя добавлять во время игры
 
     this.spectators = this.spectators.filter((p) => p.id !== id);
 

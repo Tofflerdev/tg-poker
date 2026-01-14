@@ -89,6 +89,16 @@ io.on("connection", (socket) => {
     // Если после хода наступил Showdown — отправляем результаты всем
     if (game.getState().stage === 'showdown' && game.lastShowdown) {
       io.emit("showdown", game.lastShowdown);
+
+      // Проверяем игроков с нулевым стеком
+      const state = game.getState();
+      state.seats.forEach((player) => {
+        if (player && player.chips === 0) {
+          game.removePlayer(player.id);
+          game.addSpectator(player.id); // Возвращаем в зрители, чтобы обновлялся стейт
+          io.to(player.id).emit("errorMessage", "Ваш стек равен 0. Вы покидаете стол.");
+        }
+      });
     }
     
     updateState();
@@ -128,6 +138,16 @@ io.on("connection", (socket) => {
     const result = game.showdown();
     io.emit("state", game.getState())
     io.emit("showdown", result);
+
+    // Проверяем игроков с нулевым стеком
+    const state = game.getState();
+    state.seats.forEach((player) => {
+      if (player && player.chips === 0) {
+        game.removePlayer(player.id);
+        game.addSpectator(player.id);
+        io.to(player.id).emit("errorMessage", "Ваш стек равен 0. Вы покидаете стол.");
+      }
+    });
   });
 
   socket.on("disconnect", () => {

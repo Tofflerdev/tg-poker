@@ -32,6 +32,14 @@ const App: React.FC = () => {
       if (gameState.stage !== 'showdown') {
         setShowdown(null);
       }
+
+      // Если меня нет в списке игроков, сбрасываем mySeat
+      const meInSeats = gameState.seats.findIndex(p => p && p.id === socket.id);
+      if (meInSeats === -1) {
+        setMySeat(null);
+      } else {
+        setMySeat(meInSeats);
+      }
     });
 
     socket.on("showdown", (result) => setShowdown(result));
