@@ -13,7 +13,8 @@ const App: React.FC = () => {
     seats: Array(6).fill(null),
     spectators: [],
     communityCards: [],
-    pot: 0,
+    pots: [],
+    totalPot: 0,
     currentBet: 0,
     currentPlayer: null,
     dealerPosition: 0,
@@ -62,16 +63,15 @@ const App: React.FC = () => {
     >
       <h1 style={{ textAlign: "center" }}>♠️ Poker MVP React</h1>
       
-      {/* Отображаем банк и стадию */}
+      {/* Отображаем стадию */}
       <div style={{ textAlign: "center", marginBottom: 10 }}>
-        <div>Pot: <strong>{state.pot}</strong></div>
         <div>Stage: {state.stage}</div>
       </div>
 
-      <GameControls 
-        socket={socket} 
-        gameState={state} 
-        mySeat={mySeat} 
+      <GameControls
+        socket={socket}
+        gameState={state}
+        mySeat={mySeat}
       />
 
       <Table
@@ -79,7 +79,9 @@ const App: React.FC = () => {
         spectators={state.spectators}
         mySeat={mySeat}
         communityCards={state.communityCards}
-        currentPlayer={state.currentPlayer} // Передаем, чтобы подсветить
+        currentPlayer={state.currentPlayer}
+        pots={state.pots}
+        totalPot={state.totalPot}
         onSit={handleSit}
       />
 

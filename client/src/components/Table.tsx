@@ -1,7 +1,8 @@
 import React from "react";
 import SeatsDisplay from "./SeatsDisplay";
 import CommunityCards from "./CommunityCards";
-import { Player, Spectator } from "../../../types/index";
+import PotDisplay from "./PotDisplay";
+import { Player, Spectator, Pot } from "../../../types/index";
 
 interface TableProps {
   seats?: (Player | null)[];
@@ -9,6 +10,8 @@ interface TableProps {
   mySeat: number | null;
   communityCards?: string[];
   currentPlayer?: number | null;
+  pots?: Pot[];
+  totalPot?: number;
   onSit: (seat: number) => void;
   // стили (опционально)
   tableWidth?: number;
@@ -21,6 +24,8 @@ const Table: React.FC<TableProps> = ({
   mySeat,
   communityCards = [],
   currentPlayer,
+  pots = [],
+  totalPot = 0,
   onSit,
   tableWidth = 700,
   tableHeight = 400,
@@ -53,8 +58,13 @@ const Table: React.FC<TableProps> = ({
             top: "50%",
             left: "50%",
             transform: "translate(-50%, -50%)",
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            gap: 10,
           }}
         >
+          <PotDisplay pots={pots} totalPot={totalPot} />
           <CommunityCards cards={communityCards} spacing={10} size={60} />
         </div>
       </div>

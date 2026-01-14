@@ -1,6 +1,6 @@
 import Deck from "./Deck.js";
 import pkg from "pokersolver";
-import { Player, GameState, GameStage, Spectator, ShowdownResult } from "../types/index.js";
+import { Player, GameState, GameStage, Spectator, ShowdownResult, Pot, PotResult } from "../types/index.js";
 const { Hand } = pkg;
 
 
@@ -11,7 +11,7 @@ export default class Game {
   private communityCards: string[] = [];
   private deck: Deck | null = null;
   
-  private pot: number = 0;
+  private pots: Pot[] = [];           // Массив потов (основной + сайд-поты)
   private currentBet: number = 0;
   private currentPlayer: number | null = null;
   private dealerPosition: number = 0;
@@ -21,6 +21,11 @@ export default class Game {
   private lastRaisePosition: number | null = null;
 
   public lastShowdown: ShowdownResult | null = null;
+
+  // Вспомогательный метод для получения общей суммы всех потов
+  private getTotalPot(): number {
+    return this.pots.reduce((sum, pot) => sum + pot.amount, 0);
+  }
 
   // Добавление игрока
   addPlayer(id: string, seat: number, chips: number = 1000): boolean {
@@ -36,6 +41,7 @@ export default class Game {
       hand: [],
       chips,
       bet: 0,
+      totalBet: 0,  // Общая сумма ставок за раздачу
       folded: false,
       allIn: false,
       acted: false,
@@ -59,7 +65,7 @@ export default class Game {
   reset() {
     this.deck = null;
     this.communityCards = [];
-    this.pot = 0;
+    this.pots = [];
     this.currentBet = 0;
     this.currentPlayer = null;
     this.stage = 'waiting';
@@ -70,6 +76,7 @@ export default class Game {
       if (p) {
         p.hand = [];
         p.bet = 0;
+        p.totalBet = 0;
         p.folded = false;
         p.allIn = false;
         p.acted = false;
@@ -113,16 +120,16 @@ export default class Game {
     if (sbPlayer) {
       const sbAmount = Math.min(this.smallBlind, sbPlayer.chips);
       sbPlayer.bet = sbAmount;
+      sbPlayer.totalBet += sbAmount;
       sbPlayer.chips -= sbAmount;
-      this.pot += sbAmount;
       if (sbPlayer.chips === 0) sbPlayer.allIn = true;
     }
 
     if (bbPlayer) {
       const bbAmount = Math.min(this.bigBlind, bbPlayer.chips);
       bbPlayer.bet = bbAmount;
+      bbPlayer.totalBet += bbAmount;
       bbPlayer.chips -= bbAmount;
-      this.pot += bbAmount;
       this.currentBet = bbAmount;
       if (bbPlayer.chips === 0) bbPlayer.allIn = true;
     }
@@ -159,8 +166,8 @@ export default class Game {
     const actualBet = Math.min(toCall, player.chips);
     
     player.bet += actualBet;
+    player.totalBet += actualBet;
     player.chips -= actualBet;
-    this.pot += actualBet;
 
     if (player.chips === 0) player.allIn = true;
 
@@ -169,7 +176,7 @@ export default class Game {
     return true;
   }
 
-   raise(playerId: string, amount: number): boolean {
+  raise(playerId: string, amount: number): boolean {
     const player = this.getCurrentPlayerIfValid(playerId);
     if (!player) return false;
 
@@ -181,7 +188,7 @@ export default class Game {
 
     player.chips -= totalBet;
     player.bet += totalBet;
-    this.pot += totalBet;
+    player.totalBet += totalBet;
     this.currentBet = player.bet;
 
     if (player.chips === 0) player.allIn = true;
@@ -203,10 +210,10 @@ export default class Game {
 
     const allInAmount = player.chips;
     player.bet += allInAmount;
+    player.totalBet += allInAmount;
     player.chips = 0;
-    this.pot += allInAmount;
     player.allIn = true;
-    player.acted = true; // <---
+    player.acted = true;
 
     if (player.bet > this.currentBet) {
       this.currentBet = player.bet;
@@ -244,8 +251,63 @@ export default class Game {
     return playersWhoCanAct.every(p => p.bet === this.currentBet && p.acted);
   }
 
+  // Алгоритм расчета потов (основной + сайд-поты)
+  private calculatePots(): Pot[] {
+    // Собираем все вклады игроков (включая сфолдивших)
+    const contributions = this.seats
+      .filter((p): p is Player => p !== null && p.totalBet > 0)
+      .map(p => ({
+        playerId: p.id,
+        amount: p.totalBet,
+        folded: p.folded
+      }))
+      .sort((a, b) => a.amount - b.amount);
+
+    if (contributions.length === 0) return [];
+
+    const pots: Pot[] = [];
+    let previousLevel = 0;
+
+    // Получаем уникальные уровни вкладов
+    const uniqueLevels = [...new Set(contributions.map(c => c.amount))];
+    
+    for (const level of uniqueLevels) {
+      const levelDiff = level - previousLevel;
+      
+      // Игроки, которые внесли как минимум эту сумму
+      const eligibleContributors = contributions.filter(c => c.amount >= level);
+      
+      // Только не сфолдившие игроки могут ВЫИГРАТЬ (но сфолдившие все равно вносят вклад)
+      const eligibleWinners = eligibleContributors
+        .filter(c => !c.folded)
+        .map(c => c.playerId);
+      
+      const potAmount = levelDiff * eligibleContributors.length;
+      
+      if (potAmount > 0 && eligibleWinners.length > 0) {
+        pots.push({
+          amount: potAmount,
+          eligiblePlayers: eligibleWinners,
+          name: pots.length === 0 ? "Main Pot" : `Side Pot ${pots.length}`
+        });
+      } else if (potAmount > 0 && eligibleWinners.length === 0) {
+        // Все eligible игроки сфолдили - добавляем к предыдущему поту
+        if (pots.length > 0) {
+          pots[pots.length - 1].amount += potAmount;
+        }
+      }
+      
+      previousLevel = level;
+    }
+
+    return pots;
+  }
+
   private nextStage() {
-    // Сброс ставок И флагов acted
+    // Рассчитываем поты в конце раунда торговли
+    this.pots = this.calculatePots();
+
+    // Сброс ставок текущего раунда И флагов acted
     this.seats.forEach(p => {
       if (p) {
         p.bet = 0;
@@ -255,21 +317,48 @@ export default class Game {
     this.currentBet = 0;
 
     const activePlayers = this.getActivePlayers();
+    
+    // Если остался только один игрок - он победитель
     if (activePlayers.length === 1) {
       const winner = activePlayers[0];
-      this.awards([winner]);
+      
+      // Выдаем все поты победителю
+      const totalWon = this.getTotalPot();
+      winner.chips += totalWon;
 
       // Создаем искусственный результат "showdown", чтобы фронтенд понял, что игра окончена
       this.lastShowdown = {
         results: [], // Пустой список результатов, т.к. карты не сравнивались
-        winners: [{ 
-          id: winner.id, 
+        potResults: this.pots.map(pot => ({
+          potName: pot.name,
+          amount: pot.amount,
+          winners: [{ id: winner.id, descr: "Win by Fold" }]
+        })),
+        winners: [{
+          id: winner.id,
           descr: "Win by Fold" // Описание победы
         }],
       };
 
+      this.pots = [];
+      this.currentPlayer = null;
+      
+      // Передвижение дилера
+      this.dealerPosition = this.getNextSeat(this.dealerPosition);
+
       // Переключаем стадию, чтобы появилась кнопка "Next Hand"
       this.stage = 'showdown';
+      return;
+    }
+
+    // Проверяем, есть ли игроки, которые могут действовать
+    const playersWhoCanAct = activePlayers.filter(p => !p.allIn);
+    const allPlayersAllIn = playersWhoCanAct.length <= 1;
+
+    // Если все игроки в all-in (или остался только один, кто может действовать),
+    // автоматически доигрываем до showdown
+    if (allPlayersAllIn) {
+      this.runOutBoard();
       return;
     }
 
@@ -296,6 +385,32 @@ export default class Game {
     this.currentPlayer = this.getNextPlayer(this.dealerPosition);
   }
 
+  // Автоматически доигрывает борд до конца (когда все игроки all-in)
+  private runOutBoard() {
+    // Выкладываем оставшиеся карты в зависимости от текущей стадии
+    switch (this.stage) {
+      case 'preflop':
+        this.flop();
+        this.turn();
+        this.river();
+        break;
+      case 'flop':
+        this.turn();
+        this.river();
+        break;
+      case 'turn':
+        this.river();
+        break;
+      case 'river':
+        // Уже все карты на столе
+        break;
+    }
+
+    // Переходим к showdown
+    this.stage = 'showdown';
+    this.showdown();
+  }
+
   flop() {
     if (!this.deck) return;
     this.communityCards.push(...this.deck.deal(3));
@@ -311,10 +426,14 @@ export default class Game {
     this.communityCards.push(...this.deck.deal(1));
   }
 
-  showdown() {
+  showdown(): ShowdownResult {
+    // Финальный расчет потов
+    this.pots = this.calculatePots();
+    
     const activePlayers = this.getActivePlayers();
 
-    const results = activePlayers.map((p) => {
+    // Решаем руки для всех активных игроков
+    const playerHands = activePlayers.map((p) => {
       const full = [...p.hand, ...this.communityCards];
       const solved = Hand.solve(full);
       return {
@@ -325,41 +444,58 @@ export default class Game {
       };
     });
 
-    const winnerHands = Hand.winners(results.map(r => r.hand));
-    const winners = results.filter(r => winnerHands.includes(r.hand));
+    // Обрабатываем каждый пот отдельно
+    const potResults: PotResult[] = [];
+    
+    for (const pot of this.pots) {
+      // Фильтруем только eligible игроков для этого пота
+      const eligibleHands = playerHands.filter(ph => 
+        pot.eligiblePlayers.includes(ph.player.id)
+      );
+      
+      if (eligibleHands.length === 0) continue;
+      
+      // Находим победителей для этого пота
+      const winnerHands = Hand.winners(eligibleHands.map(h => h.hand));
+      const winners = eligibleHands.filter(h => winnerHands.includes(h.hand));
+      
+      // Распределяем пот
+      const share = Math.floor(pot.amount / winners.length);
+      winners.forEach(w => {
+        w.player.chips += share;
+      });
+      
+      potResults.push({
+        potName: pot.name,
+        amount: pot.amount,
+        winners: winners.map(w => ({
+          id: w.player.id,
+          descr: w.descr
+        }))
+      });
+    }
 
-    this.awards(winners.map(w => w.player));
-
+    // Формируем результат showdown
     this.lastShowdown = {
-      results: results.map(r => ({
-        id: r.player.id,
-        seat: r.player.seat,
-        hand: r.player.hand, 
-        descr: r.descr,
-        rank: r.rank,
+      results: playerHands.map(ph => ({
+        id: ph.player.id,
+        seat: ph.player.seat,
+        hand: ph.player.hand, 
+        descr: ph.descr,
+        rank: ph.rank,
       })),
-      winners: winners.map(w => ({
-        id: w.player.id,
-        descr: w.descr,
-      })),
+      potResults: potResults,
+      winners: potResults.flatMap(pr => pr.winners),
     };
 
+    this.pots = [];
     this.stage = 'showdown'; 
-    this.currentPlayer = null;
-
-    return this.lastShowdown;
-  }
-
-  private awards(winners: Player[]) {
-    const share = Math.floor(this.pot / winners.length);
-    winners.forEach(w => {
-      w.chips += share;
-    });
-    this.pot = 0;
     this.currentPlayer = null;
     
     // Передвижение дилера
     this.dealerPosition = this.getNextSeat(this.dealerPosition);
+
+    return this.lastShowdown;
   }
 
   // Вспомогательные методы
@@ -422,7 +558,8 @@ export default class Game {
       seats: this.seats,
       spectators: this.spectators,
       communityCards: this.communityCards,
-      pot: this.pot,
+      pots: this.pots,
+      totalPot: this.getTotalPot(),
       currentBet: this.currentBet,
       currentPlayer: this.currentPlayer,
       dealerPosition: this.dealerPosition,

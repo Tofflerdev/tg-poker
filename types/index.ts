@@ -9,9 +9,27 @@ export interface Player {
   hand: string[]; // ["As", "Kd"] или ["back", "back"] для скрытых
   chips: number;  // Стек игрока
   bet: number;    // Текущая ставка в раунде
+  totalBet: number; // Общая сумма ставок за всю раздачу (для расчета сайд-потов)
   folded: boolean;
   allIn: boolean;
   acted: boolean;
+}
+
+// Представляет один пот (основной или сайд-пот)
+export interface Pot {
+  amount: number;              // Сумма фишек в этом поте
+  eligiblePlayers: string[];   // ID игроков, которые могут выиграть этот пот
+  name: string;                // "Main Pot", "Side Pot 1", и т.д.
+}
+
+// Результат распределения одного пота
+export interface PotResult {
+  potName: string;
+  amount: number;
+  winners: {
+    id: string;
+    descr: string;
+  }[];
 }
 
 export interface Spectator {
@@ -24,7 +42,8 @@ export interface GameState {
   seats: (Player | null)[];
   spectators: Spectator[];
   communityCards: string[];
-  pot: number;
+  pots: Pot[];           // Массив потов (основной + сайд-поты)
+  totalPot: number;      // Общая сумма всех потов (для удобства отображения)
   currentBet: number;
   currentPlayer: number | null; // Индекс места (seat index)
   dealerPosition: number;
@@ -41,6 +60,7 @@ export interface ShowdownResult {
     descr: string;  // "Full House 8s full of Jacks"
     rank: number;   // Числовой ранг комбинации
   }[];
+  potResults: PotResult[];  // Результаты по каждому поту
   winners: {
     id: string;
     descr: string;
