@@ -20,6 +20,13 @@ export default class Game {
   private stage: GameStage = 'waiting';
   private lastRaisePosition: number | null = null;
 
+  private turnTimer: NodeJS.Timeout | null = null;
+  private turnExpiresAt: number | null = null;
+  private readonly TURN_TIME_LIMIT = 30000; // 30 seconds
+  private onTurnTimeout: (() => void) | null = null;
+  private onStateChange: (() => void) | null = null;
+  private onShowdown: ((result: ShowdownResult) => void) | null = null;
+
   public lastShowdown: ShowdownResult | null = null;
 
   // Вспомогательный метод для получения общей суммы всех потов
@@ -45,6 +52,7 @@ export default class Game {
       folded: false,
       allIn: false,
       acted: false,
+      showCards: false,
     };
     this.seats[seat] = player;
     return true;
@@ -63,6 +71,7 @@ export default class Game {
   }
 
   reset() {
+    this.stopTurnTimer();
     this.deck = null;
     this.communityCards = [];
     this.pots = [];
@@ -80,6 +89,7 @@ export default class Game {
         p.folded = false;
         p.allIn = false;
         p.acted = false;
+        p.showCards = false;
       }
     });
   }
@@ -108,6 +118,7 @@ export default class Game {
     
     // Первый игрок после большого блайнда
     this.currentPlayer = this.getNextPlayer(this.getBigBlindPosition());
+    this.startTurnTimer();
   }
 
   private postBlinds() {
@@ -204,6 +215,17 @@ export default class Game {
     return true;
   }
 
+  showCards(playerId: string): boolean {
+    const player = this.seats.find(p => p?.id === playerId);
+    if (!player) return false;
+    
+    // Можно показывать карты только на шоудауне
+    if (this.stage !== 'showdown') return false;
+
+    player.showCards = true;
+    return true;
+  }
+
   allIn(playerId: string): boolean {
     const player = this.getCurrentPlayerIfValid(playerId);
     if (!player) return false;
@@ -236,6 +258,7 @@ export default class Game {
       this.nextStage();
     } else {
       this.currentPlayer = next;
+      this.startTurnTimer();
     }
   }
 
@@ -383,32 +406,51 @@ export default class Game {
 
     // Начинает игрок слева от дилера
     this.currentPlayer = this.getNextPlayer(this.dealerPosition);
+    this.startTurnTimer();
   }
 
   // Автоматически доигрывает борд до конца (когда все игроки all-in)
-  private runOutBoard() {
-    // Выкладываем оставшиеся карты в зависимости от текущей стадии
-    switch (this.stage) {
-      case 'preflop':
+  private async runOutBoard() {
+    this.currentPlayer = null;
+    this.stopTurnTimer();
+    
+    const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+    const notify = () => {
+        if (this.onStateChange) this.onStateChange();
+    };
+
+    // Выкладываем оставшиеся карты с задержкой
+    if (this.stage === 'preflop') {
+        await delay(1000);
         this.flop();
-        this.turn();
-        this.river();
-        break;
-      case 'flop':
-        this.turn();
-        this.river();
-        break;
-      case 'turn':
-        this.river();
-        break;
-      case 'river':
-        // Уже все карты на столе
-        break;
+        this.stage = 'flop';
+        notify();
     }
+
+    if (this.stage === 'flop') {
+        await delay(1000);
+        this.turn();
+        this.stage = 'turn';
+        notify();
+    }
+
+    if (this.stage === 'turn') {
+        await delay(1000);
+        this.river();
+        this.stage = 'river';
+        notify();
+    }
+
+    await delay(1000);
 
     // Переходим к showdown
     this.stage = 'showdown';
-    this.showdown();
+    const result = this.showdown();
+    notify();
+
+    if (this.onShowdown) {
+        this.onShowdown(result);
+    }
   }
 
   flop() {
@@ -489,8 +531,9 @@ export default class Game {
     };
 
     this.pots = [];
-    this.stage = 'showdown'; 
+    this.stage = 'showdown';
     this.currentPlayer = null;
+    this.stopTurnTimer();
     
     // Передвижение дилера
     this.dealerPosition = this.getNextSeat(this.dealerPosition);
@@ -566,19 +609,59 @@ export default class Game {
       smallBlind: this.smallBlind,
       bigBlind: this.bigBlind,
       stage: this.stage,
+      turnExpiresAt: this.turnExpiresAt,
     };
+  }
+
+  private startTurnTimer() {
+    this.stopTurnTimer();
+    if (this.currentPlayer === null) return;
+
+    this.turnExpiresAt = Date.now() + this.TURN_TIME_LIMIT;
+    
+    const currentPlayerId = this.seats[this.currentPlayer]?.id;
+    if (!currentPlayerId) return;
+
+    this.turnTimer = setTimeout(() => {
+      console.log(`Time out for player ${currentPlayerId}`);
+      // Если игрок все еще текущий (на всякий случай проверка)
+      if (this.seats[this.currentPlayer!]?.id === currentPlayerId) {
+        this.fold(currentPlayerId);
+        if (this.onTurnTimeout) {
+          this.onTurnTimeout();
+        }
+      }
+    }, this.TURN_TIME_LIMIT);
+  }
+
+  private stopTurnTimer() {
+    if (this.turnTimer) {
+      clearTimeout(this.turnTimer);
+      this.turnTimer = null;
+    }
+    this.turnExpiresAt = null;
   }
 
   // Получить состояние для конкретного игрока (скрыть карты других)
   getStateForPlayer(playerId: string): any {
     const state = this.getState();
+    const isWinByFold = this.lastShowdown && this.lastShowdown.results.length === 0;
+
     return {
       ...state,
       seats: state.seats.map(p => {
         if (!p) return null;
-        if (p.id === playerId || this.stage === 'showdown') {
-          return p; // показываем карты
+        
+        if (p.id === playerId) return p;
+
+        if (this.stage === 'showdown' && !p.folded) {
+          if (isWinByFold) {
+            if (p.showCards) return p;
+          } else {
+            return p;
+          }
         }
+
         return { ...p, hand: [] }; // скрываем карты
       }),
     };
@@ -589,5 +672,17 @@ export default class Game {
     this.smallBlind = small;
     this.bigBlind = big;
     return true;
+  }
+
+  public setOnTurnTimeout(callback: () => void) {
+    this.onTurnTimeout = callback;
+  }
+
+  public setOnStateChange(callback: () => void) {
+    this.onStateChange = callback;
+  }
+
+  public setOnShowdown(callback: (result: ShowdownResult) => void) {
+    this.onShowdown = callback;
   }
 }

@@ -13,6 +13,7 @@ export interface Player {
   folded: boolean;
   allIn: boolean;
   acted: boolean;
+  showCards: boolean;
 }
 
 // Представляет один пот (основной или сайд-пот)
@@ -50,6 +51,7 @@ export interface GameState {
   smallBlind: number;
   bigBlind: number;
   stage: GameStage;
+  turnExpiresAt: number | null; // Timestamp окончания хода
 }
 
 export interface ShowdownResult {
@@ -78,6 +80,7 @@ export interface ClientEvents {
   check: () => void;
   call: () => void;
   raise: (amount: number) => void;
+  showCards: () => void;
   // Dev only
   flop: () => void;
   turn: () => void;

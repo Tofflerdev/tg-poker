@@ -10,6 +10,7 @@ interface TableProps {
   mySeat: number | null;
   communityCards?: string[];
   currentPlayer?: number | null;
+  turnExpiresAt?: number | null;
   pots?: Pot[];
   totalPot?: number;
   onSit: (seat: number) => void;
@@ -24,6 +25,7 @@ const Table: React.FC<TableProps> = ({
   mySeat,
   communityCards = [],
   currentPlayer,
+  turnExpiresAt,
   pots = [],
   totalPot = 0,
   onSit,
@@ -49,6 +51,7 @@ const Table: React.FC<TableProps> = ({
           tableWidth={tableWidth}
           tableHeight={tableHeight}
           currentPlayer={currentPlayer}
+          turnExpiresAt={turnExpiresAt}
           onSit={onSit}
         />
 

@@ -20,7 +20,8 @@ const App: React.FC = () => {
     dealerPosition: 0,
     smallBlind: 0,
     bigBlind: 0,
-    stage: 'waiting'
+    stage: 'waiting',
+    turnExpiresAt: null
   });
   
   const [showdown, setShowdown] = useState<ShowdownResult | null>(null);
@@ -88,6 +89,7 @@ const App: React.FC = () => {
         mySeat={mySeat}
         communityCards={state.communityCards}
         currentPlayer={state.currentPlayer}
+        turnExpiresAt={state.turnExpiresAt}
         pots={state.pots}
         totalPot={state.totalPot}
         onSit={handleSit}

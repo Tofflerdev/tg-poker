@@ -22,6 +22,10 @@ const GameControls: React.FC<Props> = ({ socket, gameState, mySeat }) => {
   
   // Кнопки управления игрой (видны всегда, но лучше скрывать во время раздачи)
   if (gameState.stage === 'waiting' || gameState.stage === 'showdown') {
+    const activePlayers = gameState.seats.filter(p => p && !p.folded);
+    const isWinByFold = gameState.stage === 'showdown' && activePlayers.length === 1;
+    const amIWinner = isWinByFold && myPlayer && !myPlayer.folded;
+
     return (
       <div style={{ marginBottom: 20, textAlign: "center" }}>
         {gameState.stage === 'showdown' && (
@@ -29,7 +33,17 @@ const GameControls: React.FC<Props> = ({ socket, gameState, mySeat }) => {
              Раздача завершена!
            </div>
         )}
-        <button 
+        
+        {amIWinner && !myPlayer?.showCards && (
+          <button
+            onClick={() => socket.emit("showCards")}
+            style={{ ...btnStyle, background: "#5bc0de", marginRight: 10 }}
+          >
+            Показать карты
+          </button>
+        )}
+
+        <button
           onClick={() => socket.emit("start")}
           style={{ padding: "10px 20px", fontSize: 16, cursor: "pointer", background: "#4CAF50", color: "white", border: "none", borderRadius: 5 }}
         >

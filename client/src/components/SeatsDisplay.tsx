@@ -9,6 +9,7 @@ interface SeatsDisplayProps {
   tableHeight: number;
   seatSize?: number;
   currentPlayer?: number | null; // Кто сейчас ходит?
+  turnExpiresAt?: number | null;
   onSit: (seat: number) => void;
 }
 
@@ -19,9 +20,16 @@ const SeatsDisplay: React.FC<SeatsDisplayProps> = ({
   tableHeight,
   seatSize = 120,
   currentPlayer,
+  turnExpiresAt,
   onSit,
 }) => {
   const seatOffset = 50;
+  const [now, setNow] = React.useState(Date.now());
+
+  React.useEffect(() => {
+    const interval = setInterval(() => setNow(Date.now()), 200);
+    return () => clearInterval(interval);
+  }, []);
 
   return (
     <>
@@ -35,7 +43,12 @@ const SeatsDisplay: React.FC<SeatsDisplayProps> = ({
         const isFree = !player;
         const canSit = isFree && mySeat === null;
         // Подсветка активного игрока желтым бордером
-        const isActive = currentPlayer === i; 
+        const isActive = currentPlayer === i;
+        
+        let timeLeft = 0;
+        if (isActive && turnExpiresAt) {
+          timeLeft = Math.max(0, Math.ceil((turnExpiresAt - now) / 1000));
+        }
 
         return (
           <div
@@ -48,7 +61,7 @@ const SeatsDisplay: React.FC<SeatsDisplayProps> = ({
               height: seatSize,
               borderRadius: 12,
               background: canSit ? "#4a7a4a" : isFree ? "#3a5a3a" : "#222",
-              border: isActive 
+              border: isActive
                 ? "4px solid #FFD700" // Золотая рамка для активного
                 : `2px solid ${canSit ? "#aaffaa" : isFree ? "#777" : "#444"}`,
               display: "flex",
@@ -63,6 +76,23 @@ const SeatsDisplay: React.FC<SeatsDisplayProps> = ({
             }}
             onClick={() => canSit && onSit(i)}
           >
+            {isActive && turnExpiresAt && (
+              <div style={{
+                position: 'absolute',
+                top: -25,
+                background: timeLeft < 10 ? '#ff4444' : '#444',
+                color: 'white',
+                padding: '2px 8px',
+                borderRadius: 10,
+                fontWeight: 'bold',
+                fontSize: 14,
+                boxShadow: '0 2px 5px rgba(0,0,0,0.5)',
+                zIndex: 10
+              }}>
+                {timeLeft}s
+              </div>
+            )}
+
             {player ? (
               <>
                 {/* Карты */}
