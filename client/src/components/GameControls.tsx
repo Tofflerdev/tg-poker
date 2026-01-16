@@ -115,6 +115,14 @@ const GameControls: React.FC<Props> = ({ socket, gameState, mySeat }) => {
           Raise
         </button>
       </div>
+
+      {/* ALL IN */}
+      <button
+        onClick={() => socket.emit("allIn")}
+        style={{ ...btnStyle, background: "#c0392b" }}
+      >
+        All-In
+      </button>
     </div>
   );
 };

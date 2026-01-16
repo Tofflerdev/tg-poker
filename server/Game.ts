@@ -647,6 +647,14 @@ export default class Game {
     const state = this.getState();
     const isWinByFold = this.lastShowdown && this.lastShowdown.results.length === 0;
 
+    // Определяем, нужно ли вскрывать карты досрочно (ситуация All-In)
+    const activePlayers = state.seats.filter((p): p is Player => p !== null && !p.folded);
+    const nonAllInPlayers = activePlayers.filter(p => !p.allIn);
+    const isAllInRunout = this.stage !== 'waiting' &&
+                          this.currentPlayer === null &&
+                          activePlayers.length > 1 &&
+                          nonAllInPlayers.length <= 1;
+
     return {
       ...state,
       seats: state.seats.map(p => {
@@ -654,15 +662,22 @@ export default class Game {
         
         if (p.id === playerId) return p;
 
-        if (this.stage === 'showdown' && !p.folded) {
-          if (isWinByFold) {
-            if (p.showCards) return p;
-          } else {
+        // Вскрываем карты, если:
+        // 1. Это шоудаун (и не победа фолдом)
+        // 2. Это ситуация All-In runout
+        const shouldReveal = (this.stage === 'showdown' && !isWinByFold) || isAllInRunout;
+
+        if (!p.folded) {
+          if (shouldReveal) {
+            return p;
+          }
+          // Если победа фолдом, показываем только если игрок захотел
+          if (this.stage === 'showdown' && isWinByFold && p.showCards) {
             return p;
           }
         }
 
-        return { ...p, hand: [] }; // скрываем карты
+        return { ...p, hand: p.hand.map(() => "back") }; // скрываем карты
       }),
     };
   }

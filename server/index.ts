@@ -23,45 +23,8 @@ const updateState = function () {
 
   // Рассылаем каждому персональное состояние
   players.forEach((id) => {
-    const isWinByFold = game.lastShowdown && game.lastShowdown.results.length === 0;
-
-    // Скрываем карты чужих игроков
-    const maskedSeats = s.seats.map(p => {
-      if (!p) return null;
-
-      // Если это не я и у игрока есть карты
-      if (p.id !== id && p.hand.length > 0) {
-        let shouldHide = true;
-
-        // Если сейчас шоудаун и игрок не сбросил
-        if (s.stage === 'showdown' && !p.folded) {
-          if (isWinByFold) {
-            // Если победа фолдом - показываем только если игрок захотел
-            if (p.showCards) shouldHide = false;
-          } else {
-            // Обычный шоудаун - показываем
-            shouldHide = false;
-          }
-        }
-
-        if (shouldHide) {
-          return { ...p, hand: ["back", "back"] };
-        }
-      }
-      
-      return p;
-    });
-
-    // Формируем объект ответа, сохраняя ВСЕ поля (stage, pot, etc)
-    const playerState = {
-      ...s, // <--- ВАЖНО: копируем все поля (stage, currentPlayer, pot...)
-      seats: maskedSeats,
-    };
-
+    const playerState = game.getStateForPlayer(id);
     io.to(id).emit("state", playerState);
-    
-    // Для отладки (в консоль сервера)
-    // console.log(`Sent state to ${id}, stage: ${playerState.stage}, current: ${playerState.currentPlayer}`);
   });
 };
 
@@ -148,6 +111,10 @@ io.on("connection", (socket) => {
 
   socket.on("raise", (amount: number) => {
     handleAction(() => game.raise(socket.id, amount), "Невозможно выполнить Raise");
+  });
+
+  socket.on("allIn", () => {
+    handleAction(() => game.allIn(socket.id), "Невозможно выполнить All-In");
   });
 
   socket.on("showCards", () => {

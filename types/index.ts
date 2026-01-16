@@ -80,6 +80,7 @@ export interface ClientEvents {
   check: () => void;
   call: () => void;
   raise: (amount: number) => void;
+  allIn: () => void;
   showCards: () => void;
   // Dev only
   flop: () => void;
