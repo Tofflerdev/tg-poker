@@ -1,0 +1,699 @@
+/* Telegram Mini App Design System */
+
+:root {
+  /* Telegram Colors */
+  --tg-color-bg: var(--tg-theme-bg-color, #ffffff);
+  --tg-color-text: var(--tg-theme-text-color, #000000);
+  --tg-color-hint: var(--tg-theme-hint-color, #999999);
+  --tg-color-link: var(--tg-theme-link-color, #2481cc);
+  --tg-color-button: var(--tg-theme-button-color, #2481cc);
+  --tg-color-button-text: var(--tg-theme-button-text-color, #ffffff);
+  --tg-color-secondary-bg: var(--tg-theme-secondary-bg-color, #f1f1f1);
+  
+  /* Semantic Colors */
+  --tg-color-success: #31b545;
+  --tg-color-error: #e74c3c;
+  --tg-color-warning: #f39c12;
+  --tg-color-info: #3498db;
+  
+  /* Poker Colors */
+  --poker-felt: #1b5e20;
+  --poker-felt-dark: #0d3d12;
+  --poker-chip-red: #e53935;
+  --poker-chip-blue: #1e88e5;
+  --poker-chip-green: #43a047;
+  --poker-chip-black: #212121;
+  --poker-gold: #ffd700;
+  
+  /* Spacing */
+  --tg-spacing-xs: 4px;
+  --tg-spacing-sm: 8px;
+  --tg-spacing-md: 16px;
+  --tg-spacing-lg: 24px;
+  --tg-spacing-xl: 32px;
+  
+  /* Border Radius */
+  --tg-radius-sm: 8px;
+  --tg-radius-md: 12px;
+  --tg-radius-lg: 16px;
+  --tg-radius-xl: 24px;
+  
+  /* Typography */
+  --tg-font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+  --tg-font-size-xs: 12px;
+  --tg-font-size-sm: 14px;
+  --tg-font-size-md: 16px;
+  --tg-font-size-lg: 20px;
+  --tg-font-size-xl: 24px;
+}
+
+/* Base Styles */
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: var(--tg-font-family);
+  background-color: var(--tg-color-bg);
+  color: var(--tg-color-text);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Telegram Button Styles */
+.tg-button {
+  background-color: var(--tg-color-button);
+  color: var(--tg-color-button-text);
+  border: none;
+  border-radius: var(--tg-radius-md);
+  padding: 12px 24px;
+  font-size: var(--tg-font-size-md);
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.2s ease, transform 0.1s ease;
+  font-family: inherit;
+  width: 100%;
+}
+
+.tg-button:hover {
+  opacity: 0.9;
+}
+
+.tg-button:active {
+  transform: scale(0.98);
+  opacity: 0.8;
+}
+
+.tg-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.tg-button--secondary {
+  background-color: var(--tg-color-secondary-bg);
+  color: var(--tg-color-text);
+}
+
+.tg-button--danger {
+  background-color: var(--tg-color-error);
+}
+
+.tg-button--success {
+  background-color: var(--tg-color-success);
+}
+
+/* Card Styles */
+.tg-card {
+  background-color: var(--tg-color-secondary-bg);
+  border-radius: var(--tg-radius-lg);
+  padding: var(--tg-spacing-md);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.tg-card__title {
+  font-size: var(--tg-font-size-lg);
+  font-weight: 600;
+  margin-bottom: var(--tg-spacing-sm);
+}
+
+.tg-card__subtitle {
+  font-size: var(--tg-font-size-sm);
+  color: var(--tg-color-hint);
+  margin-bottom: var(--tg-spacing-md);
+}
+
+/* List Styles */
+.tg-list {
+  list-style: none;
+}
+
+.tg-list-item {
+  display: flex;
+  align-items: center;
+  padding: var(--tg-spacing-md);
+  background-color: var(--tg-color-bg);
+  border-bottom: 1px solid var(--tg-color-secondary-bg);
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+
+.tg-list-item:hover {
+  background-color: var(--tg-color-secondary-bg);
+}
+
+.tg-list-item__avatar {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  margin-right: var(--tg-spacing-md);
+  object-fit: cover;
+  background-color: var(--tg-color-secondary-bg);
+}
+
+.tg-list-item__content {
+  flex: 1;
+}
+
+.tg-list-item__title {
+  font-weight: 600;
+  font-size: var(--tg-font-size-md);
+  margin-bottom: 2px;
+}
+
+.tg-list-item__subtitle {
+  font-size: var(--tg-font-size-sm);
+  color: var(--tg-color-hint);
+}
+
+.tg-list-item__meta {
+  font-size: var(--tg-font-size-sm);
+  color: var(--tg-color-hint);
+  text-align: right;
+}
+
+/* Input Styles */
+.tg-input {
+  background-color: var(--tg-color-secondary-bg);
+  border: none;
+  border-radius: var(--tg-radius-md);
+  padding: 12px 16px;
+  font-size: var(--tg-font-size-md);
+  color: var(--tg-color-text);
+  font-family: inherit;
+  width: 100%;
+  outline: none;
+  transition: box-shadow 0.2s ease;
+}
+
+.tg-input:focus {
+  box-shadow: 0 0 0 2px var(--tg-color-link);
+}
+
+.tg-input::placeholder {
+  color: var(--tg-color-hint);
+}
+
+/* Status Badge */
+.tg-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 12px;
+  border-radius: 100px;
+  font-size: var(--tg-font-size-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.tg-badge--success {
+  background-color: rgba(49, 181, 69, 0.1);
+  color: var(--tg-color-success);
+}
+
+.tg-badge--error {
+  background-color: rgba(231, 76, 60, 0.1);
+  color: var(--tg-color-error);
+}
+
+.tg-badge--warning {
+  background-color: rgba(243, 156, 18, 0.1);
+  color: var(--tg-color-warning);
+}
+
+/* Poker-specific styles */
+.poker-table {
+  background: radial-gradient(ellipse at center, var(--poker-felt) 0%, var(--poker-felt-dark) 100%);
+  border-radius: 50% / 30%;
+  box-shadow: 
+    0 0 0 8px #8b4513,
+    0 0 0 16px #654321,
+    0 20px 40px rgba(0, 0, 0, 0.5);
+}
+
+.poker-chip {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: bold;
+  font-size: 11px;
+  box-shadow: 
+    0 2px 4px rgba(0, 0, 0, 0.3),
+    inset 0 2px 4px rgba(255, 255, 255, 0.3);
+  border: 3px dashed rgba(255, 255, 255, 0.5);
+}
+
+.poker-chip--red { background-color: var(--poker-chip-red); color: white; }
+.poker-chip--blue { background-color: var(--poker-chip-blue); color: white; }
+.poker-chip--green { background-color: var(--poker-chip-green); color: white; }
+.poker-chip--black { background-color: var(--poker-chip-black); color: white; }
+
+/* Animation */
+@keyframes tg-fade-in {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.tg-fade-in {
+  animation: tg-fade-in 0.3s ease-out;
+}
+
+@keyframes tg-pulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.05); }
+}
+
+.tg-pulse {
+  animation: tg-pulse 2s infinite;
+}
+
+/* Loading Spinner */
+.tg-spinner {
+  width: 24px;
+  height: 24px;
+  border: 3px solid var(--tg-color-secondary-bg);
+  border-top-color: var(--tg-color-button);
+  border-radius: 50%;
+  animation: tg-spin 0.8s linear infinite;
+}
+
+@keyframes tg-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Utility Classes */
+.tg-text-center { text-align: center; }
+.tg-text-right { text-align: right; }
+.tg-text-hint { color: var(--tg-color-hint); }
+.tg-text-link { color: var(--tg-color-link); }
+
+.tg-mb-xs { margin-bottom: var(--tg-spacing-xs); }
+.tg-mb-sm { margin-bottom: var(--tg-spacing-sm); }
+.tg-mb-md { margin-bottom: var(--tg-spacing-md); }
+.tg-mb-lg { margin-bottom: var(--tg-spacing-lg); }
+
+.tg-mt-xs { margin-top: var(--tg-spacing-xs); }
+.tg-mt-sm { margin-top: var(--tg-spacing-sm); }
+.tg-mt-md { margin-top: var(--tg-spacing-md); }
+.tg-mt-lg { margin-top: var(--tg-spacing-lg); }
+
+.tg-p-md { padding: var(--tg-spacing-md); }
+.tg-p-lg { padding: var(--tg-spacing-lg); }
+
+.tg-flex { display: flex; }
+.tg-flex-col { flex-direction: column; }
+.tg-items-center { align-items: center; }
+.tg-justify-center { justify-content: center; }
+.tg-gap-sm { gap: var(--tg-spacing-sm); }
+.tg-gap-md { gap: var(--tg-spacing-md); }
+
+/* ==========================================
+   Card Animations
+   ========================================== */
+
+@keyframes card-deal {
+  0% {
+    opacity: 0;
+    transform: translate(-100px, -100px) rotate(-30deg) scale(0.5);
+  }
+  50% {
+    opacity: 1;
+  }
+  100% {
+    transform: translate(0, 0) rotate(0deg) scale(1);
+  }
+}
+
+@keyframes card-flip {
+  0% {
+    transform: rotateY(0deg);
+  }
+  50% {
+    transform: rotateY(90deg);
+  }
+  100% {
+    transform: rotateY(0deg);
+  }
+}
+
+@keyframes card-win {
+  0%, 100% {
+    transform: translateY(0) scale(1);
+  }
+  25% {
+    transform: translateY(-10px) scale(1.05);
+  }
+  50% {
+    transform: translateY(-5px) scale(1.02);
+  }
+  75% {
+    transform: translateY(-15px) scale(1.08);
+  }
+}
+
+.card-container {
+  display: inline-block;
+  perspective: 1000px;
+}
+
+.card-deal {
+  animation: card-deal 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+
+.card-flipping {
+  transition: transform 0.3s ease-in-out;
+}
+
+.card-win {
+  animation: card-win 0.8s ease-in-out;
+}
+
+.animated-card {
+  will-change: transform;
+}
+
+/* ==========================================
+   Chip Animations
+   ========================================== */
+
+@keyframes chip-bounce {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-10px);
+  }
+}
+
+@keyframes chip-pulse {
+  0%, 100% {
+    transform: scale(1);
+    box-shadow:
+      0 3px 6px rgba(0, 0, 0, 0.3),
+      inset 0 2px 4px rgba(255, 255, 255, 0.3);
+  }
+  50% {
+    transform: scale(1.1);
+    box-shadow:
+      0 5px 15px rgba(0, 0, 0, 0.4),
+      inset 0 2px 4px rgba(255, 255, 255, 0.4),
+      0 0 20px rgba(255, 215, 0, 0.5);
+  }
+}
+
+@keyframes chip-slide {
+  0% {
+    transform: translateX(-50px) rotate(-180deg);
+    opacity: 0;
+  }
+  100% {
+    transform: translateX(0) rotate(0deg);
+    opacity: 1;
+  }
+}
+
+@keyframes chip-stack-drop {
+  0% {
+    transform: translateY(-50px);
+    opacity: 0;
+  }
+  60% {
+    transform: translateY(5px);
+  }
+  100% {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.chip-bounce {
+  animation: chip-bounce 0.5s ease-in-out;
+}
+
+.chip-pulse {
+  animation: chip-pulse 1s ease-in-out infinite;
+}
+
+.chip-slide {
+  animation: chip-slide 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+
+.chip-stack {
+  display: inline-block;
+}
+
+/* ==========================================
+   Chat Styles
+   ========================================== */
+
+.chat-container {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  max-height: 400px;
+  background: var(--tg-color-secondary-bg);
+  border-radius: var(--tg-radius-lg);
+  overflow: hidden;
+}
+
+.chat-header {
+  padding: var(--tg-spacing-sm) var(--tg-spacing-md);
+  background: var(--tg-color-button);
+  color: var(--tg-color-button-text);
+  font-weight: 600;
+  font-size: var(--tg-font-size-sm);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.chat-messages {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--tg-spacing-md);
+  display: flex;
+  flex-direction: column;
+  gap: var(--tg-spacing-sm);
+}
+
+.chat-message {
+  max-width: 85%;
+  padding: var(--tg-spacing-sm) var(--tg-spacing-md);
+  border-radius: var(--tg-radius-md);
+  font-size: var(--tg-font-size-sm);
+  line-height: 1.4;
+  word-wrap: break-word;
+  animation: message-appear 0.2s ease-out;
+}
+
+.chat-message--own {
+  align-self: flex-end;
+  background: var(--tg-color-button);
+  color: var(--tg-color-button-text);
+  border-bottom-right-radius: 4px;
+}
+
+.chat-message--other {
+  align-self: flex-start;
+  background: var(--tg-color-bg);
+  color: var(--tg-color-text);
+  border-bottom-left-radius: 4px;
+}
+
+.chat-message--system {
+  align-self: center;
+  background: rgba(0, 0, 0, 0.1);
+  color: var(--tg-color-hint);
+  font-size: var(--tg-font-size-xs);
+  font-style: italic;
+  padding: var(--tg-spacing-xs) var(--tg-spacing-md);
+  border-radius: 100px;
+}
+
+.chat-message__author {
+  font-size: var(--tg-font-size-xs);
+  font-weight: 600;
+  margin-bottom: 2px;
+  opacity: 0.8;
+}
+
+.chat-message__time {
+  font-size: 10px;
+  opacity: 0.6;
+  margin-top: 2px;
+  text-align: right;
+}
+
+@keyframes message-appear {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.chat-input-container {
+  padding: var(--tg-spacing-sm) var(--tg-spacing-md);
+  background: var(--tg-color-bg);
+  border-top: 1px solid var(--tg-color-secondary-bg);
+  display: flex;
+  gap: var(--tg-spacing-sm);
+  align-items: center;
+}
+
+.chat-input {
+  flex: 1;
+  background: var(--tg-color-secondary-bg);
+  border: none;
+  border-radius: var(--tg-radius-md);
+  padding: 10px 14px;
+  font-size: var(--tg-font-size-md);
+  font-family: inherit;
+  outline: none;
+  resize: none;
+  max-height: 100px;
+}
+
+.chat-input:focus {
+  box-shadow: 0 0 0 2px var(--tg-color-link);
+}
+
+.chat-send-btn {
+  background: var(--tg-color-button);
+  color: var(--tg-color-button-text);
+  border: none;
+  border-radius: 50%;
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: transform 0.1s, opacity 0.2s;
+  flex-shrink: 0;
+}
+
+.chat-send-btn:active {
+  transform: scale(0.95);
+}
+
+.chat-send-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ==========================================
+   Game Room Layout
+   ========================================== */
+
+.game-room {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  padding: var(--tg-spacing-md);
+}
+
+.game-room__main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--tg-spacing-md);
+}
+
+.game-room__content {
+  display: flex;
+  gap: var(--tg-spacing-md);
+  flex: 1;
+}
+
+.game-room__table-area {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.game-room__sidebar {
+  width: 320px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--tg-spacing-md);
+}
+
+@media (max-width: 900px) {
+  .game-room__content {
+    flex-direction: column;
+  }
+  
+  .game-room__sidebar {
+    width: 100%;
+    max-height: 300px;
+  }
+  
+  .chat-container {
+    max-height: 250px;
+  }
+}
+
+/* Turn Timer Animation */
+@keyframes turn-timer-pulse {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(255, 193, 7, 0.4);
+  }
+  50% {
+    box-shadow: 0 0 0 10px rgba(255, 193, 7, 0);
+  }
+}
+
+.turn-active {
+  animation: turn-timer-pulse 1.5s infinite;
+}
+
+/* Winner Animation */
+@keyframes winner-glow {
+  0%, 100% {
+    box-shadow:
+      0 0 20px rgba(255, 215, 0, 0.5),
+      0 0 40px rgba(255, 215, 0, 0.3);
+  }
+  50% {
+    box-shadow:
+      0 0 30px rgba(255, 215, 0, 0.8),
+      0 0 60px rgba(255, 215, 0, 0.5);
+  }
+}
+
+.winner-highlight {
+  animation: winner-glow 1.5s ease-in-out infinite;
+  border-radius: var(--tg-radius-lg);
+}
+
+/* Pot Win Animation */
+@keyframes pot-win-celebration {
+  0% {
+    transform: scale(1);
+  }
+  25% {
+    transform: scale(1.2);
+  }
+  50% {
+    transform: scale(1);
+  }
+  75% {
+    transform: scale(1.1);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+.pot-win-animation {
+  animation: pot-win-celebration 0.6s ease-in-out;
+  color: var(--poker-gold);
+  font-weight: bold;
+}

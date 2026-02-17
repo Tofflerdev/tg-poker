@@ -53,6 +53,7 @@ const SeatsDisplay: React.FC<SeatsDisplayProps> = ({
         return (
           <div
             key={i}
+            className={isActive ? "turn-active" : ""}
             style={{
               position: "absolute",
               left: tableWidth / 2 + x - seatSize / 2,

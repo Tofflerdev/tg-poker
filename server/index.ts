@@ -1,154 +1,369 @@
 import express from "express";
 import http from "http";
 import { Server } from "socket.io";
-import Game from "./Game.js";
+import { validateInitData, createUserFromInitData } from "./middleware/auth.js";
+import { userStorage } from "./models/User.js";
+import { tableManager } from "./TableManager.js";
+import type { 
+  TelegramUser, 
+  AuthPayload,
+  ServerEvents,
+  ExtendedClientEvents,
+  ExtendedServerEvents
+} from "../types/index.js";
 
 const app = express();
 const server = http.createServer(app);
-const io = new Server(server, {
+const io = new Server<ExtendedClientEvents, ExtendedServerEvents>(server, {
   cors: { origin: "*" },
 });
 
 const PORT = 3000;
-const game = new Game();
 
-const updateState = function () {
-  const state = game.getState();
-  const s = structuredClone(state); // Полная копия состояния
+// Debug endpoint
+app.get("/", (_req, res) => {
+  const status = {
+    status: "running",
+    tables: tableManager.tableCount,
+    activePlayers: tableManager.totalActivePlayers,
+    tableSummary: tableManager.getStatusSummary(),
+  };
+  res.json(status);
+});
 
-  // Получаем список ID всех подключенных (игроки + зрители)
-  const players: string[] = [];
-  s.seats.forEach(p => { if (p) players.push(p.id) });
-  s.spectators.forEach(p => { players.push(p.id) });
+// Get tables list endpoint (REST API fallback)
+app.get("/api/tables", (_req, res) => {
+  res.json(tableManager.getAllTablesInfo());
+});
 
-  // Рассылаем каждому персональное состояние
-  players.forEach((id) => {
-    const playerState = game.getStateForPlayer(id);
-    io.to(id).emit("state", playerState);
+/**
+ * Send game state to all players at a specific table
+ */
+const updateTableState = (tableId: string) => {
+  const table = tableManager.getTable(tableId);
+  if (!table) return;
+
+  const playerIds = table.getAllPlayerIds();
+  
+  playerIds.forEach((socketId) => {
+    const playerState = table.getStateForPlayer(socketId);
+    io.to(socketId).emit("state", playerState);
   });
 };
 
-game.setOnTurnTimeout(() => {
-  updateState();
-});
+/**
+ * Handle showdown at a table
+ */
+const handleTableShowdown = (tableId: string, result: any) => {
+  const table = tableManager.getTable(tableId);
+  if (!table) return;
 
-game.setOnStateChange(() => {
-  updateState();
-});
+  // Emit showdown to all players at the table
+  const playerIds = table.getAllPlayerIds();
+  playerIds.forEach((socketId) => {
+    io.to(socketId).emit("showdown", result);
+  });
 
-const handleShowdown = (result: any) => {
-  io.emit("showdown", result);
-
-  // Проверяем игроков с нулевым стеком
-  const state = game.getState();
+  // Check for players with zero chips
+  const state = table.getState();
   state.seats.forEach((player) => {
     if (player && player.chips === 0) {
-      game.removePlayer(player.id);
-      game.addSpectator(player.id); // Возвращаем в зрители, чтобы обновлялся стейт
+      table.removePlayer(player.id);
+      table.addSpectator(player.id);
       io.to(player.id).emit("errorMessage", "Ваш стек равен 0. Вы покидаете стол.");
     }
   });
-  
-  updateState();
+
+  updateTableState(tableId);
 };
 
-game.setOnShowdown((result) => {
-  handleShowdown(result);
-});
+// Setup table event handlers
+const setupTableEvents = (tableId: string) => {
+  const table = tableManager.getTable(tableId);
+  if (!table) return;
 
-app.get("/", (_req, res) => {
-  res.send("Poker server is running");
-});
+  table.setOnShowdown((result) => {
+    handleTableShowdown(tableId, result);
+  });
+};
+
+// Initialize table events for all predefined tables
+setTimeout(() => {
+  const tables = tableManager.getAllTablesInfo();
+  tables.forEach((t) => setupTableEvents(t.id));
+}, 1000);
 
 io.on("connection", (socket) => {
-  console.log("Player connected:", socket.id);
+  console.log("[Socket] Player connected:", socket.id);
 
-  // Новый клиент по умолчанию становится наблюдателем
-  game.addSpectator(socket.id);
-
-  // Клиент сам может запросить состояние
-  socket.on("getState", () => {
-    updateState();
-  });
-
-  // Игрок хочет занять место
-  socket.on("join", (seat: number) => {
-    const success = game.addPlayer(socket.id, seat);
-    if (!success) {
-      socket.emit("errorMessage", "Место занято или неверный номер");
-      return;
-    }
-    updateState();
-  });
-
-    // Вспомогательная функция для обработки хода
-  const handleAction = (actionFn: () => boolean, errorMessage: string) => {
-    const success = actionFn();
-    if (!success) {
-      socket.emit("errorMessage", errorMessage);
+  // ==========================================
+  // Authentication
+  // ==========================================
+  socket.on("auth", (payload: AuthPayload) => {
+    const { valid, data } = validateInitData(payload.initData);
+    
+    if (!valid) {
+      socket.emit("authError", "Invalid authentication data");
       return;
     }
 
-    // Если после хода наступил Showdown — отправляем результаты всем
-    if (game.getState().stage === 'showdown' && game.lastShowdown) {
-      handleShowdown(game.lastShowdown);
+    // Create user from initData (handles dev mode mock user automatically)
+    const user = createUserFromInitData(socket.id, data || { auth_date: 0, hash: '' });
+    
+    // Store user in persistent storage
+    userStorage.addUser(socket.id, user);
+    
+    socket.emit("authSuccess", user);
+    console.log("[Auth] Success for:", user.username || user.telegramId);
+  });
+
+  // ==========================================
+  // Table Management
+  // ==========================================
+  
+  // Get list of available tables
+  socket.on("getTables", () => {
+    const tables = tableManager.getAllTablesInfo();
+    socket.emit("tablesList", tables);
+    console.log(`[Tables] Sent ${tables.length} tables to ${socket.id}`);
+  });
+
+  // Join a specific table and seat
+  socket.on("joinTable", (payload: { tableId: string; seat: number }) => {
+    const { tableId, seat } = payload;
+    
+    // Leave current table if at one
+    const currentTableId = tableManager.getPlayerTableId(socket.id);
+    if (currentTableId) {
+      socket.leave(currentTableId);
+      tableManager.leaveTable(socket.id);
+    }
+
+    // Join new table
+    const result = tableManager.joinTable(socket.id, tableId, seat);
+    
+    if (!result.success) {
+      socket.emit("tableError", result.error || "Failed to join table");
+      return;
+    }
+
+    // Join socket room for this table
+    socket.join(tableId);
+    
+    const table = tableManager.getTable(tableId);
+    if (table) {
+      const state = table.getStateForPlayer(socket.id);
+      socket.emit("tableJoined", { tableId, seat, state });
+      updateTableState(tableId);
+      console.log(`[Table] ${socket.id} joined ${tableId} at seat ${seat}`);
+    }
+  });
+
+  // Leave current table
+  socket.on("leaveTable", () => {
+    const tableId = tableManager.getPlayerTableId(socket.id);
+    if (tableId) {
+      socket.leave(tableId);
+      tableManager.leaveTable(socket.id);
+      socket.emit("tableLeft");
+      updateTableState(tableId);
+      console.log(`[Table] ${socket.id} left ${tableId}`);
+    }
+  });
+
+  // ==========================================
+  // Game Actions (forward to appropriate table)
+  // ==========================================
+  
+  const handleGameAction = (action: string, ...args: any[]) => {
+    const table = tableManager.getPlayerTable(socket.id);
+    if (!table) {
+      socket.emit("errorMessage", "You are not at a table");
+      return false;
+    }
+
+    const tableId = table.id;
+    
+    switch (action) {
+      case 'start':
+        try {
+          table.start();
+          updateTableState(tableId);
+        } catch (e: any) {
+          socket.emit("errorMessage", e.message);
+        }
+        break;
+      
+      case 'reset':
+        table.reset();
+        updateTableState(tableId);
+        break;
+      
+      case 'fold':
+        if (table.fold(socket.id)) {
+          checkShowdownAndUpdate(table, tableId);
+        } else {
+          socket.emit("errorMessage", "Cannot fold now");
+        }
+        break;
+      
+      case 'check':
+        if (table.check(socket.id)) {
+          checkShowdownAndUpdate(table, tableId);
+        } else {
+          socket.emit("errorMessage", "Cannot check now");
+        }
+        break;
+      
+      case 'call':
+        if (table.call(socket.id)) {
+          checkShowdownAndUpdate(table, tableId);
+        } else {
+          socket.emit("errorMessage", "Cannot call now");
+        }
+        break;
+      
+      case 'raise':
+        const amount = args[0];
+        if (table.raise(socket.id, amount)) {
+          checkShowdownAndUpdate(table, tableId);
+        } else {
+          socket.emit("errorMessage", "Cannot raise now");
+        }
+        break;
+      
+      case 'allIn':
+        if (table.allIn(socket.id)) {
+          checkShowdownAndUpdate(table, tableId);
+        } else {
+          socket.emit("errorMessage", "Cannot go all-in now");
+        }
+        break;
+      
+      case 'showCards':
+        if (table.showCards(socket.id)) {
+          updateTableState(tableId);
+        }
+        break;
+      
+      case 'showdown':
+        const result = table.showdown();
+        handleTableShowdown(tableId, result);
+        break;
+      
+      case 'getState':
+        const state = table.getStateForPlayer(socket.id);
+        socket.emit("state", state);
+        break;
+    }
+
+    return true;
+  };
+
+  const checkShowdownAndUpdate = (table: any, tableId: string) => {
+    const state = table.getState();
+    if (state.stage === 'showdown' && table.game?.lastShowdown) {
+      handleTableShowdown(tableId, table.game.lastShowdown);
     } else {
-      updateState();
+      updateTableState(tableId);
     }
   };
 
-  socket.on("fold", () => {
-    handleAction(() => game.fold(socket.id), "Невозможно выполнить Fold");
-  });
+  // Game action handlers
+  socket.on("getState", () => handleGameAction('getState'));
+  socket.on("start", () => handleGameAction('start'));
+  socket.on("reset", () => handleGameAction('reset'));
+  socket.on("fold", () => handleGameAction('fold'));
+  socket.on("check", () => handleGameAction('check'));
+  socket.on("call", () => handleGameAction('call'));
+  socket.on("raise", (amount: number) => handleGameAction('raise', amount));
+  socket.on("allIn", () => handleGameAction('allIn'));
+  socket.on("showCards", () => handleGameAction('showCards'));
+  socket.on("showdown", () => handleGameAction('showdown'));
 
-  socket.on("check", () => {
-    handleAction(() => game.check(socket.id), "Невозможно выполнить Check");
-  });
+  // Legacy "join" handler - auto-assigns to first available table
+  socket.on("join", (seat: number) => {
+    // Find first available table
+    const tables = tableManager.getAllTablesInfo();
+    const availableTable = tables.find(t => t.status !== 'full');
+    
+    if (!availableTable) {
+      socket.emit("errorMessage", "No available tables");
+      return;
+    }
 
-  socket.on("call", () => {
-    handleAction(() => game.call(socket.id), "Невозможно выполнить Call");
-  });
+    // Use joinTable logic
+    const currentTableId = tableManager.getPlayerTableId(socket.id);
+    if (currentTableId) {
+      socket.leave(currentTableId);
+      tableManager.leaveTable(socket.id);
+    }
 
-  socket.on("raise", (amount: number) => {
-    handleAction(() => game.raise(socket.id, amount), "Невозможно выполнить Raise");
-  });
+    const result = tableManager.joinTable(socket.id, availableTable.id, seat);
+    
+    if (!result.success) {
+      socket.emit("errorMessage", result.error || "Failed to join table");
+      return;
+    }
 
-  socket.on("allIn", () => {
-    handleAction(() => game.allIn(socket.id), "Невозможно выполнить All-In");
-  });
-
-  socket.on("showCards", () => {
-    const success = game.showCards(socket.id);
-    if (success) updateState();
-  });
-
-  socket.on("reset", () => {
-    game.reset();
-    updateState();
-  });
-
-  socket.on("start", () => {
-    try {
-      game.start();
-      updateState();
-    } catch (e: any) {
-      socket.emit("errorMessage", e.message);
+    socket.join(availableTable.id);
+    
+    const table = tableManager.getTable(availableTable.id);
+    if (table) {
+      const state = table.getStateForPlayer(socket.id);
+      socket.emit("tableJoined", { tableId: availableTable.id, seat, state });
+      updateTableState(availableTable.id);
+      console.log(`[Table] ${socket.id} auto-joined ${availableTable.id} at seat ${seat}`);
     }
   });
 
-  socket.on("showdown", () => {
-    const result = game.showdown();
-    updateState();
-    handleShowdown(result);
+  // ==========================================
+  // Chat
+  // ==========================================
+  socket.on("sendChatMessage", (messageData) => {
+    const tableId = tableManager.getPlayerTableId(socket.id);
+    if (!tableId) {
+      socket.emit("errorMessage", "You are not at a table");
+      return;
+    }
+
+    const table = tableManager.getTable(tableId);
+    if (!table) return;
+
+    // Create full message with ID and timestamp
+    const fullMessage = {
+      ...messageData,
+      id: `${socket.id}-${Date.now()}`,
+      timestamp: Date.now(),
+    };
+
+    // Broadcast to all players at the table
+    const playerIds = table.getAllPlayerIds();
+    playerIds.forEach((playerId) => {
+      io.to(playerId).emit("chatMessage", fullMessage);
+    });
+
+    console.log(`[Chat] ${tableId}: ${messageData.authorName}: ${messageData.text.substring(0, 50)}`);
   });
 
+  // ==========================================
+  // Disconnect
+  // ==========================================
   socket.on("disconnect", () => {
-    console.log("Player disconnected:", socket.id);
-    game.removePlayer(socket.id);
-    updateState();
+    console.log("[Socket] Player disconnected:", socket.id);
+    
+    const tableId = tableManager.getPlayerTableId(socket.id);
+    if (tableId) {
+      updateTableState(tableId);
+    }
+    
+    tableManager.handleDisconnect(socket.id);
+    userStorage.removeUser(socket.id);
   });
 });
 
 server.listen(PORT, () => {
-  console.log(`Poker server running on http://localhost:${PORT}`);
+  console.log(`🚀 Poker server running on http://localhost:${PORT}`);
+  console.log(`📊 Environment: ${process.env.NODE_ENV || 'development'}`);
+  console.log(`🎲 Tables will be initialized shortly...`);
 });

@@ -1,16 +1,18 @@
 import React from "react";
-import Card from "./Card"; // используем ваш компонент Card
+import AnimatedCard from "./AnimatedCard";
 
 interface CommunityCardsProps {
   cards: string[];
   size?: number;      // размер карты в пикселях
   spacing?: number;   // расстояние между картами
+  animated?: boolean; // включить анимации
 }
 
 const CommunityCards: React.FC<CommunityCardsProps> = ({
   cards,
   size = 60,
-  spacing = 10, // уменьшено до 10px
+  spacing = 10,
+  animated = true,
 }) => {
   return (
     <div
@@ -22,7 +24,13 @@ const CommunityCards: React.FC<CommunityCardsProps> = ({
       }}
     >
       {cards.map((code, idx) => (
-        <Card key={idx} code={code} size={size} />
+        <AnimatedCard 
+          key={idx} 
+          code={code} 
+          size={size} 
+          animate={animated ? 'deal' : null}
+          delay={animated ? idx * 100 : 0}
+        />
       ))}
     </div>
   );

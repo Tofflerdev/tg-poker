@@ -1,15 +1,43 @@
 import React, { useState } from "react";
 import { Socket } from "socket.io-client";
-import { GameState, ClientEvents, ServerEvents } from "../../../types/index";
+import { GameState, ExtendedClientEvents, ExtendedServerEvents } from "../../../types/index";
+import { useTelegram } from "../hooks/useTelegram";
 
 interface Props {
-  socket: Socket<ServerEvents, ClientEvents>;
+  socket: Socket<ExtendedServerEvents, ExtendedClientEvents>;
   gameState: GameState;
   mySeat: number | null;
 }
 
 const GameControls: React.FC<Props> = ({ socket, gameState, mySeat }) => {
   const [raiseAmount, setRaiseAmount] = useState(20); // Дефолтный рейз
+  const { hapticFeedback } = useTelegram();
+
+  // Helper function for actions with haptic feedback
+  const emitAction = (action: string, ...args: any[]) => {
+    // Provide haptic feedback based on action type
+    if (hapticFeedback) {
+      switch (action) {
+        case 'fold':
+          hapticFeedback.notificationOccurred('error');
+          break;
+        case 'check':
+          hapticFeedback.impactOccurred('light');
+          break;
+        case 'call':
+          hapticFeedback.impactOccurred('medium');
+          break;
+        case 'raise':
+        case 'allIn':
+          hapticFeedback.impactOccurred('heavy');
+          break;
+        default:
+          hapticFeedback.impactOccurred('light');
+      }
+    }
+    
+    (socket.emit as any)(action, ...args);
+  };
 
   // Находим себя
   const myPlayer = mySeat !== null ? gameState.seats[mySeat] : null;
@@ -76,8 +104,8 @@ const GameControls: React.FC<Props> = ({ socket, gameState, mySeat }) => {
       boxShadow: "0 4px 6px rgba(0,0,0,0.3)"
     }}>
       {/* FOLD */}
-      <button 
-        onClick={() => socket.emit("fold")}
+      <button
+        onClick={() => emitAction("fold")}
         style={{ ...btnStyle, background: "#d9534f" }}
       >
         Fold
@@ -85,15 +113,15 @@ const GameControls: React.FC<Props> = ({ socket, gameState, mySeat }) => {
 
       {/* CHECK / CALL */}
       {toCall === 0 ? (
-        <button 
-          onClick={() => socket.emit("check")}
+        <button
+          onClick={() => emitAction("check")}
           style={{ ...btnStyle, background: "#5bc0de" }}
         >
           Check
         </button>
       ) : (
-        <button 
-          onClick={() => socket.emit("call")}
+        <button
+          onClick={() => emitAction("call")}
           style={{ ...btnStyle, background: "#5bc0de" }}
         >
           Call ({toCall})
@@ -102,14 +130,14 @@ const GameControls: React.FC<Props> = ({ socket, gameState, mySeat }) => {
 
       {/* RAISE */}
       <div style={{ display: "flex", alignItems: "center", gap: 5, background: "#444", padding: 5, borderRadius: 5 }}>
-        <input 
-          type="number" 
+        <input
+          type="number"
           value={raiseAmount}
           onChange={(e) => setRaiseAmount(Number(e.target.value))}
           style={{ width: 60, padding: 5, borderRadius: 3, border: "none" }}
         />
-        <button 
-          onClick={() => socket.emit("raise", raiseAmount)}
+        <button
+          onClick={() => emitAction("raise", raiseAmount)}
           style={{ ...btnStyle, background: "#f0ad4e", color: "black" }}
         >
           Raise
@@ -118,7 +146,7 @@ const GameControls: React.FC<Props> = ({ socket, gameState, mySeat }) => {
 
       {/* ALL IN */}
       <button
-        onClick={() => socket.emit("allIn")}
+        onClick={() => emitAction("allIn")}
         style={{ ...btnStyle, background: "#c0392b" }}
       >
         All-In
