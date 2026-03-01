@@ -14,6 +14,11 @@ export class Table {
   status: TableStatus;
   createdAt: Date;
 
+  // Auto-start timer
+  private nextHandTimer: NodeJS.Timeout | null = null;
+  private readonly NEXT_HAND_DELAY = 5000; // 5 секунд между раздачами
+  private onStateChangeCallback: (() => void) | null = null;
+
   constructor(id: string, name: string, config: TableConfig) {
     this.id = id;
     this.name = name;
@@ -29,18 +34,16 @@ export class Table {
     // Setup state change callback
     this.game.setOnStateChange(() => {
       this.updateStatus();
+      if (this.onStateChangeCallback) {
+        this.onStateChangeCallback();
+      }
     });
 
     // Setup turn timeout callback
     this.game.setOnTurnTimeout(() => {
-      // Auto-fold on timeout
-      const state = this.game.getState();
-      if (state.currentPlayer !== null) {
-        const player = state.seats[state.currentPlayer];
-        if (player) {
-          this.game.fold(player.id);
-        }
-      }
+      // Game class handles auto-fold internally
+      // We notify state change to update UI
+      this.notifyStateChange();
     });
   }
 
@@ -101,17 +104,103 @@ export class Table {
     if (success) {
       this.playerIds.add(socketId);
       this.updateStatus();
+      // Пробуем автоматически начать раздачу
+      this.tryStartNextHand();
     }
     return success;
   }
 
   /**
-   * Remove a player from the table
+   * Remove a player from the table (handles mid-hand fold if needed)
    */
   removePlayer(socketId: string): void {
     this.game.removePlayer(socketId);
     this.playerIds.delete(socketId);
     this.updateStatus();
+    
+    // Проверяем, нужно ли продолжить/завершить текущую раздачу
+    const state = this.game.getState();
+    if (state.stage === 'showdown' || state.stage === 'waiting') {
+      this.scheduleNextHand();
+    }
+  }
+
+  /**
+   * Remove player mid-game with auto-fold
+   */
+  removePlayerMidGame(socketId: string): void {
+    this.removePlayer(socketId);
+  }
+
+  /**
+   * Schedule next hand to start automatically
+   */
+  scheduleNextHand(): void {
+    // Очищаем существующий таймер
+    if (this.nextHandTimer) {
+      clearTimeout(this.nextHandTimer);
+      this.nextHandTimer = null;
+    }
+
+    // Устанавливаем timestamp для UI
+    this.game.nextHandIn = Date.now() + this.NEXT_HAND_DELAY;
+    this.notifyStateChange();
+
+    const eligibleCount = this.game.getEligiblePlayers().length;
+    
+    // Если игроков достаточно ИЛИ мы в стадии showdown (нужно показать победителя перед переходом в waiting)
+    const state = this.game.getState();
+    const shouldSchedule = eligibleCount >= 2 || state.stage === 'showdown';
+
+    if (shouldSchedule) {
+      this.nextHandTimer = setTimeout(() => {
+        this.nextHandTimer = null;
+        this.game.nextHandIn = null;
+        const started = this.game.startNextHand();
+        
+        // Уведомляем об изменении состояния, даже если игра не началась (переход в waiting)
+        if (this.onStateChangeCallback) {
+          this.onStateChangeCallback();
+        }
+      }, this.NEXT_HAND_DELAY);
+    } else {
+      // Недостаточно игроков и не showdown - сбрасываем таймер
+      this.game.nextHandIn = null;
+    }
+  }
+
+  /**
+   * Try to start next hand (called when player joins)
+   */
+  tryStartNextHand(): void {
+    const state = this.game.getState();
+    
+    // Запускаем только если:
+    // 1. Сейчас waiting stage ИЛИ showdown
+    // 2. Нет активного таймера
+    // 3. Достаточно eligible игроков
+    if ((state.stage === 'waiting' || state.stage === 'showdown') && !this.nextHandTimer) {
+      const eligibleCount = this.game.getEligiblePlayers().length;
+      if (eligibleCount >= 2) {
+        this.scheduleNextHand();
+      }
+    }
+  }
+
+  /**
+   * Set state change callback (for broadcasting updates)
+   */
+  setOnStateChange(callback: () => void): void {
+    this.onStateChangeCallback = callback;
+  }
+
+  /**
+   * Notify state change
+   */
+  private notifyStateChange(): void {
+    if (this.onStateChangeCallback) {
+      this.onStateChangeCallback();
+    }
   }
 
   /**
@@ -176,6 +265,29 @@ export class Table {
 
   showCards(socketId: string): boolean {
     return this.game.showCards(socketId);
+  }
+
+  /**
+   * Sit out - player voluntarily sits out
+   */
+  sitOut(socketId: string): boolean {
+    const result = this.game.sitOut(socketId);
+    if (result) {
+      this.notifyStateChange();
+    }
+    return result;
+  }
+
+  /**
+   * Sit in - player returns from sit out
+   */
+  sitIn(socketId: string): boolean {
+    const result = this.game.sitIn(socketId);
+    if (result) {
+      this.tryStartNextHand();
+      this.notifyStateChange();
+    }
+    return result;
   }
 
   /**

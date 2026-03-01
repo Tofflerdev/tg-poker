@@ -50,6 +50,9 @@ const SeatsDisplay: React.FC<SeatsDisplayProps> = ({
           timeLeft = Math.max(0, Math.ceil((turnExpiresAt - now) / 1000));
         }
 
+        // Визуальные индикаторы для разных состояний
+        const isWaitingForBB = player?.waitingForBB;
+        
         return (
           <div
             key={i}
@@ -64,7 +67,9 @@ const SeatsDisplay: React.FC<SeatsDisplayProps> = ({
               background: canSit ? "#4a7a4a" : isFree ? "#3a5a3a" : "#222",
               border: isActive
                 ? "4px solid #FFD700" // Золотая рамка для активного
-                : `2px solid ${canSit ? "#aaffaa" : isFree ? "#777" : "#444"}`,
+                : isWaitingForBB
+                  ? "2px solid #f0ad4e" // Оранжевая рамка для ожидающих ББ
+                  : `2px solid ${canSit ? "#aaffaa" : isFree ? "#777" : "#444"}`,
               display: "flex",
               flexDirection: "column",
               alignItems: "center",
@@ -73,7 +78,7 @@ const SeatsDisplay: React.FC<SeatsDisplayProps> = ({
               textAlign: "center",
               cursor: canSit ? "pointer" : "default",
               transition: "all 0.3s",
-              boxShadow: isActive ? "0 0 15px #FFD700" : "none"
+              boxShadow: isActive ? "0 0 15px #FFD700" : "none",
             }}
             onClick={() => canSit && onSit(i)}
           >
@@ -106,6 +111,7 @@ const SeatsDisplay: React.FC<SeatsDisplayProps> = ({
                     <div>Stack: {player.chips}</div>
                     {player.bet > 0 && <div style={{color: '#aaaaff'}}>Bet: {player.bet}</div>}
                     {player.folded && <div style={{color: '#ff6666'}}>FOLD</div>}
+                    {player.waitingForBB && <div style={{color: '#f0ad4e'}}>Ждет ББ</div>}
                 </div>
               </>
             ) : (

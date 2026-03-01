@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Socket } from "socket.io-client";
 import { GameState, ExtendedClientEvents, ExtendedServerEvents } from "../../../types/index";
 import { useTelegram } from "../hooks/useTelegram";
@@ -9,9 +9,37 @@ interface Props {
   mySeat: number | null;
 }
 
+// Hook for countdown timer
+const useCountdown = (targetTime: number | null): number | null => {
+  const [remaining, setRemaining] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (!targetTime) {
+      setRemaining(null);
+      return;
+    }
+
+    const updateRemaining = () => {
+      const now = Date.now();
+      const diff = Math.ceil((targetTime - now) / 1000);
+      setRemaining(diff > 0 ? diff : 0);
+    };
+
+    updateRemaining();
+    const interval = setInterval(updateRemaining, 1000);
+
+    return () => clearInterval(interval);
+  }, [targetTime]);
+
+  return remaining;
+};
+
 const GameControls: React.FC<Props> = ({ socket, gameState, mySeat }) => {
   const [raiseAmount, setRaiseAmount] = useState(20); // Дефолтный рейз
   const { hapticFeedback } = useTelegram();
+
+  // Countdown for next hand
+  const countdown = useCountdown(gameState.nextHandIn);
 
   // Helper function for actions with haptic feedback
   const emitAction = (action: string, ...args: any[]) => {
@@ -47,21 +75,45 @@ const GameControls: React.FC<Props> = ({ socket, gameState, mySeat }) => {
   const currentBet = gameState.currentBet;
   const myBet = myPlayer?.bet || 0;
   const toCall = currentBet - myBet;
-  
-  // Кнопки управления игрой (видны всегда, но лучше скрывать во время раздачи)
+
+  // Статус ожидания для waiting/showdown
   if (gameState.stage === 'waiting' || gameState.stage === 'showdown') {
     const activePlayers = gameState.seats.filter(p => p && !p.folded);
     const isWinByFold = gameState.stage === 'showdown' && activePlayers.length === 1;
     const amIWinner = isWinByFold && myPlayer && !myPlayer.folded;
+    const eligiblePlayers = gameState.seats.filter(p => p && p.chips > 0 && !p.waitingForBB).length;
 
     return (
       <div style={{ marginBottom: 20, textAlign: "center" }}>
+        {/* Showdown completed message */}
         {gameState.stage === 'showdown' && (
-           <div style={{marginBottom: 10, color: '#f0ad4e', fontWeight: 'bold'}}>
-             Раздача завершена!
-           </div>
+          <div style={{marginBottom: 10, color: '#f0ad4e', fontWeight: 'bold'}}>
+            Раздача завершена!
+          </div>
+        )}
+
+        {/* Countdown for next hand */}
+        {countdown !== null && countdown > 0 && (
+          <div style={{marginBottom: 10, color: '#5bc0de', fontSize: 14}}>
+            Следующая раздача через {countdown} сек...
+          </div>
+        )}
+
+        {/* Waiting for players */}
+        {gameState.stage === 'waiting' && (
+          <div style={{marginBottom: 10, color: '#888', fontSize: 14}}>
+            Ожидание игроков... ({eligiblePlayers}/2 минимум)
+          </div>
+        )}
+
+        {/* Waiting for BB message */}
+        {myPlayer?.waitingForBB && (
+          <div style={{marginBottom: 10, color: '#f0ad4e', fontSize: 14}}>
+            Ожидание большого блайнда...
+          </div>
         )}
         
+        {/* Show cards button for winner */}
         {amIWinner && !myPlayer?.showCards && (
           <button
             onClick={() => socket.emit("showCards")}
@@ -71,12 +123,6 @@ const GameControls: React.FC<Props> = ({ socket, gameState, mySeat }) => {
           </button>
         )}
 
-        <button
-          onClick={() => socket.emit("start")}
-          style={{ padding: "10px 20px", fontSize: 16, cursor: "pointer", background: "#4CAF50", color: "white", border: "none", borderRadius: 5 }}
-        >
-          {gameState.stage === 'showdown' ? "Следующая раздача" : "Начать игру"}
-        </button>
       </div>
     );
   }

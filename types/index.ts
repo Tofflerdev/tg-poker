@@ -14,6 +14,8 @@ export interface Player {
   allIn: boolean;
   acted: boolean;
   showCards: boolean;
+  waitingForBB: boolean;  // NEW: игрок присоединился во время игры, ждет большого блайнда
+  sittingOut: boolean;    // NEW: игрок добровольно отсиделся
 }
 
 // Представляет один пот (основной или сайд-пот)
@@ -52,6 +54,7 @@ export interface GameState {
   bigBlind: number;
   stage: GameStage;
   turnExpiresAt: number | null; // Timestamp окончания хода
+  nextHandIn: number | null;  // NEW: timestamp когда начнется следующая раздача
 }
 
 export interface ShowdownResult {
@@ -73,8 +76,6 @@ export interface ShowdownResult {
 export interface ClientEvents {
   join: (seat: number) => void;
   getState: () => void;
-  start: () => void;
-  reset: () => void;
   // Actions
   fold: () => void;
   check: () => void;
@@ -82,6 +83,9 @@ export interface ClientEvents {
   raise: (amount: number) => void;
   allIn: () => void;
   showCards: () => void;
+  // Auto-start continuous game
+  sitOut: () => void;     // NEW: добровольный сит-аут
+  sitIn: () => void;      // NEW: вернуться за стол (будет ждать ББ)
   // Dev only
   flop: () => void;
   turn: () => void;

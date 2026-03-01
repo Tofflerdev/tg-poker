@@ -75,6 +75,13 @@ const handleTableShowdown = (tableId: string, result: any) => {
   });
 
   updateTableState(tableId);
+
+  // Schedule next hand automatically
+  setTimeout(() => {
+    table.scheduleNextHand();
+    // Broadcast state update to show countdown
+    updateTableState(tableId);
+  }, 100);
 };
 
 // Setup table event handlers
@@ -84,6 +91,10 @@ const setupTableEvents = (tableId: string) => {
 
   table.setOnShowdown((result) => {
     handleTableShowdown(tableId, result);
+  });
+
+  table.setOnStateChange(() => {
+    updateTableState(tableId);
   });
 };
 
@@ -185,20 +196,6 @@ io.on("connection", (socket) => {
     const tableId = table.id;
     
     switch (action) {
-      case 'start':
-        try {
-          table.start();
-          updateTableState(tableId);
-        } catch (e: any) {
-          socket.emit("errorMessage", e.message);
-        }
-        break;
-      
-      case 'reset':
-        table.reset();
-        updateTableState(tableId);
-        break;
-      
       case 'fold':
         if (table.fold(socket.id)) {
           checkShowdownAndUpdate(table, tableId);
@@ -255,6 +252,18 @@ io.on("connection", (socket) => {
         const state = table.getStateForPlayer(socket.id);
         socket.emit("state", state);
         break;
+
+      case 'sitOut':
+        if (table.sitOut(socket.id)) {
+          updateTableState(tableId);
+        }
+        break;
+
+      case 'sitIn':
+        if (table.sitIn(socket.id)) {
+          updateTableState(tableId);
+        }
+        break;
     }
 
     return true;
@@ -271,8 +280,6 @@ io.on("connection", (socket) => {
 
   // Game action handlers
   socket.on("getState", () => handleGameAction('getState'));
-  socket.on("start", () => handleGameAction('start'));
-  socket.on("reset", () => handleGameAction('reset'));
   socket.on("fold", () => handleGameAction('fold'));
   socket.on("check", () => handleGameAction('check'));
   socket.on("call", () => handleGameAction('call'));
@@ -280,6 +287,8 @@ io.on("connection", (socket) => {
   socket.on("allIn", () => handleGameAction('allIn'));
   socket.on("showCards", () => handleGameAction('showCards'));
   socket.on("showdown", () => handleGameAction('showdown'));
+  socket.on("sitOut", () => handleGameAction('sitOut'));
+  socket.on("sitIn", () => handleGameAction('sitIn'));
 
   // Legacy "join" handler - auto-assigns to first available table
   socket.on("join", (seat: number) => {

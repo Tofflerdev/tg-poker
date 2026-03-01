@@ -28,19 +28,27 @@ export default class Game {
   private onShowdown: ((result: ShowdownResult) => void) | null = null;
 
   public lastShowdown: ShowdownResult | null = null;
+  public nextHandIn: number | null = null;  // NEW: timestamp когда начнется следующая раздача
 
   // Вспомогательный метод для получения общей суммы всех потов
   private getTotalPot(): number {
     return this.pots.reduce((sum, pot) => sum + pot.amount, 0);
   }
 
-  // Добавление игрока
+  // Добавление игрока (разрешаем в любое время)
   addPlayer(id: string, seat: number, chips: number = 1000): boolean {
     if (seat < 0 || seat >= this.seats.length) return false;
     if (this.seats[seat]) return false;
-    if (this.stage !== 'waiting' && this.stage !== 'showdown') return false; // нельзя добавлять во время игры
 
     this.spectators = this.spectators.filter((p) => p.id !== id);
+
+    // Определяем, нужно ли ждать большой блайнд
+    // Если стол в waiting ИЛИ нет eligible игроков (стол фактически пуст) - не ждем
+    // Иначе ждем ББ
+    const eligiblePlayers = this.seats.filter((p): p is Player =>
+      p !== null && p.chips > 0 && !p.waitingForBB && !p.sittingOut
+    );
+    const waitingForBB = this.stage !== 'waiting' && eligiblePlayers.length > 0;
 
     const player: Player = {
       id,
@@ -53,9 +61,26 @@ export default class Game {
       allIn: false,
       acted: false,
       showCards: false,
+      waitingForBB,  // NEW: ждем ББ если игра уже идет
+      sittingOut: false,  // NEW: изначально не отсидиваемся
     };
     this.seats[seat] = player;
     return true;
+  }
+
+  // Получить список игроков, которые могут участвовать в СЛЕДУЮЩЕЙ раздаче
+  getEligiblePlayers(): Player[] {
+    return this.seats.filter((p): p is Player =>
+      p !== null &&
+      p.chips > 0 &&
+      !p.waitingForBB &&
+      !p.sittingOut
+    );
+  }
+
+  // Проверка, может ли игрок играть в текущей раздаче
+  private canPlayerPlayInCurrentHand(player: Player): boolean {
+    return player.chips > 0 && !player.waitingForBB && !player.sittingOut;
   }
 
   addSpectator(id: string): boolean {
@@ -65,9 +90,55 @@ export default class Game {
     return true;
   }
 
-  removePlayer(id: string) {
+  // Удаление игрока с обработкой выхода во время раздачи
+  removePlayer(id: string): boolean {
+    const player = this.seats.find(p => p?.id === id);
+    if (!player) {
+      // Игрок может быть spectator
+      this.spectators = this.spectators.filter((p) => p.id !== id);
+      return true;
+    }
+
+    // Если игрок в текущей раздаче (есть карты и не сфолдил)
+    const isInHand = this.stage !== 'waiting' &&
+                     this.stage !== 'showdown' &&
+                     player.hand.length > 0 &&
+                     !player.folded;
+
+    if (isInHand) {
+      // Авто-фолд при выходе во время раздачи
+      // Если это текущий игрок, сбрасываем и переходим дальше
+      const currentPlayerObj = this.currentPlayer !== null ? this.seats[this.currentPlayer] : null;
+      if (currentPlayerObj?.id === id) {
+        player.folded = true;
+        player.acted = true;
+        this.nextPlayer();
+      } else {
+        // Просто помечаем как сфолдившего
+        player.folded = true;
+      }
+    }
+
     this.seats = this.seats.map((p) => (p?.id === id ? null : p));
     this.spectators = this.spectators.filter((p) => p.id !== id);
+    return true;
+  }
+
+  // Добровольный сит-аут
+  sitOut(playerId: string): boolean {
+    const player = this.seats.find(p => p?.id === playerId);
+    if (!player) return false;
+    player.sittingOut = true;
+    return true;
+  }
+
+  // Вернуться за стол (будет ждать ББ)
+  sitIn(playerId: string): boolean {
+    const player = this.seats.find(p => p?.id === playerId);
+    if (!player) return false;
+    player.sittingOut = false;
+    player.waitingForBB = this.stage !== 'waiting';
+    return true;
   }
 
   reset() {
@@ -90,15 +161,29 @@ export default class Game {
         p.allIn = false;
         p.acted = false;
         p.showCards = false;
+        // НЕ сбрасываем waitingForBB и sittingOut - они сохраняются между раздачами
       }
     });
   }
 
+  // Legacy start() - оставляем для обратной совместимости
   start() {
-    const playersCanPlay = this.seats.filter(p => p !== null && p.chips > 0);
+    this.startNextHand();
+  }
+
+  // Новый метод: автоматический старт следующей раздачи
+  startNextHand(): boolean {
+    // Передвигаем дилера перед стартом новой раздачи
+    this.dealerPosition = this.getNextSeatForDealer(this.dealerPosition);
+
+    // Активируем игроков, у которых наступил ББ
+    this.activateWaitingPlayers();
+
+    const eligiblePlayers = this.getEligiblePlayers();
     
-    if (playersCanPlay.length < 2) {
-      throw new Error("Нужно минимум 2 игрока");
+    if (eligiblePlayers.length < 2) {
+      this.stage = 'waiting';
+      return false;
     }
 
     this.reset();
@@ -106,9 +191,9 @@ export default class Game {
     this.deck.shuffle();
     this.stage = 'preflop';
 
-    // Раздача карт
+    // Раздача карт только eligible игрокам
     this.seats.forEach((p) => {
-      if (p && p.chips > 0) {
+      if (p && this.canPlayerPlayInCurrentHand(p)) {
         p.hand = this.deck!.deal(2);
       }
     });
@@ -119,6 +204,39 @@ export default class Game {
     // Первый игрок после большого блайнда
     this.currentPlayer = this.getNextPlayer(this.getBigBlindPosition());
     this.startTurnTimer();
+    
+    return true;
+  }
+
+  // Активировать игроков, которые ждали ББ
+  private activateWaitingPlayers(): void {
+    const bbPosition = this.getNextSeatForDealer(this.getNextSeatForDealer(this.dealerPosition));
+    
+    this.seats.forEach((p) => {
+      if (p && p.waitingForBB) {
+        // Если ББ достиг позиции игрока - активируем
+        if (p.seat === bbPosition) {
+          p.waitingForBB = false;
+        }
+      }
+    });
+  }
+
+  // Получить следующее место для дилера (пропускаем пустые и отсидивающиеся)
+  private getNextSeatForDealer(fromSeat: number): number {
+    let seat = (fromSeat + 1) % this.seats.length;
+    let attempts = 0;
+    
+    while (attempts < this.seats.length) {
+      const player = this.seats[seat];
+      if (player && player.chips > 0 && !player.sittingOut) {
+        return seat;
+      }
+      seat = (seat + 1) % this.seats.length;
+      attempts++;
+    }
+    
+    return fromSeat;
   }
 
   private postBlinds() {
@@ -365,12 +483,12 @@ export default class Game {
 
       this.pots = [];
       this.currentPlayer = null;
-      
-      // Передвижение дилера
-      this.dealerPosition = this.getNextSeat(this.dealerPosition);
 
-      // Переключаем стадию, чтобы появилась кнопка "Next Hand"
+      // Переключаем стадию, auto-start сработает через Table.scheduleNextHand()
       this.stage = 'showdown';
+      if (this.onShowdown) {
+        this.onShowdown(this.lastShowdown!);
+      }
       return;
     }
 
@@ -400,7 +518,10 @@ export default class Game {
         break;
       case 'river':
         this.stage = 'showdown';
-        this.showdown();
+        const result = this.showdown();
+        if (this.onShowdown) {
+          this.onShowdown(result);
+        }
         return;
     }
 
@@ -534,9 +655,8 @@ export default class Game {
     this.stage = 'showdown';
     this.currentPlayer = null;
     this.stopTurnTimer();
-    
-    // Передвижение дилера
-    this.dealerPosition = this.getNextSeat(this.dealerPosition);
+
+    // Дилер передвинется при старте следующей раздачи в startNextHand()
 
     return this.lastShowdown;
   }
@@ -545,15 +665,15 @@ export default class Game {
   private getCurrentPlayerIfValid(playerId: string): Player | null {
     if (this.currentPlayer === null) return null;
     const player = this.seats[this.currentPlayer];
-    if (!player || player.id !== playerId || player.folded || player.allIn) {
+    if (!player || player.id !== playerId || player.folded || player.allIn || player.waitingForBB) {
       return null;
     }
     return player;
   }
 
   private getActivePlayers(): Player[] {
-    return this.seats.filter((p): p is Player => 
-      p !== null && !p.folded
+    return this.seats.filter((p): p is Player =>
+      p !== null && !p.folded && !p.waitingForBB
     );
   }
 
@@ -563,7 +683,7 @@ export default class Game {
     
     while (attempts < this.seats.length) {
       const player = this.seats[seat];
-      if (player && !player.folded && !player.allIn && player.chips > 0) {
+      if (player && !player.folded && !player.allIn && player.chips > 0 && !player.waitingForBB) {
         return seat;
       }
       seat = this.getNextSeat(seat);
@@ -610,6 +730,7 @@ export default class Game {
       bigBlind: this.bigBlind,
       stage: this.stage,
       turnExpiresAt: this.turnExpiresAt,
+      nextHandIn: this.nextHandIn,
     };
   }
 

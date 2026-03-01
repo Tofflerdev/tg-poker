@@ -53,7 +53,8 @@ const App: React.FC = () => {
     smallBlind: 0,
     bigBlind: 0,
     stage: 'waiting',
-    turnExpiresAt: null
+    turnExpiresAt: null,
+    nextHandIn: null
   });
   
   const [showdown, setShowdown] = useState<ShowdownResult | null>(null);
