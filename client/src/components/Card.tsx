@@ -7,10 +7,10 @@ interface CardProps {
 }
 
 const Card: React.FC<CardProps> = ({ code, size = 60, style }) => {
-  // 🔹 путь к картинкам
+  // 🔹 путь к картинкам (public/cards/ — works in both dev and production)
   const src = code
-    ? `/src/assets/cards/${code}.png`
-    : `/src/assets/cards/back.png`; // <-- рубашка
+    ? `/cards/${code}.png`
+    : `/cards/back.png`;
 
   return (
     <img

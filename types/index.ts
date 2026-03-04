@@ -5,6 +5,9 @@
 
 export interface Player {
   id: string;
+  telegramId?: number;    // NEW: for persistent identity
+  displayName?: string;   // NEW: shown at table
+  avatarUrl?: string;     // NEW: shown at table
   seat: number;
   hand: string[]; // ["As", "Kd"] или ["back", "back"] для скрытых
   chips: number;  // Стек игрока
@@ -107,22 +110,29 @@ export interface ServerEvents {
 // ==========================================
 
 export interface TelegramUser {
-  id: string;
+  id: string;           // internal ID (was socket.id, now DB id)
   telegramId: number;
-  username?: string;
+  username?: string;     // Telegram @username
+  displayName: string;   // NEW: editable display name
   firstName: string;
   lastName?: string;
   photoUrl?: string;
+  avatarUrl?: string;    // NEW: custom avatar (overrides photoUrl)
   balance: number;
+  lastDailyRefill?: string; // NEW: ISO timestamp
+  canClaimDaily?: boolean;  // NEW: computed field
 }
 
 export interface UserProfile {
   telegramId: number;
-  username: string;
+  username?: string;
+  displayName: string;
+  avatarUrl?: string;
   totalWinnings: number;
   handsPlayed: number;
   handsWon: number;
-  joinedAt: Date;
+  biggestPot: number;
+  joinedAt: string; // ISO string
 }
 
 export interface WebAppInitData {
@@ -212,6 +222,13 @@ export interface ExtendedServerEvents extends ServerEvents {
   // Chat events
   chatMessage: (message: ChatMessage) => void;
   systemMessage: (text: string) => void;
+  // NEW
+  dailyBonusClaimed: (data: { balance: number; nextClaimAt: string }) => void;
+  dailyBonusError: (msg: string) => void;
+  profileData: (profile: UserProfile) => void;
+  profileUpdated: (profile: UserProfile) => void;
+  profileError: (msg: string) => void;
+  balanceUpdate: (balance: number) => void;
 }
 
 // ==========================================
@@ -235,4 +252,8 @@ export interface ExtendedClientEvents extends ClientEvents {
   leaveTable: () => void;
   // Chat
   sendChatMessage: (message: Omit<ChatMessage, 'id' | 'timestamp'>) => void;
+  // NEW
+  claimDailyBonus: () => void;
+  getProfile: () => void;
+  updateProfile: (data: { displayName?: string; avatarUrl?: string }) => void;
 }

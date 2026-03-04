@@ -1,20 +1,26 @@
 import React from 'react';
 import { useTelegram } from '../hooks/useTelegram';
-import type { TableInfo } from '../../../types/index';
+import type { TableInfo, TelegramUser } from '../../../types/index';
+import { DailyBonusButton } from '../components/DailyBonusButton';
 
 interface MainMenuProps {
-  user: {
-    firstName: string;
-    username?: string;
-    balance?: number;
-  } | null;
+  user: TelegramUser | null;
   tables: TableInfo[];
   onSelectTable: (tableId: string) => void;
   onShowTables: () => void;
+  onOpenProfile: () => void;
+  onClaimBonus: () => void;
 }
 
-export const MainMenu: React.FC<MainMenuProps> = ({ user, tables, onSelectTable, onShowTables }) => {
-  const { showMainButton, hideMainButton, setHeaderColor, hapticFeedback } = useTelegram();
+export const MainMenu: React.FC<MainMenuProps> = ({ 
+  user, 
+  tables, 
+  onSelectTable, 
+  onShowTables,
+  onOpenProfile,
+  onClaimBonus
+}) => {
+  const { hideMainButton, setHeaderColor, hapticFeedback } = useTelegram();
 
   const handleSelectTableClick = (tableId: string) => {
     hapticFeedback?.impactOccurred('medium');
@@ -48,19 +54,6 @@ export const MainMenu: React.FC<MainMenuProps> = ({ user, tables, onSelectTable,
     }
   };
 
-  const getStatusText = (status: TableInfo['status']) => {
-    switch (status) {
-      case 'waiting':
-        return 'Ожидание';
-      case 'playing':
-        return 'Идёт игра';
-      case 'full':
-        return 'Полный';
-      default:
-        return 'Неизвестно';
-    }
-  };
-
   const firstThreeTables = tables.slice(0, 3);
 
   return (
@@ -68,13 +61,37 @@ export const MainMenu: React.FC<MainMenuProps> = ({ user, tables, onSelectTable,
       <div className="menu-header">
         <div className="logo">🃏 Poker App</div>
         {user && (
-          <div className="user-greeting">
-            Привет, {user.firstName}!
+          <div className="user-greeting" onClick={onOpenProfile} style={{ cursor: 'pointer' }}>
+            <div className="user-info">
+              <img 
+                src={user.avatarUrl || user.photoUrl || 'https://via.placeholder.com/40'} 
+                alt="Avatar" 
+                className="user-avatar-small"
+                onError={(e) => { (e.target as HTMLImageElement).src = 'https://via.placeholder.com/40'; }}
+              />
+              <span>{user.displayName || user.firstName}</span>
+            </div>
+            <span className="settings-icon">⚙️</span>
           </div>
         )}
       </div>
 
       <div className="menu-content">
+        {user && (
+          <div className="balance-card">
+            <div className="balance-info">
+              <span className="balance-label">Ваш баланс:</span>
+              <span className="balance-value">{user.balance.toLocaleString()} 💰</span>
+            </div>
+            <DailyBonusButton 
+              balance={user.balance}
+              lastDailyRefill={user.lastDailyRefill}
+              canClaimDaily={user.canClaimDaily}
+              onClaim={onClaimBonus}
+            />
+          </div>
+        )}
+
         <div className="menu-card">
           <h2>Добро пожаловать!</h2>
           <p>Играйте в техасский холдем покер прямо в Telegram.</p>
@@ -132,13 +149,6 @@ export const MainMenu: React.FC<MainMenuProps> = ({ user, tables, onSelectTable,
             <span>📋 Посмотреть все столы</span>
           </button>
         </div>
-
-        {user?.balance !== undefined && (
-          <div className="balance-card">
-            <span className="balance-label">Ваш баланс:</span>
-            <span className="balance-value">{user.balance.toLocaleString()} 💰</span>
-          </div>
-        )}
       </div>
 
       <style>{`
@@ -149,19 +159,43 @@ export const MainMenu: React.FC<MainMenuProps> = ({ user, tables, onSelectTable,
         }
 
         .menu-header {
-          text-align: center;
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
           margin-bottom: 24px;
         }
 
         .logo {
-          font-size: 48px;
-          margin-bottom: 8px;
+          font-size: 24px;
+          font-weight: bold;
         }
 
         .user-greeting {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          background: var(--tg-theme-secondary-bg-color, #fff);
+          padding: 5px 10px;
+          border-radius: 20px;
+          box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+
+        .user-info {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+        }
+
+        .user-avatar-small {
+          width: 30px;
+          height: 30px;
+          border-radius: 50%;
+          object-fit: cover;
+        }
+
+        .settings-icon {
           font-size: 18px;
-          color: var(--tg-theme-text-color, #000);
-          opacity: 0.8;
+          opacity: 0.7;
         }
 
         .menu-content {
@@ -312,10 +346,15 @@ export const MainMenu: React.FC<MainMenuProps> = ({ user, tables, onSelectTable,
           background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
           border-radius: 12px;
           padding: 16px;
+          margin-bottom: 16px;
+          color: white;
+        }
+
+        .balance-info {
           display: flex;
           justify-content: space-between;
           align-items: center;
-          color: white;
+          margin-bottom: 10px;
         }
 
         .balance-label {

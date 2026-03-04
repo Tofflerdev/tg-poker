@@ -1,4 +1,5 @@
 import { Table } from './models/Table.js';
+import { userStorage } from './models/User.js';
 import type { TableConfig, TableInfo, TableStatus } from '../types/index.js';
 
 /**
@@ -178,7 +179,20 @@ export class TableManager {
       return { success: false, error: 'Seat is occupied' };
     }
 
-    const success = table.addPlayer(socketId, seat);
+    const user = userStorage.getUser(socketId);
+    if (!user) {
+      return { success: false, error: 'User not found' };
+    }
+
+    const success = table.addPlayer(
+      socketId,
+      seat,
+      table.config.buyIn,
+      user.telegramId,
+      user.displayName,
+      user.avatarUrl
+    );
+    
     if (success) {
       this.playerToTable.set(socketId, tableId);
       return { success: true, seat };

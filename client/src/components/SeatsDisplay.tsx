@@ -101,6 +101,33 @@ const SeatsDisplay: React.FC<SeatsDisplayProps> = ({
 
             {player ? (
               <>
+                {/* Avatar and Name */}
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 5,
+                  marginBottom: 5,
+                  position: 'absolute',
+                  top: -35,
+                  background: 'rgba(0,0,0,0.7)',
+                  padding: '4px 8px',
+                  borderRadius: 10,
+                  whiteSpace: 'nowrap',
+                  zIndex: 5
+                }}>
+                  {player.avatarUrl && (
+                    <img
+                      src={player.avatarUrl}
+                      alt="Avatar"
+                      style={{ width: 20, height: 20, borderRadius: '50%' }}
+                      onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                    />
+                  )}
+                  <span style={{ fontSize: 12, fontWeight: 'bold' }}>
+                    {player.displayName || `Player ${player.id.slice(0, 4)}`}
+                  </span>
+                </div>
+
                 {/* Карты */}
                 <div style={{ transform: "scale(0.8)", marginBottom: -10 }}>
                    <HandDisplay cards={player.hand} size={60} />

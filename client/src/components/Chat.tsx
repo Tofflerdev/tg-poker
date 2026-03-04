@@ -66,7 +66,7 @@ const Chat: React.FC<ChatProps> = ({ socket, currentUser, tableId }) => {
 
     const message: Omit<ChatMessage, "id" | "timestamp"> = {
       authorId: currentUser.id,
-      authorName: currentUser.username || currentUser.firstName,
+      authorName: currentUser.displayName || currentUser.username || currentUser.firstName,
       text: inputValue.trim(),
       type: "player",
     };

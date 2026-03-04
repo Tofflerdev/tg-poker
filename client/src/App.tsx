@@ -4,6 +4,7 @@ import { useTelegram } from "./hooks/useTelegram";
 import { MainMenu } from "./pages/MainMenu";
 import { TableList } from "./pages/TableList";
 import { GameRoom } from "./pages/GameRoom";
+import { ProfileSettings } from "./pages/ProfileSettings";
 import "./styles/telegram.css";
 import type { 
   GameState, 
@@ -15,10 +16,12 @@ import type {
   TableInfo
 } from "../../types/index";
 
-// Socket connection
-const socket: Socket<ExtendedServerEvents, ExtendedClientEvents> = io("http://localhost:3000");
+// Socket connection — in production, connect to same origin (nginx proxies /socket.io/)
+// In development, connect to localhost:3000
+const SOCKET_URL = import.meta.env.DEV ? "http://localhost:3000" : window.location.origin;
+const socket: Socket<ExtendedServerEvents, ExtendedClientEvents> = io(SOCKET_URL);
 
-type AppView = 'loading' | 'auth' | 'menu' | 'tables' | 'game';
+type AppView = 'loading' | 'auth' | 'menu' | 'tables' | 'game' | 'profile';
 
 const App: React.FC = () => {
   const {
@@ -85,6 +88,7 @@ const App: React.FC = () => {
           telegramId: parseInt(socket.id.slice(0, 8), 16) || 123456789,
           firstName: 'Player',
           username: 'player_' + socket.id.slice(0, 4),
+          displayName: 'Dev Player',
           balance: 1000,
         };
         setCurrentUser(mockUser);
@@ -163,6 +167,28 @@ const App: React.FC = () => {
       hapticFeedback?.notificationOccurred('error');
     });
 
+    // Balance updates
+    socket.on("balanceUpdate", (newBalance) => {
+      setCurrentUser(prev => prev ? { ...prev, balance: newBalance } : null);
+    });
+    
+    socket.on("dailyBonusClaimed", (data) => {
+        setCurrentUser(prev => prev ? { 
+            ...prev, 
+            balance: data.balance,
+            lastDailyRefill: new Date().toISOString(), // Approximate
+            canClaimDaily: false
+        } : null);
+    });
+
+    socket.on("profileUpdated", (profile) => {
+        setCurrentUser(prev => prev ? {
+            ...prev,
+            displayName: profile.displayName,
+            avatarUrl: profile.avatarUrl
+        } : null);
+    });
+
     return () => {
       socket.off("tablesList");
       socket.off("tableJoined");
@@ -171,6 +197,9 @@ const App: React.FC = () => {
       socket.off("state");
       socket.off("showdown");
       socket.off("errorMessage");
+      socket.off("balanceUpdate");
+      socket.off("dailyBonusClaimed");
+      socket.off("profileUpdated");
     };
   }, [currentUser, hapticFeedback]);
 
@@ -217,6 +246,18 @@ const App: React.FC = () => {
     setView('menu');
   }, []);
 
+  const handleOpenProfile = useCallback(() => {
+    setView('profile');
+  }, []);
+
+  const handleClaimBonus = useCallback(() => {
+    socket.emit("claimDailyBonus");
+  }, []);
+
+  const handleBackFromProfile = useCallback(() => {
+    setView('menu');
+  }, []);
+
   // Loading view
   if (view === 'loading') {
     return (
@@ -253,6 +294,8 @@ const App: React.FC = () => {
         tables={tables}
         onSelectTable={handleSelectTable}
         onShowTables={handleShowTables}
+        onOpenProfile={handleOpenProfile}
+        onClaimBonus={handleClaimBonus}
       />
     );
   }
@@ -264,6 +307,16 @@ const App: React.FC = () => {
         tables={tables}
         onSelectTable={handleSelectTable}
         onBack={handleBackFromTables}
+      />
+    );
+  }
+
+  // Profile view
+  if (view === 'profile') {
+    return (
+      <ProfileSettings
+        socket={socket}
+        onBack={handleBackFromProfile}
       />
     );
   }

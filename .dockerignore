@@ -1,0 +1,11 @@
+node_modules
+client/node_modules
+dist
+client/dist
+dev.db
+.env
+.env.production
+.git
+*.md
+plans/
+repomix-output.*

@@ -1,5 +1,6 @@
 import crypto from 'crypto';
 import type { WebAppInitData, TelegramUser } from '../../types/index.js';
+import { UserRepository } from '../db/UserRepository.js';
 
 // Telegram Bot Token (should be from environment variable in production)
 const BOT_TOKEN = process.env.BOT_TOKEN || '';
@@ -11,7 +12,7 @@ const BOT_TOKEN = process.env.BOT_TOKEN || '';
 export function validateInitData(initData: string): { valid: boolean; data?: WebAppInitData } {
   // For development: accept empty initData
   if (process.env.NODE_ENV === 'development' && initData === '') {
-    return { valid: true };
+    return { valid: true, data: {} as WebAppInitData };
   }
 
   try {
@@ -85,28 +86,33 @@ export function validateInitData(initData: string): { valid: boolean; data?: Web
 /**
  * Create or get Telegram user from initData
  */
-export function createUserFromInitData(
+export async function createUserFromInitData(
   socketId: string, 
   initData: WebAppInitData
-): TelegramUser {
+): Promise<TelegramUser> {
   if (!initData.user) {
     // Return mock user for development
+    // Use a fixed ID for dev to test persistence if needed, or random
+    const devTelegramId = 123456789; 
+    const user = await UserRepository.findOrCreate(devTelegramId, 'dev_user');
+    
     return {
-      id: socketId,
-      telegramId: parseInt(socketId.slice(0, 8), 16) || 123456789,
-      firstName: 'Player',
-      username: 'player_' + socketId.slice(0, 4),
-      balance: 1000,
+      ...user,
+      firstName: 'Dev Player',
+      // We use the DB id, but we might need to map it to string if it's not already
     };
   }
 
+  const user = await UserRepository.findOrCreate(
+    initData.user.id, 
+    initData.user.username, 
+    initData.user.photo_url
+  );
+
   return {
-    id: socketId,
-    telegramId: initData.user.id,
-    username: initData.user.username,
+    ...user,
     firstName: initData.user.first_name,
     lastName: initData.user.last_name,
     photoUrl: initData.user.photo_url,
-    balance: 1000, // Default starting balance
   };
 }

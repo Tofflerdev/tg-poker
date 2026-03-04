@@ -1,0 +1,25 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id                Int       @id @default(autoincrement())
+  telegramId        BigInt    @unique @map("telegram_id")
+  telegramUsername  String?   @map("telegram_username") @db.VarChar(255)
+  displayName       String    @map("display_name") @db.VarChar(50)
+  avatarUrl         String?   @map("avatar_url")
+  balance           Int       @default(1000)
+  lastDailyRefill   DateTime? @map("last_daily_refill") @db.Timestamptz
+  handsPlayed       Int       @default(0) @map("hands_played")
+  handsWon          Int       @default(0) @map("hands_won")
+  totalWinnings     Int       @default(0) @map("total_winnings")
+  biggestPot        Int       @default(0) @map("biggest_pot")
+  createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt         DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@map("users")
+}

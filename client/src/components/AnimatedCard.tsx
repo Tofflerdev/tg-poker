@@ -62,8 +62,8 @@ const AnimatedCard: React.FC<AnimatedCardProps> = ({
   }, [animationClass, onAnimationEnd]);
 
   const src = showFront && code
-    ? `/src/assets/cards/${code}.png`
-    : `/src/assets/cards/back.png`;
+    ? `/cards/${code}.png`
+    : `/cards/back.png`;
 
   return (
     <div

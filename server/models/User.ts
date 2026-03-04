@@ -19,10 +19,12 @@ class UserStorage {
       profile = {
         telegramId,
         username: username || `user_${telegramId}`,
+        displayName: username || `Player ${telegramId}`,
         totalWinnings: 0,
         handsPlayed: 0,
         handsWon: 0,
-        joinedAt: new Date(),
+        biggestPot: 0,
+        joinedAt: new Date().toISOString(),
       };
       this.profiles.set(telegramId, profile);
     }

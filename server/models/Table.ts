@@ -95,12 +95,12 @@ export class Table {
   /**
    * Add a player to the table
    */
-  addPlayer(socketId: string, seat: number): boolean {
+  addPlayer(socketId: string, seat: number, chips: number, telegramId?: number, displayName?: string, avatarUrl?: string): boolean {
     if (!this.isSeatAvailable(seat)) {
       return false;
     }
 
-    const success = this.game.addPlayer(socketId, seat);
+    const success = this.game.addPlayer(socketId, seat, chips, telegramId, displayName, avatarUrl);
     if (success) {
       this.playerIds.add(socketId);
       this.updateStatus();
@@ -208,6 +208,14 @@ export class Table {
    */
   addSpectator(socketId: string): void {
     this.game.addSpectator(socketId);
+  }
+
+  /**
+   * Get player by socket ID
+   */
+  getPlayer(socketId: string): any | undefined {
+    const state = this.game.getState();
+    return state.seats.find(p => p?.id === socketId) || undefined;
   }
 
   /**

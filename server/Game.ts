@@ -36,7 +36,7 @@ export default class Game {
   }
 
   // Добавление игрока (разрешаем в любое время)
-  addPlayer(id: string, seat: number, chips: number = 1000): boolean {
+  addPlayer(id: string, seat: number, chips: number = 1000, telegramId?: number, displayName?: string, avatarUrl?: string): boolean {
     if (seat < 0 || seat >= this.seats.length) return false;
     if (this.seats[seat]) return false;
 
@@ -53,6 +53,9 @@ export default class Game {
     const player: Player = {
       id,
       seat,
+      telegramId,
+      displayName,
+      avatarUrl,
       hand: [],
       chips,
       bet: 0,
