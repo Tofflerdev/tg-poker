@@ -10,9 +10,12 @@ const BOT_TOKEN = process.env.BOT_TOKEN || '';
  * See: https://core.telegram.org/bots/webapps#validating-data-received-via-the-mini-app
  */
 export function validateInitData(initData: string): { valid: boolean; data?: WebAppInitData } {
-  // For development: accept empty initData
-  if (process.env.NODE_ENV === 'development' && initData === '') {
-    return { valid: true, data: {} as WebAppInitData };
+  // For development: accept empty initData or mock data
+  if (process.env.NODE_ENV === 'development') {
+    // Allow empty initData or mock data that might fail hash check
+    if (initData === '' || initData.startsWith('query_id=') || initData.includes('user=')) {
+        return { valid: true, data: {} as WebAppInitData };
+    }
   }
 
   try {
@@ -87,18 +90,19 @@ export function validateInitData(initData: string): { valid: boolean; data?: Web
  * Create or get Telegram user from initData
  */
 export async function createUserFromInitData(
-  socketId: string, 
-  initData: WebAppInitData
+  socketId: string,
+  initData: WebAppInitData,
+  devId?: number
 ): Promise<TelegramUser> {
   if (!initData.user) {
     // Return mock user for development
     // Use a fixed ID for dev to test persistence if needed, or random
-    const devTelegramId = 123456789; 
-    const user = await UserRepository.findOrCreate(devTelegramId, 'dev_user');
+    const devTelegramId = devId || 123456789;
+    const user = await UserRepository.findOrCreate(devTelegramId, `dev_${devTelegramId}`);
     
     return {
       ...user,
-      firstName: 'Dev Player',
+      firstName: `Dev Player ${devTelegramId}`,
       // We use the DB id, but we might need to map it to string if it's not already
     };
   }

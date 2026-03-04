@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
 import HandDisplay from "./HandDisplay";
 import { Player } from "../../../types/index";
 
@@ -8,41 +8,59 @@ interface SeatsDisplayProps {
   tableWidth: number;
   tableHeight: number;
   seatSize?: number;
-  currentPlayer?: number | null; // Кто сейчас ходит?
+  currentPlayer?: number | null;
   turnExpiresAt?: number | null;
   onSit: (seat: number) => void;
 }
+
+// Positions as percentages [left, top]
+// 0: Bottom Center (My Seat)
+// 1: Bottom Left
+// 2: Top Left
+// 3: Top Center
+// 4: Top Right
+// 5: Bottom Right
+const SEAT_POSITIONS = [
+  { left: '50%', top: '92%', align: 'translate(-50%, -50%)' }, // Bottom Center
+  { left: '10%', top: '75%', align: 'translate(-50%, -50%)' }, // Bottom Left
+  { left: '10%', top: '25%', align: 'translate(-50%, -50%)' }, // Top Left
+  { left: '50%', top: '8%',  align: 'translate(-50%, -50%)' }, // Top Center
+  { left: '90%', top: '25%', align: 'translate(-50%, -50%)' }, // Top Right
+  { left: '90%', top: '75%', align: 'translate(-50%, -50%)' }, // Bottom Right
+];
 
 const SeatsDisplay: React.FC<SeatsDisplayProps> = ({
   seats,
   mySeat,
   tableWidth,
   tableHeight,
-  seatSize = 120,
   currentPlayer,
   turnExpiresAt,
   onSit,
 }) => {
-  const seatOffset = 50;
-  const [now, setNow] = React.useState(Date.now());
+  const [now, setNow] = useState(Date.now());
 
-  React.useEffect(() => {
+  useEffect(() => {
     const interval = setInterval(() => setNow(Date.now()), 200);
     return () => clearInterval(interval);
   }, []);
 
+  const totalSeats = 6;
+  const rotationOffset = mySeat !== null ? mySeat : 0;
+
+  // Responsive seat size calculation
+  const seatWidth = Math.max(60, Math.min(100, tableWidth * 0.18));
+  const seatHeight = seatWidth;
+
   return (
     <>
       {seats.map((player, i) => {
-        const angle = (i / seats.length) * 2 * Math.PI;
-        const radiusX = tableWidth / 2 + seatOffset;
-        const radiusY = tableHeight / 2 + seatOffset;
-        const x = radiusX * Math.cos(angle);
-        const y = radiusY * Math.sin(angle);
+        // Calculate visual position index
+        const visualIndex = (i - rotationOffset + totalSeats) % totalSeats;
+        const pos = SEAT_POSITIONS[visualIndex];
 
         const isFree = !player;
         const canSit = isFree && mySeat === null;
-        // Подсветка активного игрока желтым бордером
         const isActive = currentPlayer === i;
         
         let timeLeft = 0;
@@ -50,103 +68,76 @@ const SeatsDisplay: React.FC<SeatsDisplayProps> = ({
           timeLeft = Math.max(0, Math.ceil((turnExpiresAt - now) / 1000));
         }
 
-        // Визуальные индикаторы для разных состояний
         const isWaitingForBB = player?.waitingForBB;
         
         return (
           <div
             key={i}
-            className={isActive ? "turn-active" : ""}
+            className={`absolute flex flex-col items-center justify-center transition-all duration-500 ${isActive ? "z-20" : "z-10"}`}
             style={{
-              position: "absolute",
-              left: tableWidth / 2 + x - seatSize / 2,
-              top: tableHeight / 2 + y - seatSize / 2,
-              width: seatSize,
-              height: seatSize,
-              borderRadius: 12,
-              background: canSit ? "#4a7a4a" : isFree ? "#3a5a3a" : "#222",
-              border: isActive
-                ? "4px solid #FFD700" // Золотая рамка для активного
-                : isWaitingForBB
-                  ? "2px solid #f0ad4e" // Оранжевая рамка для ожидающих ББ
-                  : `2px solid ${canSit ? "#aaffaa" : isFree ? "#777" : "#444"}`,
-              display: "flex",
-              flexDirection: "column",
-              alignItems: "center",
-              justifyContent: "center",
-              color: "white",
-              textAlign: "center",
-              cursor: canSit ? "pointer" : "default",
-              transition: "all 0.3s",
-              boxShadow: isActive ? "0 0 15px #FFD700" : "none",
+              left: pos.left,
+              top: pos.top,
+              transform: pos.align,
+              width: seatWidth,
+              height: seatHeight,
             }}
             onClick={() => canSit && onSit(i)}
           >
-            {isActive && turnExpiresAt && (
-              <div style={{
-                position: 'absolute',
-                top: -25,
-                background: timeLeft < 10 ? '#ff4444' : '#444',
-                color: 'white',
-                padding: '2px 8px',
-                borderRadius: 10,
-                fontWeight: 'bold',
-                fontSize: 14,
-                boxShadow: '0 2px 5px rgba(0,0,0,0.5)',
-                zIndex: 10
-              }}>
-                {timeLeft}s
-              </div>
-            )}
+            <div 
+              className={`
+                relative w-full h-full rounded-xl flex flex-col items-center justify-center text-center text-white shadow-lg border-2
+                ${isActive ? "border-yellow-400 shadow-[0_0_15px_#FFD700]" : ""}
+                ${isWaitingForBB ? "border-orange-400" : ""}
+                ${!isActive && !isWaitingForBB ? (canSit ? "border-green-300" : isFree ? "border-gray-500" : "border-gray-700") : ""}
+                ${canSit ? "bg-green-800 cursor-pointer hover:bg-green-700" : isFree ? "bg-gray-800/80" : "bg-gray-900"}
+              `}
+            >
+              {isActive && turnExpiresAt && (
+                <div className={`
+                  absolute -top-3 px-2 py-0.5 rounded-full text-xs font-bold shadow-md z-30
+                  ${timeLeft < 10 ? 'bg-red-500' : 'bg-gray-700'}
+                `}>
+                  {timeLeft}s
+                </div>
+              )}
 
-            {player ? (
-              <>
-                {/* Avatar and Name */}
-                <div style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 5,
-                  marginBottom: 5,
-                  position: 'absolute',
-                  top: -35,
-                  background: 'rgba(0,0,0,0.7)',
-                  padding: '4px 8px',
-                  borderRadius: 10,
-                  whiteSpace: 'nowrap',
-                  zIndex: 5
-                }}>
-                  {player.avatarUrl && (
-                    <img
-                      src={player.avatarUrl}
-                      alt="Avatar"
-                      style={{ width: 20, height: 20, borderRadius: '50%' }}
-                      onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
-                    />
-                  )}
-                  <span style={{ fontSize: 12, fontWeight: 'bold' }}>
-                    {player.displayName || `Player ${player.id.slice(0, 4)}`}
-                  </span>
-                </div>
+              {player ? (
+                <>
+                  {/* Avatar and Name */}
+                  <div className="absolute -top-6 bg-black/70 px-2 py-0.5 rounded-lg flex items-center gap-1 whitespace-nowrap z-20 max-w-[140%] overflow-hidden">
+                    {player.avatarUrl && (
+                      <img
+                        src={player.avatarUrl}
+                        alt="Avatar"
+                        className="w-3 h-3 rounded-full"
+                        onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                      />
+                    )}
+                    <span className="text-[10px] font-bold truncate max-w-[80px]">
+                      {player.displayName || `Player ${player.id.slice(0, 4)}`}
+                    </span>
+                  </div>
 
-                {/* Карты */}
-                <div style={{ transform: "scale(0.8)", marginBottom: -10 }}>
-                   <HandDisplay cards={player.hand} size={60} />
-                </div>
-                
-                {/* Инфо об игроке */}
-                <div style={{ fontSize: 12, marginTop: 5 }}>
-                    <div>Stack: {player.chips}</div>
-                    {player.bet > 0 && <div style={{color: '#aaaaff'}}>Bet: {player.bet}</div>}
-                    {player.folded && <div style={{color: '#ff6666'}}>FOLD</div>}
-                    {player.waitingForBB && <div style={{color: '#f0ad4e'}}>Ждет ББ</div>}
-                </div>
-              </>
-            ) : (
-              <>
-                <div style={{fontSize: 12}}>Empty</div>
-                {canSit && <div style={{ marginTop: 2, fontWeight: 'bold' }}>SIT</div>}
-              </>
-            )}
+                  {/* Cards */}
+                  <div className="transform scale-75 -mb-4 mt-1 w-full flex justify-center">
+                     <HandDisplay cards={player.hand} size={seatWidth * 0.6} />
+                  </div>
+                  
+                  {/* Player Info */}
+                  <div className="text-[10px] mt-1 leading-tight w-full px-1 flex flex-col items-center">
+                      <div className="font-mono font-bold truncate max-w-full">{player.chips}</div>
+                      {player.bet > 0 && <div className="text-blue-300 font-bold text-[9px]">{player.bet}</div>}
+                      {player.folded && <div className="text-red-400 font-bold text-[9px]">FOLD</div>}
+                      {player.waitingForBB && <div className="text-orange-300 text-[8px]">Wait BB</div>}
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="text-xs text-gray-400">Empty</div>
+                  {canSit && <div className="mt-1 font-bold text-xs text-green-200">SIT</div>}
+                </>
+              )}
+            </div>
           </div>
         );
       })}

@@ -1,3 +1,4 @@
+import "dotenv/config";
 import express from "express";
 import http from "http";
 import path from "path";
@@ -24,7 +25,7 @@ const server = http.createServer(app);
 // CORS: allow all in dev, restrict in production
 const CORS_ORIGIN = process.env.NODE_ENV === 'production'
   ? ["https://tgp.isgood.host"]
-  : ["*"];
+  : ["http://localhost:5173", "http://127.0.0.1:5173", "http://localhost:3000"];
 
 const io = new Server<ExtendedClientEvents, ExtendedServerEvents>(server, {
   cors: {
@@ -135,7 +136,7 @@ io.on("connection", (socket) => {
 
     try {
       // Create user from initData (handles dev mode mock user automatically)
-      const user = await createUserFromInitData(socket.id, data || { auth_date: 0, hash: '' });
+      const user = await createUserFromInitData(socket.id, data || { auth_date: 0, hash: '' }, payload.devId);
       
       // Store user in persistent storage (session cache)
       userStorage.addUser(socket.id, user);

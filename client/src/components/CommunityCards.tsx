@@ -16,12 +16,8 @@ const CommunityCards: React.FC<CommunityCardsProps> = ({
 }) => {
   return (
     <div
-      style={{
-        display: "flex",
-        gap: `${spacing}px`,
-        justifyContent: "center",
-        alignItems: "center",
-      }}
+      className="flex justify-center items-center"
+      style={{ gap: spacing }}
     >
       {cards.map((code, idx) => (
         <AnimatedCard 

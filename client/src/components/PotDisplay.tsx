@@ -7,56 +7,19 @@ interface PotDisplayProps {
 }
 
 const PotDisplay: React.FC<PotDisplayProps> = ({ pots, totalPot }) => {
-  if (totalPot === 0) {
-    return null;
-  }
-
   return (
-    <div style={{
-      display: "flex",
-      flexDirection: "column",
-      alignItems: "center",
-      gap: 5,
-      padding: "10px 20px",
-      background: "rgba(0, 0, 0, 0.5)",
-      borderRadius: 10,
-      minWidth: 120,
-    }}>
-      {/* Общий банк */}
-      <div style={{
-        fontSize: 18,
-        fontWeight: "bold",
-        color: "#FFD700",
-        textShadow: "0 0 10px rgba(255, 215, 0, 0.5)",
-      }}>
-        💰 {totalPot}
+    <div className="flex flex-col items-center gap-1 z-10">
+      <div className="bg-black/60 px-4 py-1.5 rounded-full flex items-center gap-2 border border-white/10 backdrop-blur-sm shadow-lg">
+        <span className="text-xs text-gray-300 uppercase font-bold tracking-wider">Pot</span>
+        <span className="text-yellow-400 font-bold font-mono text-lg">{totalPot}</span>
       </div>
-
-      {/* Разбивка по потам (показываем только если больше одного пота) */}
+      
+      {/* Side pots if any */}
       {pots.length > 1 && (
-        <div style={{
-          display: "flex",
-          flexDirection: "column",
-          gap: 3,
-          marginTop: 5,
-          fontSize: 12,
-          color: "#ccc",
-        }}>
+        <div className="flex gap-2 text-[10px] text-gray-400">
           {pots.map((pot, i) => (
-            <div key={i} style={{
-              display: "flex",
-              justifyContent: "space-between",
-              gap: 10,
-            }}>
-              <span style={{ color: i === 0 ? "#fff" : "#aaa" }}>
-                {pot.name}:
-              </span>
-              <span style={{ 
-                fontWeight: "bold",
-                color: i === 0 ? "#FFD700" : "#FFA500",
-              }}>
-                {pot.amount}
-              </span>
+            <div key={i} className="bg-black/40 px-2 py-0.5 rounded border border-white/5">
+              {i === 0 ? "Main" : `Side ${i}`}: {pot.amount}
             </div>
           ))}
         </div>

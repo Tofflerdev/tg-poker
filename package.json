@@ -4,7 +4,8 @@
   "type": "module",
   "scripts": {
     "build": "tsc",
-    "dev": "npm run build && node dist/server/index.js"
+    "dev": "npm run build && node dist/server/index.js",
+    "dev:all": "concurrently \"npm run dev\" \"cd client && npm run dev\""
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.4.2",
@@ -22,6 +23,7 @@
     "@types/node": "^20.11.30",
     "@types/pg": "^8.18.0",
     "@types/socket.io": "^3.0.2",
+    "concurrently": "^9.2.1",
     "prisma": "^7.4.2",
     "ts-node": "^10.9.2",
     "typescript": "^5.9.2"

@@ -12,7 +12,6 @@ interface ChatProps {
 const Chat: React.FC<ChatProps> = ({ socket, currentUser, tableId }) => {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputValue, setInputValue] = useState("");
-  const [isTyping, setIsTyping] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const { hapticFeedback } = useTelegram();
@@ -41,7 +40,7 @@ const Chat: React.FC<ChatProps> = ({ socket, currentUser, tableId }) => {
       const systemMessage: ChatMessage = {
         id: `system-${Date.now()}`,
         authorId: "system",
-        authorName: "Система",
+        authorName: "System",
         text,
         timestamp: Date.now(),
         type: "system",
@@ -53,7 +52,7 @@ const Chat: React.FC<ChatProps> = ({ socket, currentUser, tableId }) => {
     socket.on("systemMessage", handleSystemMessage);
 
     // Add welcome message
-    handleSystemMessage("Добро пожаловать за стол! Удачи в игре 🍀");
+    handleSystemMessage("Welcome to the table! Good luck 🍀");
 
     return () => {
       socket.off("chatMessage", handleChatMessage);
@@ -101,76 +100,81 @@ const Chat: React.FC<ChatProps> = ({ socket, currentUser, tableId }) => {
 
   const formatTime = (timestamp: number) => {
     const date = new Date(timestamp);
-    return date.toLocaleTimeString("ru-RU", { 
+    return date.toLocaleTimeString("en-US", { 
       hour: "2-digit", 
-      minute: "2-digit" 
+      minute: "2-digit",
+      hour12: false
     });
   };
 
   const isOwnMessage = (msg: ChatMessage) => msg.authorId === currentUser?.id;
 
   return (
-    <div className="chat-container">
-      <div className="chat-header">
-        <span>💬 Чат стола</span>
-        <span style={{ fontSize: 12, opacity: 0.8 }}>
-          {messages.filter(m => m.type === "player").length} сообщений
-        </span>
-      </div>
-
-      <div className="chat-messages">
+    <div className="flex flex-col h-full bg-[#1c1c1e]">
+      <div className="flex-1 overflow-y-auto p-4 space-y-3">
         {messages.length === 0 && (
-          <div style={{ 
-            textAlign: "center", 
-            color: "var(--tg-color-hint)", 
-            padding: "20px",
-            fontSize: 14 
-          }}>
-            Нет сообщений. Начните общение!
+          <div className="text-center text-gray-500 py-8 text-sm">
+            No messages yet. Start the conversation!
           </div>
         )}
 
-        {messages.map((msg) => (
-          <div
-            key={msg.id}
-            className={`chat-message ${
-              msg.type === "system" 
-                ? "chat-message--system" 
-                : isOwnMessage(msg) 
-                  ? "chat-message--own" 
-                  : "chat-message--other"
-            }`}
-          >
-            {msg.type !== "system" && (
-              <div className="chat-message__author">
-                {msg.authorName}
+        {messages.map((msg) => {
+          if (msg.type === "system") {
+            return (
+              <div key={msg.id} className="flex justify-center my-2">
+                <div className="bg-white/10 text-gray-300 text-xs px-3 py-1 rounded-full italic">
+                  {msg.text}
+                </div>
               </div>
-            )}
-            <div>{msg.text}</div>
-            <div className="chat-message__time">
-              {formatTime(msg.timestamp)}
+            );
+          }
+
+          const isOwn = isOwnMessage(msg);
+          
+          return (
+            <div
+              key={msg.id}
+              className={`flex flex-col ${isOwn ? "items-end" : "items-start"}`}
+            >
+              {!isOwn && (
+                <span className="text-[10px] text-gray-400 ml-1 mb-0.5">
+                  {msg.authorName}
+                </span>
+              )}
+              <div
+                className={`max-w-[85%] px-3 py-2 rounded-2xl text-sm break-words ${
+                  isOwn 
+                    ? "bg-blue-600 text-white rounded-br-none" 
+                    : "bg-[#2c2c2e] text-white rounded-bl-none"
+                }`}
+              >
+                {msg.text}
+              </div>
+              <span className="text-[10px] text-gray-500 mt-0.5 px-1">
+                {formatTime(msg.timestamp)}
+              </span>
             </div>
-          </div>
-        ))}
+          );
+        })}
         <div ref={messagesEndRef} />
       </div>
 
-      <div className="chat-input-container">
+      <div className="p-3 bg-[#2c2c2e] border-t border-white/5 flex gap-2 items-end">
         <textarea
           ref={inputRef}
-          className="chat-input"
+          className="flex-1 bg-[#1c1c1e] text-white rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 resize-none max-h-[100px]"
           value={inputValue}
           onChange={handleInputChange}
           onKeyDown={handleKeyDown}
-          placeholder="Написать сообщение..."
+          placeholder="Type a message..."
           rows={1}
           disabled={!currentUser}
         />
         <button
-          className="chat-send-btn"
+          className="p-2 bg-blue-600 text-white rounded-full disabled:opacity-50 disabled:cursor-not-allowed hover:bg-blue-500 transition-colors flex-shrink-0"
           onClick={handleSend}
           disabled={!inputValue.trim() || !currentUser}
-          aria-label="Отправить"
+          aria-label="Send"
         >
           <svg
             width="20"

@@ -175,6 +175,7 @@ export interface WebAppChat {
 
 export interface AuthPayload {
   initData: string;
+  devId?: number;
 }
 
 

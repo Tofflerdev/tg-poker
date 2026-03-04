@@ -29,6 +29,7 @@ export const GameRoom: React.FC<GameRoomProps> = ({
   const [selectedSeat, setSelectedSeat] = useState<number | null>(null);
   const [isMyTurn, setIsMyTurn] = useState(false);
   const [lastStage, setLastStage] = useState(gameState.stage);
+  const [isChatOpen, setIsChatOpen] = useState(false);
 
   // Handle back button and header
   useEffect(() => {
@@ -109,218 +110,111 @@ export const GameRoom: React.FC<GameRoomProps> = ({
   };
 
   return (
-    <div className="game-room">
-      <div className="game-room__main">
-        {/* Table Header */}
-        <div className="table-header">
-          <div className="table-info">
-            <span className="table-id">Стол #{tableId.slice(-4)}</span>
-            <span className="game-stage">{getStageText(gameState.stage)}</span>
-          </div>
-          <div className="pot-info">
-            <span className="pot-label">Банк:</span>
-            <span className={`pot-value ${showdown ? "pot-win-animation" : ""}`}>
-              {gameState.totalPot.toLocaleString()}
-            </span>
-          </div>
+    <div className="min-h-screen bg-gradient-to-b from-[#0d3328] to-[#1a472a] flex flex-col overflow-hidden">
+      {/* Header */}
+      <div className="flex justify-between items-center px-4 py-3 bg-black/30 text-white z-10">
+        <div className="flex flex-col">
+          <span className="text-xs opacity-70">Table #{tableId.slice(-4)}</span>
+          <span className="text-sm font-medium uppercase">{getStageText(gameState.stage)}</span>
+        </div>
+        
+        <div className="flex items-center gap-2">
+          <span className="text-xs opacity-70">Pot:</span>
+          <span className={`text-lg font-bold text-[#ffd700] ${showdown ? "animate-pulse" : ""}`}>
+            {gameState.totalPot.toLocaleString()}
+          </span>
         </div>
 
-        <div className="game-room__content">
-          {/* Table Area */}
-          <div className="game-room__table-area">
-            <div className="game-container">
-              <Table 
-                seats={gameState.seats}
-                spectators={gameState.spectators}
-                mySeat={mySeat}
-                communityCards={gameState.communityCards}
-                currentPlayer={gameState.currentPlayer}
-                turnExpiresAt={gameState.turnExpiresAt || undefined}
-                pots={gameState.pots}
-                totalPot={gameState.totalPot}
-                onSit={handleSeatClick}
-              />
-            </div>
+        <button 
+          onClick={() => setIsChatOpen(true)}
+          className="p-2 bg-white/10 rounded-full hover:bg-white/20 transition-colors relative"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
+          </svg>
+          {/* Optional: Unread badge could go here */}
+        </button>
+      </div>
 
-            {/* Seat Confirmation */}
-            {mySeat === null && selectedSeat !== null && (
-              <div className="seat-confirmation tg-fade-in">
-                <p>Занять место {selectedSeat + 1}?</p>
-                <div className="confirmation-buttons">
-                  <button className="btn-confirm" onClick={handleJoinSeat}>
-                    Да
-                  </button>
-                  <button className="btn-cancel" onClick={handleCancelSeat}>
-                    Нет
-                  </button>
-                </div>
+      {/* Main Game Area */}
+      <div className="flex-1 flex flex-col relative">
+        {/* Table */}
+        <div className="flex-1 flex items-center justify-center p-4 overflow-hidden">
+          <Table 
+            seats={gameState.seats}
+            spectators={gameState.spectators}
+            mySeat={mySeat}
+            communityCards={gameState.communityCards}
+            currentPlayer={gameState.currentPlayer}
+            turnExpiresAt={gameState.turnExpiresAt || undefined}
+            pots={gameState.pots}
+            totalPot={gameState.totalPot}
+            onSit={handleSeatClick}
+          />
+        </div>
+
+        {/* Seat Confirmation Modal */}
+        {mySeat === null && selectedSeat !== null && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+            <div className="bg-white rounded-xl p-6 shadow-2xl w-full max-w-xs text-center animate-in fade-in zoom-in duration-200">
+              <p className="text-lg font-medium mb-6 text-gray-900">Take seat {selectedSeat + 1}?</p>
+              <div className="flex gap-3 justify-center">
+                <button 
+                  className="flex-1 py-2 px-4 bg-green-600 text-white rounded-lg font-medium active:scale-95 transition-transform"
+                  onClick={handleJoinSeat}
+                >
+                  Yes
+                </button>
+                <button 
+                  className="flex-1 py-2 px-4 bg-gray-200 text-gray-800 rounded-lg font-medium active:scale-95 transition-transform"
+                  onClick={handleCancelSeat}
+                >
+                  No
+                </button>
               </div>
-            )}
-
-            {/* Game Controls */}
-            <GameControls
-              socket={socket}
-              gameState={gameState}
-              mySeat={mySeat}
-            />
+            </div>
           </div>
+        )}
 
-          {/* Sidebar with Chat */}
-          <div className="game-room__sidebar">
-            <Chat 
-              socket={socket}
-              currentUser={currentUser}
-              tableId={tableId}
-            />
-          </div>
+        {/* Game Controls - Sticky Bottom */}
+        <div className="w-full z-20">
+          <GameControls
+            socket={socket}
+            gameState={gameState}
+            mySeat={mySeat}
+          />
         </div>
       </div>
 
-      <style>{`
-        .game-room {
-          min-height: 100vh;
-          background: linear-gradient(180deg, #0d3328 0%, #1a472a 100%);
-          display: flex;
-          flex-direction: column;
-        }
-
-        .game-room__main {
-          flex: 1;
-          display: flex;
-          flex-direction: column;
-        }
-
-        .game-room__content {
-          flex: 1;
-          display: flex;
-          gap: 16px;
-          padding: 0 16px 16px;
-        }
-
-        .game-room__table-area {
-          flex: 1;
-          display: flex;
-          flex-direction: column;
-          min-width: 0;
-        }
-
-        .game-room__sidebar {
-          width: 320px;
-          flex-shrink: 0;
-        }
-
-        @media (max-width: 900px) {
-          .game-room__content {
-            flex-direction: column;
-          }
-          
-          .game-room__sidebar {
-            width: 100%;
-            height: 300px;
-          }
-        }
-
-        .table-header {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          padding: 12px 16px;
-          background: rgba(0,0,0,0.3);
-          color: white;
-          margin-bottom: 16px;
-        }
-
-        .table-info {
-          display: flex;
-          flex-direction: column;
-          gap: 2px;
-        }
-
-        .table-id {
-          font-size: 12px;
-          opacity: 0.7;
-        }
-
-        .game-stage {
-          font-size: 14px;
-          font-weight: 500;
-          text-transform: uppercase;
-        }
-
-        .pot-info {
-          display: flex;
-          align-items: center;
-          gap: 6px;
-        }
-
-        .pot-label {
-          font-size: 12px;
-          opacity: 0.7;
-        }
-
-        .pot-value {
-          font-size: 18px;
-          font-weight: 600;
-          color: #ffd700;
-        }
-
-        .game-container {
-          flex: 1;
-          display: flex;
-          justify-content: center;
-          align-items: center;
-          padding: 16px;
-          overflow: auto;
-          min-height: 400px;
-        }
-
-        .seat-confirmation {
-          position: fixed;
-          bottom: 200px;
-          left: 50%;
-          transform: translateX(-50%);
-          background: white;
-          padding: 16px 24px;
-          border-radius: 12px;
-          box-shadow: 0 4px 20px rgba(0,0,0,0.3);
-          text-align: center;
-          z-index: 100;
-        }
-
-        .seat-confirmation p {
-          margin: 0 0 12px 0;
-          font-weight: 500;
-        }
-
-        .confirmation-buttons {
-          display: flex;
-          gap: 8px;
-          justify-content: center;
-        }
-
-        .btn-confirm, .btn-cancel {
-          padding: 8px 24px;
-          border: none;
-          border-radius: 8px;
-          font-size: 14px;
-          cursor: pointer;
-          transition: transform 0.1s, opacity 0.2s;
-        }
-
-        .btn-confirm:active, .btn-cancel:active {
-          transform: scale(0.95);
-        }
-
-        .btn-confirm {
-          background: #4CAF50;
-          color: white;
-        }
-
-        .btn-cancel {
-          background: #f0f0f0;
-          color: #333;
-        }
-      `}</style>
+      {/* Chat Overlay (Bottom Sheet) */}
+      {isChatOpen && (
+        <div className="fixed inset-0 z-50 flex flex-col justify-end">
+          <div 
+            className="absolute inset-0 bg-black/60 backdrop-blur-sm transition-opacity" 
+            onClick={() => setIsChatOpen(false)}
+          />
+          <div className="relative bg-[#1c1c1e] w-full h-[60vh] rounded-t-2xl shadow-2xl flex flex-col overflow-hidden animate-in slide-in-from-bottom duration-300">
+            <div className="flex justify-between items-center p-3 border-b border-white/10 bg-[#2c2c2e]">
+              <h3 className="font-medium text-white">Chat</h3>
+              <button 
+                onClick={() => setIsChatOpen(false)}
+                className="p-1 rounded-full hover:bg-white/10 text-gray-400 hover:text-white"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <div className="flex-1 overflow-hidden">
+              <Chat 
+                socket={socket}
+                currentUser={currentUser}
+                tableId={tableId}
+              />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
@@ -328,17 +222,17 @@ export const GameRoom: React.FC<GameRoomProps> = ({
 function getStageText(stage: GameState["stage"]): string {
   switch (stage) {
     case "waiting":
-      return "Ожидание игроков";
+      return "Waiting";
     case "preflop":
-      return "Префлоп";
+      return "Preflop";
     case "flop":
-      return "Флоп";
+      return "Flop";
     case "turn":
-      return "Тёрн";
+      return "Turn";
     case "river":
-      return "Ривер";
+      return "River";
     case "showdown":
-      return "Вскрытие";
+      return "Showdown";
     default:
       return stage;
   }

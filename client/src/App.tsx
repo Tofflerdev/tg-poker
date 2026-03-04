@@ -80,20 +80,16 @@ const App: React.FC = () => {
     // Try to authenticate with Telegram initData
     if (initData) {
       socket.emit("auth", { initData });
-    } else {
-      // For development: create mock user if no Telegram
-      setTimeout(() => {
-        const mockUser: TelegramUser = {
-          id: socket.id,
-          telegramId: parseInt(socket.id.slice(0, 8), 16) || 123456789,
-          firstName: 'Player',
-          username: 'player_' + socket.id.slice(0, 4),
-          displayName: 'Dev Player',
-          balance: 1000,
-        };
-        setCurrentUser(mockUser);
-        setView('menu');
-      }, 500);
+    } else if (import.meta.env.DEV) {
+      // Dev mode: authenticate via server with mock initData
+      // Generate a random ID to simulate different users in different tabs
+      const devId = Math.floor(Math.random() * 900000) + 100000;
+      console.log('Dev mode: Authenticating with devId', devId);
+      
+      // Create a mock initData string that passes the basic check in auth.ts
+      const mockInitData = `query_id=AAHdF6kUAAAAAN0XqRT&user=%7B%22id%22%3A${devId}%2C%22first_name%22%3A%22Dev%22%2C%22last_name%22%3A%22User%22%2C%22username%22%3A%22dev_user_${devId}%22%2C%22language_code%22%3A%22en%22%7D&auth_date=${Math.floor(Date.now() / 1000)}&hash=mock_hash_for_dev`;
+      
+      socket.emit("auth", { initData: mockInitData, devId });
     }
 
     // Listen for auth responses
