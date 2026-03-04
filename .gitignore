@@ -1,6 +1,12 @@
 node_modules/
 client/node_modules/
 dist/
+client/dist/
 repomix-output.xml
 repomix-output.txt
-plans/
+/generated/prisma
+.env
+.env.production
+dev.db
+*.tar
+prod-check.png
