@@ -30,14 +30,20 @@ const Table: React.FC<TableProps> = ({
   const containerRef = useRef<HTMLDivElement>(null);
   const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
 
+  // Seat margin percentages — how much space to reserve for seats outside the table
+  const SEAT_MARGIN_X_PCT = 0.10; // 10% on each side
+  const SEAT_MARGIN_Y_PCT = 0.15; // 15% on top and bottom
+
   useEffect(() => {
     const updateDimensions = () => {
       if (containerRef.current) {
         const { offsetWidth } = containerRef.current;
-        // Maintain 7/4 aspect ratio
-        const width = offsetWidth;
-        const height = width * (4 / 7);
-        setDimensions({ width, height });
+        // The table felt uses the inner area; total container is larger to fit seats outside
+        const tableWidth = offsetWidth * (1 - 2 * SEAT_MARGIN_X_PCT);
+        const tableHeight = tableWidth * (4 / 7);
+        // Total container height includes margins for seats above and below
+        const totalHeight = tableHeight / (1 - 2 * SEAT_MARGIN_Y_PCT);
+        setDimensions({ width: offsetWidth, height: totalHeight });
       }
     };
 
@@ -52,25 +58,45 @@ const Table: React.FC<TableProps> = ({
     return () => observer.disconnect();
   }, []);
 
-  // Calculate card size based on table width
-  // Base size 60px for 700px width -> ~8.5% of width
-  const cardSize = Math.max(30, Math.min(60, dimensions.width * 0.085));
-  const cardSpacing = Math.max(4, dimensions.width * 0.015);
+  // Inner table dimensions (the felt ellipse)
+  const innerWidth = dimensions.width * (1 - 2 * SEAT_MARGIN_X_PCT);
+  const cardSize = Math.max(30, Math.min(60, innerWidth * 0.085));
+  const cardSpacing = Math.max(4, innerWidth * 0.015);
 
   return (
     <div className="w-full flex flex-col items-center">
-      <div 
+      <div
         ref={containerRef}
         className="relative w-full max-w-3xl mx-auto"
         style={{ height: dimensions.height }}
       >
         {dimensions.width > 0 && (
-          <div
-            className="absolute inset-0 rounded-[50%/30%] border-8 border-[#654321] shadow-xl overflow-hidden"
-            style={{
-              background: "radial-gradient(ellipse at center, var(--poker-felt) 0%, var(--poker-felt-dark) 100%)",
-            }}
-          >
+          <>
+            {/* Table felt — inset within the container */}
+            <div
+              className="absolute rounded-[50%/30%] border-8 border-[#654321] shadow-xl"
+              style={{
+                left: `${SEAT_MARGIN_X_PCT * 100}%`,
+                right: `${SEAT_MARGIN_X_PCT * 100}%`,
+                top: `${SEAT_MARGIN_Y_PCT * 100}%`,
+                bottom: `${SEAT_MARGIN_Y_PCT * 100}%`,
+                background: "radial-gradient(ellipse at center, var(--poker-felt) 0%, var(--poker-felt-dark) 100%)",
+              }}
+            >
+              <div
+                className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 flex flex-col items-center gap-2 z-10"
+                style={{ width: '60%' }}
+              >
+                <PotDisplay pots={pots} totalPot={totalPot} />
+                <CommunityCards
+                  cards={communityCards}
+                  spacing={cardSpacing}
+                  size={cardSize}
+                />
+              </div>
+            </div>
+
+            {/* Seats — positioned relative to the full container (outside the table) */}
             <SeatsDisplay
               seats={seats}
               mySeat={mySeat}
@@ -80,19 +106,7 @@ const Table: React.FC<TableProps> = ({
               turnExpiresAt={turnExpiresAt}
               onSit={onSit}
             />
-
-            <div 
-              className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 flex flex-col items-center gap-2 z-10"
-              style={{ width: '60%' }}
-            >
-              <PotDisplay pots={pots} totalPot={totalPot} />
-              <CommunityCards 
-                cards={communityCards} 
-                spacing={cardSpacing} 
-                size={cardSize} 
-              />
-            </div>
-          </div>
+          </>
         )}
       </div>
 

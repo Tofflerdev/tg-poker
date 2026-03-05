@@ -13,7 +13,9 @@ interface SeatsDisplayProps {
   onSit: (seat: number) => void;
 }
 
-// Positions as percentages [left, top]
+// Positions as percentages relative to the OUTER container (which is larger than the table).
+// The table felt is inset ~10% horizontally and ~15% vertically,
+// so seats at the edges of the container sit outside the table border.
 // 0: Bottom Center (My Seat)
 // 1: Bottom Left
 // 2: Top Left
@@ -21,12 +23,12 @@ interface SeatsDisplayProps {
 // 4: Top Right
 // 5: Bottom Right
 const SEAT_POSITIONS = [
-  { left: '50%', top: '92%', align: 'translate(-50%, -50%)' }, // Bottom Center
-  { left: '10%', top: '75%', align: 'translate(-50%, -50%)' }, // Bottom Left
-  { left: '10%', top: '25%', align: 'translate(-50%, -50%)' }, // Top Left
-  { left: '50%', top: '8%',  align: 'translate(-50%, -50%)' }, // Top Center
-  { left: '90%', top: '25%', align: 'translate(-50%, -50%)' }, // Top Right
-  { left: '90%', top: '75%', align: 'translate(-50%, -50%)' }, // Bottom Right
+  { left: '50%', top: '96%',  align: 'translate(-50%, -100%)' }, // Bottom Center — below table
+  { left: '4%',  top: '72%',  align: 'translate(-20%, -50%)' },  // Bottom Left — outside left edge
+  { left: '4%',  top: '28%',  align: 'translate(-20%, -50%)' },  // Top Left — outside left edge
+  { left: '50%', top: '4%',   align: 'translate(-50%, 0%)' },    // Top Center — above table
+  { left: '96%', top: '28%',  align: 'translate(-80%, -50%)' },  // Top Right — outside right edge
+  { left: '96%', top: '72%',  align: 'translate(-80%, -50%)' },  // Bottom Right — outside right edge
 ];
 
 const SeatsDisplay: React.FC<SeatsDisplayProps> = ({
