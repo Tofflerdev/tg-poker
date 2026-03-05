@@ -107,6 +107,13 @@ export function useTelegram(): UseTelegramReturn {
 
   useEffect(() => {
     try {
+      // In DEV mode, skip Telegram WebApp entirely to avoid interference
+      if (import.meta.env.DEV) {
+        console.log('🔧 DEV mode: Skipping Telegram WebApp initialization');
+        setIsReady(true);
+        return;
+      }
+
       const webApp = window.Telegram?.WebApp;
       
       if (!webApp) {

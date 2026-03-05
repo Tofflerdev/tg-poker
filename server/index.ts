@@ -130,6 +130,9 @@ io.on("connection", (socket) => {
     const { valid, data } = validateInitData(payload.initData);
     
     if (!valid) {
+      console.warn("[Auth] Invalid initData from socket:", socket.id,
+        "| initData length:", payload.initData?.length || 0,
+        "| NODE_ENV:", process.env.NODE_ENV);
       socket.emit("authError", "Invalid authentication data");
       return;
     }
@@ -142,10 +145,18 @@ io.on("connection", (socket) => {
       userStorage.addUser(socket.id, user);
       
       socket.emit("authSuccess", user);
-      console.log("[Auth] Success for:", user.username || user.telegramId);
+      console.log("[Auth] Success for:", user.username || user.displayName || user.telegramId,
+        payload.devId ? `(dev mode, devId=${payload.devId})` : '');
     } catch (error) {
-      console.error("[Auth] Error:", error);
-      socket.emit("authError", "Authentication failed");
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      console.error("[Auth] Error for socket:", socket.id, "| Error:", errorMsg);
+      
+      // In dev mode, provide more detailed error info
+      if (process.env.NODE_ENV === 'development') {
+        socket.emit("authError", `Authentication failed: ${errorMsg}`);
+      } else {
+        socket.emit("authError", "Authentication failed");
+      }
     }
   });
 

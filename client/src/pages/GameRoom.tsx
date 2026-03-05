@@ -81,7 +81,8 @@ export const GameRoom: React.FC<GameRoomProps> = ({
     if (showdown && mySeat !== null) {
       const myResult = showdown.results.find(r => r.seat === mySeat);
       if (myResult) {
-        const isWinner = showdown.winners.some(w => w.id === currentUser?.id);
+        // Server uses socket.id for player identification in game state
+        const isWinner = showdown.winners.some(w => w.id === socket.id);
         if (isWinner) {
           hapticFeedback?.notificationOccurred("success");
         }

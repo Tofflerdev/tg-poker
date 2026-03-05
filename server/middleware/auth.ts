@@ -4,17 +4,36 @@ import { UserRepository } from '../db/UserRepository.js';
 
 // Telegram Bot Token (should be from environment variable in production)
 const BOT_TOKEN = process.env.BOT_TOKEN || '';
+const IS_DEV = process.env.NODE_ENV === 'development';
 
 /**
  * Validate Telegram WebApp initData
  * See: https://core.telegram.org/bots/webapps#validating-data-received-via-the-mini-app
  */
 export function validateInitData(initData: string): { valid: boolean; data?: WebAppInitData } {
-  // For development: accept empty initData or mock data
-  if (process.env.NODE_ENV === 'development') {
-    // Allow empty initData or mock data that might fail hash check
-    if (initData === '' || initData.startsWith('query_id=') || initData.includes('user=')) {
-        return { valid: true, data: {} as WebAppInitData };
+  // For development: accept any initData (empty, mock, or real)
+  if (IS_DEV) {
+    if (initData === '' || initData.includes('mock_hash_for_dev') || initData.startsWith('query_id=') || initData.includes('user=')) {
+      // Try to parse user data from mock initData if present
+      try {
+        const urlParams = new URLSearchParams(initData);
+        const userStr = urlParams.get('user');
+        if (userStr) {
+          const userData = JSON.parse(userStr);
+          return {
+            valid: true,
+            data: {
+              user: userData,
+              auth_date: parseInt(urlParams.get('auth_date') || '0', 10),
+              hash: urlParams.get('hash') || 'dev',
+              query_id: urlParams.get('query_id') || undefined,
+            } as WebAppInitData
+          };
+        }
+      } catch {
+        // Parsing failed, return empty data
+      }
+      return { valid: true, data: {} as WebAppInitData };
     }
   }
 
@@ -94,29 +113,69 @@ export async function createUserFromInitData(
   initData: WebAppInitData,
   devId?: number
 ): Promise<TelegramUser> {
-  if (!initData.user) {
-    // Return mock user for development
-    // Use a fixed ID for dev to test persistence if needed, or random
-    const devTelegramId = devId || 123456789;
-    const user = await UserRepository.findOrCreate(devTelegramId, `dev_${devTelegramId}`);
-    
-    return {
-      ...user,
-      firstName: `Dev Player ${devTelegramId}`,
-      // We use the DB id, but we might need to map it to string if it's not already
-    };
+  // In dev mode with devId, always use the dev path for consistent behavior
+  if (IS_DEV && devId) {
+    return createDevUser(devId);
   }
 
-  const user = await UserRepository.findOrCreate(
-    initData.user.id, 
-    initData.user.username, 
-    initData.user.photo_url
-  );
+  if (!initData.user) {
+    // No user data and no devId — use generic dev fallback
+    if (IS_DEV) {
+      return createDevUser(devId || 123456789);
+    }
+    throw new Error('No user data in initData');
+  }
 
-  return {
-    ...user,
-    firstName: initData.user.first_name,
-    lastName: initData.user.last_name,
-    photoUrl: initData.user.photo_url,
-  };
+  try {
+    const user = await UserRepository.findOrCreate(
+      initData.user.id,
+      initData.user.username,
+      initData.user.photo_url
+    );
+
+    return {
+      ...user,
+      firstName: initData.user.first_name,
+      lastName: initData.user.last_name,
+      photoUrl: initData.user.photo_url,
+    };
+  } catch (dbError) {
+    if (IS_DEV) {
+      console.error('[Auth] DB error, falling back to in-memory user:', dbError);
+      return createDevUser(initData.user.id || devId || 123456789);
+    }
+    throw dbError;
+  }
+}
+
+/**
+ * Create a dev user — tries DB first, falls back to in-memory
+ */
+async function createDevUser(devTelegramId: number): Promise<TelegramUser> {
+  const playerLabel = devTelegramId >= 100001 && devTelegramId <= 100006
+    ? `${devTelegramId - 100000}`
+    : `${devTelegramId}`;
+  const devUsername = devTelegramId >= 100001 && devTelegramId <= 100006
+    ? `dev_player_${devTelegramId - 100000}`
+    : `dev_${devTelegramId}`;
+
+  console.log(`[Auth] Dev mode: Creating/finding user with telegramId=${devTelegramId}, username=${devUsername}`);
+
+  try {
+    const user = await UserRepository.findOrCreate(devTelegramId, devUsername);
+    return {
+      ...user,
+      firstName: `Dev Player ${playerLabel}`,
+    };
+  } catch (dbError) {
+    console.error('[Auth] DB error in dev mode, creating in-memory user:', dbError);
+    return {
+      id: `dev-${devTelegramId}`,
+      telegramId: devTelegramId,
+      username: devUsername,
+      displayName: `Dev Player ${playerLabel}`,
+      firstName: `Dev Player ${playerLabel}`,
+      balance: 1000,
+    };
+  }
 }
