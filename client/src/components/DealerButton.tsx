@@ -25,8 +25,8 @@ const DealerButton: React.FC<DealerButtonProps> = ({
   mySeat,
   stage,
 }) => {
-  // Don't show dealer button when waiting for players
-  if (stage === "waiting") return null;
+  // Don't show if dealerPosition is invalid
+  if (dealerPosition < 0 || dealerPosition >= 6) return null;
 
   const totalSeats = 6;
   const rotationOffset = mySeat !== null ? mySeat : 0;
