@@ -25,8 +25,8 @@ const DealerButton: React.FC<DealerButtonProps> = ({
   mySeat,
   stage,
 }) => {
-  // Don't show if dealerPosition is invalid
-  if (dealerPosition < 0 || dealerPosition >= 6) return null;
+  // Don't show if dealerPosition is invalid or no active hand
+  if (dealerPosition == null || dealerPosition < 0 || dealerPosition >= 6) return null;
 
   const totalSeats = 6;
   const rotationOffset = mySeat !== null ? mySeat : 0;
@@ -36,25 +36,27 @@ const DealerButton: React.FC<DealerButtonProps> = ({
 
   return (
     <div
-      className="absolute z-20 transition-all duration-700 ease-in-out pointer-events-none"
+      className="absolute transition-all duration-700 ease-in-out pointer-events-none"
       style={{
         left: `${pos.left}%`,
         top: `${pos.top}%`,
         transform: "translate(-50%, -50%)",
+        zIndex: 25,
       }}
     >
       <div
-        className="flex items-center justify-center rounded-full bg-white"
+        className="flex items-center justify-center rounded-full"
         style={{
-          width: 22,
-          height: 22,
-          border: "2px solid #d4d4d8",
-          boxShadow: "0 1px 4px rgba(0,0,0,0.35), inset 0 1px 2px rgba(255,255,255,0.6)",
+          width: 26,
+          height: 26,
+          background: "linear-gradient(135deg, #ffffff 0%, #e8e8e8 100%)",
+          border: "2.5px solid #b0b0b0",
+          boxShadow: "0 2px 6px rgba(0,0,0,0.4), inset 0 1px 3px rgba(255,255,255,0.8)",
         }}
       >
         <span
           className="font-bold leading-none select-none"
-          style={{ fontSize: 11, color: "#111" }}
+          style={{ fontSize: 13, color: "#222", textShadow: "0 1px 0 rgba(255,255,255,0.5)" }}
         >
           D
         </span>

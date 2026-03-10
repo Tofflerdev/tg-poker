@@ -113,7 +113,7 @@ const Table: React.FC<TableProps> = ({
             />
 
             {/* Dealer Button */}
-            {dealerPosition !== undefined && (
+            {dealerPosition != null && (
               <DealerButton
                 dealerPosition={dealerPosition}
                 mySeat={mySeat}
