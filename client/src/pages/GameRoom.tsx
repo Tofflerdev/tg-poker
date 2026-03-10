@@ -141,7 +141,7 @@ export const GameRoom: React.FC<GameRoomProps> = ({
       <div className="flex-1 flex flex-col relative">
         {/* Table */}
         <div className="flex-1 flex items-center justify-center p-4 overflow-hidden">
-          <Table 
+          <Table
             seats={gameState.seats}
             spectators={gameState.spectators}
             mySeat={mySeat}
@@ -150,6 +150,8 @@ export const GameRoom: React.FC<GameRoomProps> = ({
             turnExpiresAt={gameState.turnExpiresAt || undefined}
             pots={gameState.pots}
             totalPot={gameState.totalPot}
+            dealerPosition={gameState.dealerPosition}
+            stage={gameState.stage}
             onSit={handleSeatClick}
           />
         </div>

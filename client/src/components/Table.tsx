@@ -2,6 +2,7 @@ import React, { useRef, useState, useEffect } from "react";
 import SeatsDisplay from "./SeatsDisplay";
 import CommunityCards from "./CommunityCards";
 import PotDisplay from "./PotDisplay";
+import DealerButton from "./DealerButton";
 import { Player, Spectator, Pot } from "../../../types/index";
 
 interface TableProps {
@@ -13,6 +14,8 @@ interface TableProps {
   turnExpiresAt?: number | null;
   pots?: Pot[];
   totalPot?: number;
+  dealerPosition?: number;
+  stage?: string;
   onSit: (seat: number) => void;
 }
 
@@ -25,6 +28,8 @@ const Table: React.FC<TableProps> = ({
   turnExpiresAt,
   pots = [],
   totalPot = 0,
+  dealerPosition,
+  stage = "waiting",
   onSit,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -106,6 +111,15 @@ const Table: React.FC<TableProps> = ({
               turnExpiresAt={turnExpiresAt}
               onSit={onSit}
             />
+
+            {/* Dealer Button */}
+            {dealerPosition !== undefined && (
+              <DealerButton
+                dealerPosition={dealerPosition}
+                mySeat={mySeat}
+                stage={stage}
+              />
+            )}
           </>
         )}
       </div>
