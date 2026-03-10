@@ -1,4 +1,5 @@
 import React from "react";
+import dealerButtonImg from "../assets/dealer-button.svg";
 
 interface DealerButtonProps {
   dealerPosition: number;
@@ -19,6 +20,8 @@ const DEALER_BUTTON_ON_TABLE = [
   { left: 84, top: 42 },  // 4: Top Right — just inside right edge, mid-high
   { left: 84, top: 58 },  // 5: Bottom Right — just inside right edge, mid-low
 ];
+
+const BUTTON_SIZE = 30;
 
 const DealerButton: React.FC<DealerButtonProps> = ({
   dealerPosition,
@@ -44,23 +47,17 @@ const DealerButton: React.FC<DealerButtonProps> = ({
         zIndex: 25,
       }}
     >
-      <div
-        className="flex items-center justify-center rounded-full"
+      <img
+        src={dealerButtonImg}
+        alt="Dealer"
+        draggable={false}
         style={{
-          width: 26,
-          height: 26,
-          background: "linear-gradient(135deg, #ffffff 0%, #e8e8e8 100%)",
-          border: "2.5px solid #b0b0b0",
-          boxShadow: "0 2px 6px rgba(0,0,0,0.4), inset 0 1px 3px rgba(255,255,255,0.8)",
+          width: BUTTON_SIZE,
+          height: BUTTON_SIZE,
+          filter: "drop-shadow(0 2px 4px rgba(0,0,0,0.5))",
+          userSelect: "none",
         }}
-      >
-        <span
-          className="font-bold leading-none select-none"
-          style={{ fontSize: 13, color: "#222", textShadow: "0 1px 0 rgba(255,255,255,0.5)" }}
-        >
-          D
-        </span>
-      </div>
+      />
     </div>
   );
 };

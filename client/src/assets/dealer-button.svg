@@ -1,0 +1,67 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="100" height="100">
+  <defs>
+    <!-- Outer edge gradient (dark rim) -->
+    <radialGradient id="rimGrad" cx="50%" cy="45%" r="50%">
+      <stop offset="0%" stop-color="#d4d4d4"/>
+      <stop offset="80%" stop-color="#a0a0a0"/>
+      <stop offset="100%" stop-color="#787878"/>
+    </radialGradient>
+    <!-- Inner face gradient (white/cream puck) -->
+    <radialGradient id="faceGrad" cx="45%" cy="40%" r="55%">
+      <stop offset="0%" stop-color="#ffffff"/>
+      <stop offset="40%" stop-color="#f5f0e8"/>
+      <stop offset="100%" stop-color="#e0d8c8"/>
+    </radialGradient>
+    <!-- Top highlight -->
+    <radialGradient id="highlight" cx="40%" cy="30%" r="40%">
+      <stop offset="0%" stop-color="rgba(255,255,255,0.9)"/>
+      <stop offset="100%" stop-color="rgba(255,255,255,0)"/>
+    </radialGradient>
+    <!-- Drop shadow -->
+    <filter id="shadow" x="-20%" y="-10%" width="140%" height="150%">
+      <feDropShadow dx="0" dy="3" stdDeviation="4" flood-color="#000000" flood-opacity="0.5"/>
+    </filter>
+    <!-- Inner shadow for depth -->
+    <filter id="innerShadow">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="2" result="blur"/>
+      <feOffset dx="0" dy="1" result="offsetBlur"/>
+      <feComposite in="SourceGraphic" in2="offsetBlur" operator="over"/>
+    </filter>
+  </defs>
+
+  <!-- Shadow layer -->
+  <ellipse cx="50" cy="54" rx="42" ry="42" fill="rgba(0,0,0,0.35)" filter="url(#shadow)" opacity="0"/>
+
+  <!-- Outer rim (beveled edge) -->
+  <circle cx="50" cy="50" r="46" fill="url(#rimGrad)" filter="url(#shadow)"/>
+
+  <!-- Notch decorations around the edge (casino chip style) -->
+  <g stroke="#999" stroke-width="1.5" opacity="0.5">
+    <line x1="50" y1="4" x2="50" y2="10"/>
+    <line x1="50" y1="90" x2="50" y2="96"/>
+    <line x1="4" y1="50" x2="10" y2="50"/>
+    <line x1="90" y1="50" x2="96" y2="50"/>
+    <line x1="17" y1="17" x2="21" y2="21"/>
+    <line x1="79" y1="79" x2="83" y2="83"/>
+    <line x1="83" y1="17" x2="79" y2="21"/>
+    <line x1="17" y1="83" x2="21" y2="79"/>
+  </g>
+
+  <!-- Inner ring border -->
+  <circle cx="50" cy="50" r="40" fill="none" stroke="#b8b0a0" stroke-width="1.5"/>
+
+  <!-- Main face -->
+  <circle cx="50" cy="50" r="39" fill="url(#faceGrad)"/>
+
+  <!-- Decorative inner ring -->
+  <circle cx="50" cy="50" r="33" fill="none" stroke="#c8c0b0" stroke-width="0.8" stroke-dasharray="4 3"/>
+
+  <!-- Top highlight reflection -->
+  <ellipse cx="44" cy="38" rx="24" ry="18" fill="url(#highlight)" opacity="0.6"/>
+
+  <!-- Letter D -->
+  <text x="50" y="58" text-anchor="middle" font-family="Georgia, 'Times New Roman', serif" font-weight="bold" font-size="36" fill="#1a1a1a" letter-spacing="1">D</text>
+
+  <!-- Subtle text shadow -->
+  <text x="50" y="58" text-anchor="middle" font-family="Georgia, 'Times New Roman', serif" font-weight="bold" font-size="36" fill="rgba(255,255,255,0.3)" letter-spacing="1" dy="-1">D</text>
+</svg>
