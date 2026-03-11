@@ -7,21 +7,24 @@ interface DealerButtonProps {
   stage: string;
 }
 
-// Positions ON THE TABLE FELT, offset to the SIDE of each seat so the button
-// doesn't overlap player cards, names, avatars, or community cards.
-// The felt ellipse spans ~10%-90% horizontally and ~15%-85% vertically.
-// Each position is placed in the "dead space" on the felt near the seat,
-// shifted laterally (clockwise) from the seat's direct line to center.
+// Dealer button positions (% of outer container), derived from seat positions
+// and shifted toward the table center so the button stays inside the felt.
+//
+// Seat positions (from SeatsDisplay):
+//   0: 50%,96%  1: 4%,72%  2: 4%,28%  3: 50%,4%  4: 96%,28%  5: 96%,72%
+//
+// Felt ellipse spans 10%-90% horizontally, 15%-85% vertically.
+// Community cards occupy roughly 35%-65% horizontal, 40%-60% vertical.
+// Each button position sits between its seat and the table center,
+// inside the felt but outside the community-cards zone.
 const DEALER_BUTTON_ON_TABLE = [
-  { left: 62, top: 76 },  // 0: Bottom Center — right side of bottom
-  { left: 16, top: 58 },  // 1: Bottom Left — just inside left edge, mid-low
-  { left: 16, top: 42 },  // 2: Top Left — just inside left edge, mid-high
-  { left: 38, top: 24 },  // 3: Top Center — left side of top
-  { left: 84, top: 42 },  // 4: Top Right — just inside right edge, mid-high
-  { left: 84, top: 58 },  // 5: Bottom Right — just inside right edge, mid-low
+  { left: 38, top: 78 },  // 0: Bottom Center — up-left from seat, inside felt bottom
+  { left: 20, top: 65 },  // 1: Bottom Left — right-up from seat, inside felt left-bottom
+  { left: 20, top: 35 },  // 2: Top Left — right-down from seat, inside felt left-top
+  { left: 38, top: 22 },  // 3: Top Center — down-left from seat, inside felt top
+  { left: 80, top: 35 },  // 4: Top Right — left-down from seat, inside felt right-top
+  { left: 80, top: 65 },  // 5: Bottom Right — left-up from seat, inside felt right-bottom
 ];
-
-const BUTTON_SIZE = 30;
 
 const DealerButton: React.FC<DealerButtonProps> = ({
   dealerPosition,
@@ -52,8 +55,8 @@ const DealerButton: React.FC<DealerButtonProps> = ({
         alt="Dealer"
         draggable={false}
         style={{
-          width: BUTTON_SIZE,
-          height: BUTTON_SIZE,
+          width: "clamp(20px, 4vw, 30px)",
+          height: "clamp(20px, 4vw, 30px)",
           filter: "drop-shadow(0 2px 4px rgba(0,0,0,0.5))",
           userSelect: "none",
         }}
