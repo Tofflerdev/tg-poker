@@ -12,6 +12,7 @@ export default class Game {
   private deck: Deck | null = null;
   
   private pots: Pot[] = [];           // Массив потов (основной + сайд-поты)
+  private lastRoundBets: number[] = Array(6).fill(0); // Ставки из последнего завершённого раунда
   private currentBet: number = 0;
   private currentPlayer: number | null = null;
   private dealerPosition: number = 0;
@@ -149,6 +150,7 @@ export default class Game {
     this.deck = null;
     this.communityCards = [];
     this.pots = [];
+    this.lastRoundBets = Array(6).fill(0);
     this.currentBet = 0;
     this.currentPlayer = null;
     this.stage = 'waiting';
@@ -451,6 +453,9 @@ export default class Game {
     // Рассчитываем поты в конце раунда торговли
     this.pots = this.calculatePots();
 
+    // Сохраняем ставки текущего раунда перед сбросом (для анимации фишек на клиенте)
+    this.lastRoundBets = this.seats.map(p => p ? p.bet : 0);
+
     // Сброс ставок текущего раунда И флагов acted
     this.seats.forEach(p => {
       if (p) {
@@ -734,6 +739,7 @@ export default class Game {
       stage: this.stage,
       turnExpiresAt: this.turnExpiresAt,
       nextHandIn: this.nextHandIn,
+      lastRoundBets: this.lastRoundBets,
     };
   }
 

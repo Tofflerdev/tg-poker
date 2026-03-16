@@ -3,6 +3,7 @@ import SeatsDisplay from "./SeatsDisplay";
 import CommunityCards from "./CommunityCards";
 import PotDisplay from "./PotDisplay";
 import DealerButton from "./DealerButton";
+import BetChipsDisplay from "./BetChipsDisplay";
 import { Player, Spectator, Pot } from "../../../types/index";
 
 interface TableProps {
@@ -16,8 +17,12 @@ interface TableProps {
   totalPot?: number;
   dealerPosition?: number;
   stage?: string;
+  lastRoundBets?: number[];
   onSit: (seat: number) => void;
 }
+
+// Total chip animation time: show (600ms) + move (800ms) + buffer
+const CHIP_ANIMATION_TOTAL = 1500;
 
 const Table: React.FC<TableProps> = ({
   seats = [],
@@ -30,10 +35,38 @@ const Table: React.FC<TableProps> = ({
   totalPot = 0,
   dealerPosition,
   stage = "waiting",
+  lastRoundBets = [],
   onSit,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
+
+  // Delayed community cards — wait for chip animation to finish before showing new cards
+  const [displayedCards, setDisplayedCards] = useState<string[]>(communityCards);
+  const prevStageRef = useRef(stage);
+  const prevCardsCountRef = useRef(communityCards.length);
+
+  useEffect(() => {
+    const stageChanged = prevStageRef.current !== stage;
+    const newCardsAdded = communityCards.length > prevCardsCountRef.current;
+    const hasLastRoundBets = lastRoundBets.some(b => b > 0);
+
+    if (stageChanged && newCardsAdded && hasLastRoundBets) {
+      // Delay showing new community cards until chip animation finishes
+      const timer = setTimeout(() => {
+        setDisplayedCards(communityCards);
+      }, CHIP_ANIMATION_TOTAL);
+
+      prevStageRef.current = stage;
+      prevCardsCountRef.current = communityCards.length;
+      return () => clearTimeout(timer);
+    } else {
+      // No animation needed — show cards immediately
+      setDisplayedCards(communityCards);
+      prevStageRef.current = stage;
+      prevCardsCountRef.current = communityCards.length;
+    }
+  }, [communityCards, stage, lastRoundBets]);
 
   // Seat margin percentages — how much space to reserve for seats outside the table
   const SEAT_MARGIN_X_PCT = 0.10; // 10% on each side
@@ -94,12 +127,20 @@ const Table: React.FC<TableProps> = ({
               >
                 <PotDisplay pots={pots} totalPot={totalPot} />
                 <CommunityCards
-                  cards={communityCards}
+                  cards={displayedCards}
                   spacing={cardSpacing}
                   size={cardSize}
                 />
               </div>
             </div>
+
+            {/* Bet chips on the felt */}
+            <BetChipsDisplay
+              seats={seats}
+              mySeat={mySeat}
+              stage={stage}
+              lastRoundBets={lastRoundBets}
+            />
 
             {/* Seats — positioned relative to the full container (outside the table) */}
             <SeatsDisplay

@@ -152,6 +152,7 @@ export const GameRoom: React.FC<GameRoomProps> = ({
             totalPot={gameState.totalPot}
             dealerPosition={gameState.dealerPosition}
             stage={gameState.stage}
+            lastRoundBets={gameState.lastRoundBets}
             onSit={handleSeatClick}
           />
         </div>

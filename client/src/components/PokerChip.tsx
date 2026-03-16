@@ -15,7 +15,7 @@ const sizeMap = {
 };
 
 // Определяем цвет фишки по номиналу
-const getChipColor = (value: number): string => {
+export const getChipColor = (value: number): string => {
   if (value >= 1000) return '#212121'; // black
   if (value >= 500) return '#7b1fa2'; // purple
   if (value >= 100) return '#1e88e5'; // blue

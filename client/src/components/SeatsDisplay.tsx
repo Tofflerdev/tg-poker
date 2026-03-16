@@ -128,7 +128,6 @@ const SeatsDisplay: React.FC<SeatsDisplayProps> = ({
                   {/* Player Info */}
                   <div className="text-[10px] mt-1 leading-tight w-full px-1 flex flex-col items-center">
                       <div className="font-mono font-bold truncate max-w-full">{player.chips}</div>
-                      {player.bet > 0 && <div className="text-blue-300 font-bold text-[9px]">{player.bet}</div>}
                       {player.folded && <div className="text-red-400 font-bold text-[9px]">FOLD</div>}
                       {player.waitingForBB && <div className="text-orange-300 text-[8px]">Wait BB</div>}
                   </div>

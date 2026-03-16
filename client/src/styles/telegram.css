@@ -447,6 +447,27 @@ body {
   display: inline-block;
 }
 
+/* Bet Chips Animations */
+@keyframes bet-appear {
+  0% {
+    transform: translate(-50%, -50%) scale(0);
+    opacity: 0;
+  }
+  60% {
+    transform: translate(-50%, -50%) scale(1.15);
+    opacity: 1;
+  }
+  100% {
+    transform: translate(-50%, -50%) scale(1);
+    opacity: 1;
+  }
+}
+
+.bet-appear {
+  animation: bet-appear 0.3s ease-out forwards;
+}
+
+
 
 /* Turn Timer Animation */
 @keyframes turn-timer-pulse {

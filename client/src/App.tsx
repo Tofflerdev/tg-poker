@@ -93,7 +93,8 @@ const App: React.FC = () => {
     bigBlind: 0,
     stage: 'waiting',
     turnExpiresAt: null,
-    nextHandIn: null
+    nextHandIn: null,
+    lastRoundBets: []
   });
   
   const [showdown, setShowdown] = useState<ShowdownResult | null>(null);

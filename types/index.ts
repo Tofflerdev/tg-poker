@@ -58,6 +58,7 @@ export interface GameState {
   stage: GameStage;
   turnExpiresAt: number | null; // Timestamp окончания хода
   nextHandIn: number | null;  // NEW: timestamp когда начнется следующая раздача
+  lastRoundBets: number[];    // Ставки из последнего завершённого раунда торговли (для анимации фишек)
 }
 
 export interface ShowdownResult {
