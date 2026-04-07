@@ -4,6 +4,7 @@ import CommunityCards from "./CommunityCards";
 import PotDisplay from "./PotDisplay";
 import DealerButton from "./DealerButton";
 import BetChipsDisplay from "./BetChipsDisplay";
+import { useIsMobile } from "../hooks/useIsMobile";
 import { Player, Spectator, Pot } from "../../../types/index";
 
 interface TableProps {
@@ -18,6 +19,7 @@ interface TableProps {
   dealerPosition?: number;
   stage?: string;
   lastRoundBets?: number[];
+  blinds?: { small: number; big: number };
   onSit: (seat: number) => void;
 }
 
@@ -36,8 +38,10 @@ const Table: React.FC<TableProps> = ({
   dealerPosition,
   stage = "waiting",
   lastRoundBets = [],
+  blinds,
   onSit,
 }) => {
+  const isMobile = useIsMobile();
   const containerRef = useRef<HTMLDivElement>(null);
   const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
 
@@ -52,7 +56,6 @@ const Table: React.FC<TableProps> = ({
     const hasLastRoundBets = lastRoundBets.some(b => b > 0);
 
     if (stageChanged && newCardsAdded && hasLastRoundBets) {
-      // Delay showing new community cards until chip animation finishes
       const timer = setTimeout(() => {
         setDisplayedCards(communityCards);
       }, CHIP_ANIMATION_TOTAL);
@@ -61,31 +64,37 @@ const Table: React.FC<TableProps> = ({
       prevCardsCountRef.current = communityCards.length;
       return () => clearTimeout(timer);
     } else {
-      // No animation needed — show cards immediately
       setDisplayedCards(communityCards);
       prevStageRef.current = stage;
       prevCardsCountRef.current = communityCards.length;
     }
   }, [communityCards, stage, lastRoundBets]);
 
-  // Seat margin percentages — how much space to reserve for seats outside the table
-  const SEAT_MARGIN_X_PCT = 0.10; // 10% on each side
-  const SEAT_MARGIN_Y_PCT = 0.15; // 15% on top and bottom
+  // Seat margin percentages
+  const SEAT_MARGIN_X_PCT = isMobile ? 0.08 : 0.10;
+  const SEAT_MARGIN_Y_PCT = isMobile ? 0.10 : 0.15;
 
   useEffect(() => {
     const updateDimensions = () => {
       if (containerRef.current) {
         const { offsetWidth } = containerRef.current;
-        // The table felt uses the inner area; total container is larger to fit seats outside
-        const tableWidth = offsetWidth * (1 - 2 * SEAT_MARGIN_X_PCT);
-        const tableHeight = tableWidth * (4 / 7);
-        // Total container height includes margins for seats above and below
-        const totalHeight = tableHeight / (1 - 2 * SEAT_MARGIN_Y_PCT);
-        setDimensions({ width: offsetWidth, height: totalHeight });
+
+        if (isMobile) {
+          // Mobile: vertical table. Width is constrained, height is taller.
+          const tableWidth = offsetWidth * (1 - 2 * SEAT_MARGIN_X_PCT);
+          const tableHeight = tableWidth * (7 / 4); // portrait ratio
+          const totalHeight = tableHeight / (1 - 2 * SEAT_MARGIN_Y_PCT);
+          setDimensions({ width: offsetWidth, height: totalHeight });
+        } else {
+          // Desktop: horizontal table
+          const tableWidth = offsetWidth * (1 - 2 * SEAT_MARGIN_X_PCT);
+          const tableHeight = tableWidth * (4 / 7);
+          const totalHeight = tableHeight / (1 - 2 * SEAT_MARGIN_Y_PCT);
+          setDimensions({ width: offsetWidth, height: totalHeight });
+        }
       }
     };
 
-    // Initial calculation
     updateDimensions();
 
     const observer = new ResizeObserver(updateDimensions);
@@ -94,12 +103,19 @@ const Table: React.FC<TableProps> = ({
     }
 
     return () => observer.disconnect();
-  }, []);
+  }, [isMobile]);
 
   // Inner table dimensions (the felt ellipse)
   const innerWidth = dimensions.width * (1 - 2 * SEAT_MARGIN_X_PCT);
-  const cardSize = Math.max(30, Math.min(60, innerWidth * 0.085));
-  const cardSpacing = Math.max(4, innerWidth * 0.015);
+  const cardSize = isMobile
+    ? Math.max(28, Math.min(48, innerWidth * 0.10))
+    : Math.max(30, Math.min(60, innerWidth * 0.085));
+  const cardSpacing = isMobile
+    ? Math.max(3, innerWidth * 0.012)
+    : Math.max(4, innerWidth * 0.015);
+
+  // Table felt border-radius changes based on orientation
+  const feltBorderRadius = isMobile ? "30%/50%" : "50%/30%";
 
   return (
     <div className="w-full flex flex-col items-center">
@@ -110,20 +126,22 @@ const Table: React.FC<TableProps> = ({
       >
         {dimensions.width > 0 && (
           <>
-            {/* Table felt — inset within the container */}
+            {/* Table felt */}
             <div
-              className="absolute rounded-[50%/30%] border-8 border-[#654321] shadow-xl"
+              className="absolute border-[6px] md:border-8 border-[#654321] shadow-xl"
               style={{
                 left: `${SEAT_MARGIN_X_PCT * 100}%`,
                 right: `${SEAT_MARGIN_X_PCT * 100}%`,
                 top: `${SEAT_MARGIN_Y_PCT * 100}%`,
                 bottom: `${SEAT_MARGIN_Y_PCT * 100}%`,
+                borderRadius: feltBorderRadius,
                 background: "radial-gradient(ellipse at center, var(--poker-felt) 0%, var(--poker-felt-dark) 100%)",
               }}
             >
+              {/* Center content: pot + community cards + table info */}
               <div
-                className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 flex flex-col items-center gap-2 z-10"
-                style={{ width: '60%' }}
+                className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 flex flex-col items-center gap-1 md:gap-2 z-10"
+                style={{ width: isMobile ? '80%' : '60%' }}
               >
                 <PotDisplay pots={pots} totalPot={totalPot} />
                 <CommunityCards
@@ -131,6 +149,11 @@ const Table: React.FC<TableProps> = ({
                   spacing={cardSpacing}
                   size={cardSize}
                 />
+                {blinds && (
+                  <div className="text-[10px] text-white/50 mt-1 whitespace-nowrap">
+                    NLH ~ {blinds.small}/{blinds.big} 6MAX
+                  </div>
+                )}
               </div>
             </div>
 
@@ -140,9 +163,10 @@ const Table: React.FC<TableProps> = ({
               mySeat={mySeat}
               stage={stage}
               lastRoundBets={lastRoundBets}
+              isMobile={isMobile}
             />
 
-            {/* Seats — positioned relative to the full container (outside the table) */}
+            {/* Seats */}
             <SeatsDisplay
               seats={seats}
               mySeat={mySeat}
@@ -151,6 +175,7 @@ const Table: React.FC<TableProps> = ({
               currentPlayer={currentPlayer}
               turnExpiresAt={turnExpiresAt}
               onSit={onSit}
+              isMobile={isMobile}
             />
 
             {/* Dealer Button */}
@@ -159,6 +184,7 @@ const Table: React.FC<TableProps> = ({
                 dealerPosition={dealerPosition}
                 mySeat={mySeat}
                 stage={stage}
+                isMobile={isMobile}
               />
             )}
           </>

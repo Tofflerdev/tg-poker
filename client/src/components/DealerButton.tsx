@@ -5,40 +5,43 @@ interface DealerButtonProps {
   dealerPosition: number;
   mySeat: number | null;
   stage: string;
+  isMobile?: boolean;
 }
 
-// Dealer button positions (% of outer container), derived from seat positions
-// and shifted toward the table center so the button stays inside the felt.
-//
-// Seat positions (from SeatsDisplay):
-//   0: 50%,96%  1: 4%,72%  2: 4%,28%  3: 50%,4%  4: 96%,28%  5: 96%,72%
-//
-// Felt ellipse spans 10%-90% horizontally, 15%-85% vertically.
-// Community cards occupy roughly 35%-65% horizontal, 40%-60% vertical.
-// Each button position sits between its seat and the table center,
-// inside the felt but outside the community-cards zone.
-const DEALER_BUTTON_ON_TABLE = [
-  { left: 38, top: 78 },  // 0: Bottom Center — up-left from seat, inside felt bottom
-  { left: 20, top: 65 },  // 1: Bottom Left — right-up from seat, inside felt left-bottom
-  { left: 20, top: 35 },  // 2: Top Left — right-down from seat, inside felt left-top
-  { left: 38, top: 22 },  // 3: Top Center — down-left from seat, inside felt top
-  { left: 80, top: 35 },  // 4: Top Right — left-down from seat, inside felt right-top
-  { left: 80, top: 65 },  // 5: Bottom Right — left-up from seat, inside felt right-bottom
+// Desktop: dealer button positions (horizontal table)
+const DEALER_POSITIONS_DESKTOP = [
+  { left: 38, top: 78 },  // 0: Bottom Center
+  { left: 20, top: 65 },  // 1: Bottom Left
+  { left: 20, top: 35 },  // 2: Top Left
+  { left: 38, top: 22 },  // 3: Top Center
+  { left: 80, top: 35 },  // 4: Top Right
+  { left: 80, top: 65 },  // 5: Bottom Right
+];
+
+// Mobile: dealer button positions (vertical table)
+const DEALER_POSITIONS_MOBILE = [
+  { left: 62, top: 82 },  // 0: Bottom Center (me)
+  { left: 22, top: 72 },  // 1: Bottom Left
+  { left: 22, top: 38 },  // 2: Left mid
+  { left: 38, top: 18 },  // 3: Top Center
+  { left: 78, top: 38 },  // 4: Right mid
+  { left: 78, top: 72 },  // 5: Bottom Right
 ];
 
 const DealerButton: React.FC<DealerButtonProps> = ({
   dealerPosition,
   mySeat,
   stage,
+  isMobile = false,
 }) => {
-  // Don't show if dealerPosition is invalid or no active hand
   if (dealerPosition == null || dealerPosition < 0 || dealerPosition >= 6) return null;
 
   const totalSeats = 6;
   const rotationOffset = mySeat !== null ? mySeat : 0;
   const visualIndex = (dealerPosition - rotationOffset + totalSeats) % totalSeats;
 
-  const pos = DEALER_BUTTON_ON_TABLE[visualIndex];
+  const positions = isMobile ? DEALER_POSITIONS_MOBILE : DEALER_POSITIONS_DESKTOP;
+  const pos = positions[visualIndex];
 
   return (
     <div

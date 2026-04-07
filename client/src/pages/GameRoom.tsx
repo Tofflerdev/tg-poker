@@ -5,6 +5,7 @@ import GameControls from "../components/GameControls";
 import Chat from "../components/Chat";
 import type { GameState, ShowdownResult, TelegramUser, ExtendedServerEvents, ExtendedClientEvents } from "../../../types/index";
 import { useTelegram } from "../hooks/useTelegram";
+import { useIsMobile } from "../hooks/useIsMobile";
 
 interface GameRoomProps {
   socket: Socket<ExtendedServerEvents, ExtendedClientEvents>;
@@ -26,6 +27,7 @@ export const GameRoom: React.FC<GameRoomProps> = ({
   onLeaveTable,
 }) => {
   const { showBackButton, hideBackButton, setHeaderColor, showConfirm, hapticFeedback } = useTelegram();
+  const isMobile = useIsMobile();
   const [selectedSeat, setSelectedSeat] = useState<number | null>(null);
   const [isMyTurn, setIsMyTurn] = useState(false);
   const [lastStage, setLastStage] = useState(gameState.stage);
@@ -33,8 +35,8 @@ export const GameRoom: React.FC<GameRoomProps> = ({
 
   // Handle back button and header
   useEffect(() => {
-    setHeaderColor("#1a472a"); // Dark green for poker table
-    
+    setHeaderColor("#1a472a");
+
     showBackButton(() => {
       showConfirm("Покинуть стол?", (confirmed) => {
         if (confirmed) {
@@ -52,26 +54,23 @@ export const GameRoom: React.FC<GameRoomProps> = ({
   useEffect(() => {
     const wasMyTurn = isMyTurn;
     const nowMyTurn = mySeat !== null && gameState.currentPlayer === mySeat;
-    
+
     if (!wasMyTurn && nowMyTurn) {
-      // It's now my turn - provide haptic notification
       hapticFeedback?.notificationOccurred("warning");
     }
-    
+
     setIsMyTurn(nowMyTurn);
   }, [gameState.currentPlayer, mySeat, isMyTurn, hapticFeedback]);
 
   // Track stage changes for haptic feedback
   useEffect(() => {
     if (lastStage !== gameState.stage) {
-      // Stage changed - provide light haptic
       hapticFeedback?.impactOccurred("light");
-      
-      // Special feedback for showdown
+
       if (gameState.stage === "showdown") {
         hapticFeedback?.notificationOccurred("success");
       }
-      
+
       setLastStage(gameState.stage);
     }
   }, [gameState.stage, lastStage, hapticFeedback]);
@@ -81,7 +80,6 @@ export const GameRoom: React.FC<GameRoomProps> = ({
     if (showdown && mySeat !== null) {
       const myResult = showdown.results.find(r => r.seat === mySeat);
       if (myResult) {
-        // Server uses socket.id for player identification in game state
         const isWinner = showdown.winners.some(w => w.id === socket.id);
         if (isWinner) {
           hapticFeedback?.notificationOccurred("success");
@@ -111,36 +109,66 @@ export const GameRoom: React.FC<GameRoomProps> = ({
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-[#0d3328] to-[#1a472a] flex flex-col overflow-hidden">
-      {/* Header */}
-      <div className="flex justify-between items-center px-4 py-3 bg-black/30 text-white z-10">
-        <div className="flex flex-col">
-          <span className="text-xs opacity-70">Table #{tableId.slice(-4)}</span>
-          <span className="text-sm font-medium uppercase">{getStageText(gameState.stage)}</span>
-        </div>
-        
-        <div className="flex items-center gap-2">
-          <span className="text-xs opacity-70">Pot:</span>
-          <span className={`text-lg font-bold text-[#ffd700] ${showdown ? "animate-pulse" : ""}`}>
-            {gameState.totalPot.toLocaleString()}
-          </span>
+    <div className="min-h-screen bg-gradient-to-b from-[#0d1b0f] to-[#1a2e1a] flex flex-col overflow-hidden">
+      {/* Header — compact on mobile */}
+      <div className="flex justify-between items-center px-3 md:px-4 py-2 md:py-3 bg-black/30 text-white z-10">
+        <div className="flex items-center gap-3">
+          {/* Menu/back button area */}
+          <button
+            onClick={() => {
+              showConfirm("Покинуть стол?", (confirmed) => {
+                if (confirmed) onLeaveTable();
+              });
+            }}
+            className="p-1.5 bg-white/10 rounded-lg hover:bg-white/20 transition-colors"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+            </svg>
+          </button>
+
+          <div className="flex flex-col">
+            <span className="text-xs opacity-70">Table #{tableId.slice(-4)}</span>
+            <span className="text-xs font-medium uppercase text-white/80">{getStageText(gameState.stage)}</span>
+          </div>
         </div>
 
-        <button 
-          onClick={() => setIsChatOpen(true)}
-          className="p-2 bg-white/10 rounded-full hover:bg-white/20 transition-colors relative"
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
-          </svg>
-          {/* Optional: Unread badge could go here */}
-        </button>
+        <div className="flex items-center gap-2">
+          {/* Pot display in header (mobile only — saves space) */}
+          {isMobile && (
+            <div className="flex items-center gap-1">
+              <span className="text-[10px] opacity-50">Pot</span>
+              <span className={`text-sm font-bold text-[#ffd700] ${showdown ? "animate-pulse" : ""}`}>
+                {gameState.totalPot.toLocaleString()}
+              </span>
+            </div>
+          )}
+
+          {!isMobile && (
+            <div className="flex items-center gap-2">
+              <span className="text-xs opacity-70">Pot:</span>
+              <span className={`text-lg font-bold text-[#ffd700] ${showdown ? "animate-pulse" : ""}`}>
+                {gameState.totalPot.toLocaleString()}
+              </span>
+            </div>
+          )}
+
+          {/* Chat + emoji buttons */}
+          <button
+            onClick={() => setIsChatOpen(true)}
+            className="p-1.5 md:p-2 bg-white/10 rounded-full hover:bg-white/20 transition-colors"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 md:h-5 md:w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
+            </svg>
+          </button>
+        </div>
       </div>
 
       {/* Main Game Area */}
-      <div className="flex-1 flex flex-col relative">
+      <div className="flex-1 flex flex-col relative min-h-0">
         {/* Table */}
-        <div className="flex-1 flex items-center justify-center p-4 overflow-hidden">
+        <div className={`flex-1 flex items-center justify-center overflow-hidden ${isMobile ? 'px-2 py-1' : 'p-4'}`}>
           <Table
             seats={gameState.seats}
             spectators={gameState.spectators}
@@ -153,6 +181,7 @@ export const GameRoom: React.FC<GameRoomProps> = ({
             dealerPosition={gameState.dealerPosition}
             stage={gameState.stage}
             lastRoundBets={gameState.lastRoundBets}
+            blinds={{ small: gameState.smallBlind, big: gameState.bigBlind }}
             onSit={handleSeatClick}
           />
         </div>
@@ -163,13 +192,13 @@ export const GameRoom: React.FC<GameRoomProps> = ({
             <div className="bg-white rounded-xl p-6 shadow-2xl w-full max-w-xs text-center animate-in fade-in zoom-in duration-200">
               <p className="text-lg font-medium mb-6 text-gray-900">Take seat {selectedSeat + 1}?</p>
               <div className="flex gap-3 justify-center">
-                <button 
+                <button
                   className="flex-1 py-2 px-4 bg-green-600 text-white rounded-lg font-medium active:scale-95 transition-transform"
                   onClick={handleJoinSeat}
                 >
                   Yes
                 </button>
-                <button 
+                <button
                   className="flex-1 py-2 px-4 bg-gray-200 text-gray-800 rounded-lg font-medium active:scale-95 transition-transform"
                   onClick={handleCancelSeat}
                 >
@@ -180,7 +209,7 @@ export const GameRoom: React.FC<GameRoomProps> = ({
           </div>
         )}
 
-        {/* Game Controls - Sticky Bottom */}
+        {/* Game Controls — docked at bottom */}
         <div className="w-full z-20">
           <GameControls
             socket={socket}
@@ -193,14 +222,14 @@ export const GameRoom: React.FC<GameRoomProps> = ({
       {/* Chat Overlay (Bottom Sheet) */}
       {isChatOpen && (
         <div className="fixed inset-0 z-50 flex flex-col justify-end">
-          <div 
-            className="absolute inset-0 bg-black/60 backdrop-blur-sm transition-opacity" 
+          <div
+            className="absolute inset-0 bg-black/60 backdrop-blur-sm transition-opacity"
             onClick={() => setIsChatOpen(false)}
           />
           <div className="relative bg-[#1c1c1e] w-full h-[60vh] rounded-t-2xl shadow-2xl flex flex-col overflow-hidden animate-in slide-in-from-bottom duration-300">
             <div className="flex justify-between items-center p-3 border-b border-white/10 bg-[#2c2c2e]">
               <h3 className="font-medium text-white">Chat</h3>
-              <button 
+              <button
                 onClick={() => setIsChatOpen(false)}
                 className="p-1 rounded-full hover:bg-white/10 text-gray-400 hover:text-white"
               >
@@ -210,7 +239,7 @@ export const GameRoom: React.FC<GameRoomProps> = ({
               </button>
             </div>
             <div className="flex-1 overflow-hidden">
-              <Chat 
+              <Chat
                 socket={socket}
                 currentUser={currentUser}
                 tableId={tableId}

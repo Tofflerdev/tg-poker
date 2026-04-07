@@ -7,10 +7,11 @@ interface BetChipsDisplayProps {
   mySeat: number | null;
   stage: string;
   lastRoundBets: number[];
+  isMobile?: boolean;
 }
 
-// Bet chip positions on the table (% of outer container).
-const BET_POSITIONS = [
+// Desktop: bet chip positions on the table (% of outer container)
+const BET_POSITIONS_DESKTOP = [
   { left: 50, top: 65 },  // 0: Bottom Center
   { left: 25, top: 60 },  // 1: Bottom Left
   { left: 25, top: 38 },  // 2: Top Left
@@ -19,9 +20,19 @@ const BET_POSITIONS = [
   { left: 75, top: 60 },  // 5: Bottom Right
 ];
 
+// Mobile: bet positions for vertical table
+const BET_POSITIONS_MOBILE = [
+  { left: 50, top: 78 },  // 0: Bottom Center (me)
+  { left: 22, top: 68 },  // 1: Bottom Left
+  { left: 22, top: 40 },  // 2: Left mid
+  { left: 50, top: 22 },  // 3: Top Center
+  { left: 78, top: 40 },  // 4: Right mid
+  { left: 78, top: 68 },  // 5: Bottom Right
+];
+
 const POT_CENTER = { left: 50, top: 50 };
-const SHOW_DURATION = 600;     // ms — how long to show bets at seat before collecting
-const MOVE_DURATION = 800;     // ms — how long the move-to-pot animation takes
+const SHOW_DURATION = 600;
+const MOVE_DURATION = 800;
 
 const COLLECT_TRANSITIONS: Record<string, string[]> = {
   preflop: ['flop', 'showdown'],
@@ -124,12 +135,6 @@ const BetStack: React.FC<{
   );
 };
 
-// Animation phases:
-// 'idle'    — show current player.bet values
-// 'show'    — show frozen bets at seat positions (brief pause so user sees them)
-// 'collect' — browser paints at seat positions (1 frame)
-// 'moving'  — CSS transition moves chips to pot center
-// 'done'    — cleanup → back to idle
 type AnimPhase = 'idle' | 'show' | 'collect' | 'moving' | 'done';
 
 const BetChipsDisplay: React.FC<BetChipsDisplayProps> = ({
@@ -137,26 +142,23 @@ const BetChipsDisplay: React.FC<BetChipsDisplayProps> = ({
   mySeat,
   stage,
   lastRoundBets,
+  isMobile = false,
 }) => {
   const totalSeats = 6;
   const rotationOffset = mySeat !== null ? mySeat : 0;
+  const betPositions = isMobile ? BET_POSITIONS_MOBILE : BET_POSITIONS_DESKTOP;
 
   const prevStageRef = useRef(stage);
 
-  // Animation state
   const [frozenBets, setFrozenBets] = useState<number[]>(Array(totalSeats).fill(0));
   const [animPhase, setAnimPhase] = useState<AnimPhase>('idle');
 
-  // Current bets from props
   const currentBets = Array.from({ length: totalSeats }, (_, i) => seats[i]?.bet ?? 0);
 
-  // Detect stage change and trigger animation
   useEffect(() => {
     const prevStage = prevStageRef.current;
     if (prevStage !== stage && animPhase === 'idle') {
       if (shouldAnimateCollect(prevStage, stage)) {
-        // Use lastRoundBets from server — this is the authoritative source
-        // It contains the bets from the round that just ended, saved before clearing
         const betsToAnimate = lastRoundBets.length > 0 ? [...lastRoundBets] : [];
         const hasBets = betsToAnimate.some(b => b > 0);
 
@@ -169,7 +171,6 @@ const BetChipsDisplay: React.FC<BetChipsDisplayProps> = ({
     prevStageRef.current = stage;
   }, [stage, animPhase, lastRoundBets]);
 
-  // Phase machine: show → collect → moving → done → idle
   useEffect(() => {
     let timerId: ReturnType<typeof setTimeout> | undefined;
     let rafId1: number | undefined;
@@ -201,7 +202,6 @@ const BetChipsDisplay: React.FC<BetChipsDisplayProps> = ({
     };
   }, [animPhase, totalSeats]);
 
-  // Determine what to render
   const isAnimating = animPhase === 'show' || animPhase === 'collect' || animPhase === 'moving';
   const displayBets = isAnimating ? frozenBets : currentBets;
   const moveToPot = animPhase === 'moving';
@@ -212,7 +212,7 @@ const BetChipsDisplay: React.FC<BetChipsDisplayProps> = ({
         if (bet <= 0) return null;
 
         const visualIndex = (seatIndex - rotationOffset + totalSeats) % totalSeats;
-        const position = BET_POSITIONS[visualIndex];
+        const position = betPositions[visualIndex];
 
         return (
           <BetStack
