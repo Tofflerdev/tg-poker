@@ -80,12 +80,11 @@ const Table: React.FC<TableProps> = ({
   useEffect(() => {
     const updateDimensions = () => {
       if (containerRef.current) {
-        const { offsetWidth } = containerRef.current;
-        const parentEl = containerRef.current.parentElement;
-        const availableHeight = parentEl ? parentEl.clientHeight : window.innerHeight;
+        const { offsetWidth, offsetHeight } = containerRef.current;
 
         if (isMobile) {
-          // Mobile: vertical table. Fit within available height.
+          // Mobile: vertical table. Use actual available height from CSS (h-full).
+          const availableHeight = offsetHeight;
           const tableWidth = offsetWidth * (1 - 2 * SEAT_MARGIN_X_PCT);
           const idealHeight = tableWidth * (7 / 4); // portrait ratio
           const idealTotalHeight = idealHeight / (1 - 2 * SEAT_MARGIN_Y_PCT);
@@ -125,11 +124,11 @@ const Table: React.FC<TableProps> = ({
   const feltBorderRadius = isMobile ? "30%/50%" : "50%/30%";
 
   return (
-    <div className="w-full flex flex-col items-center">
+    <div className="w-full h-full flex flex-col items-center">
       <div
         ref={containerRef}
-        className="relative w-full max-w-3xl mx-auto"
-        style={{ height: dimensions.height }}
+        className="relative w-full h-full max-w-3xl mx-auto"
+        style={isMobile ? undefined : { height: dimensions.height }}
       >
         {dimensions.width > 0 && (
           <>
