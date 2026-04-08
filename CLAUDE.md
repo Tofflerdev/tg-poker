@@ -78,6 +78,20 @@ See `.env.example`:
 - Auth: in dev mode, `auth.ts` accepts empty `initData` with optional `devId`
 - Production CORS restricted to `https://tgp.isgood.host`
 
+## UI Design — "Neon Strip" Style
+
+Game controls (`GameControls.tsx`) use a **"Neon Strip"** design language:
+- Dark translucent backgrounds (`rgba(10,10,14,0.9+)`) with `backdrop-blur`
+- Each action has a distinct neon color: **red** (Fold `#ff4757`), **cyan** (Check/Call `#00e5ff`), **amber** (Raise `#ffab00`), **orange** (All-In `#ff6d00`)
+- Buttons are transparent with colored borders (`1.5px solid`) and a glowing bar (`GlowBar`) at the bottom edge
+- Active/primary buttons get an inner glow via `box-shadow: inset 0 0 12px`
+- Mobile: 3 main buttons in a row (56px height) + separate All-In strip below
+- All bottom-docked panels use `paddingBottom: max(env(safe-area-inset-bottom), 12px)` for Android nav bar / iOS home indicator
+- Touch targets minimum 44px, `active:scale-95` for tap feedback
+- Neon color tokens defined in `NEON` object at top of `GameControls.tsx`
+
+When adding new UI controls, follow this neon style with colored borders, glow effects, and dark backgrounds.
+
 ## DB Schema
 
 Single `User` model: `telegramId` (unique), `displayName`, `balance` (default 1000), stats (`handsPlayed`, `handsWon`, `totalWinnings`, `biggestPot`), `lastDailyRefill`.
