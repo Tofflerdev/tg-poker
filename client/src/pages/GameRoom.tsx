@@ -109,7 +109,7 @@ export const GameRoom: React.FC<GameRoomProps> = ({
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-[#0d1b0f] to-[#1a2e1a] flex flex-col overflow-hidden">
+    <div className="h-[100dvh] bg-gradient-to-b from-[#0d1b0f] to-[#1a2e1a] flex flex-col overflow-hidden">
       {/* Header — compact on mobile */}
       <div className="flex justify-between items-center px-3 md:px-4 py-2 md:py-3 bg-black/30 text-white z-10">
         <div className="flex items-center gap-3">
@@ -168,7 +168,7 @@ export const GameRoom: React.FC<GameRoomProps> = ({
       {/* Main Game Area */}
       <div className="flex-1 flex flex-col relative min-h-0">
         {/* Table */}
-        <div className={`flex-1 flex items-center justify-center overflow-hidden ${isMobile ? 'px-2 py-1' : 'p-4'}`}>
+        <div className={`flex-1 flex items-center justify-center overflow-hidden min-h-0 ${isMobile ? 'px-2 py-1' : 'p-4'}`}>
           <Table
             seats={gameState.seats}
             spectators={gameState.spectators}

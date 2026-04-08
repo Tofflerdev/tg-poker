@@ -81,12 +81,16 @@ const Table: React.FC<TableProps> = ({
     const updateDimensions = () => {
       if (containerRef.current) {
         const { offsetWidth } = containerRef.current;
+        const parentEl = containerRef.current.parentElement;
+        const availableHeight = parentEl ? parentEl.clientHeight : window.innerHeight;
 
         if (isMobile) {
-          // Mobile: vertical table. Width is constrained, height is taller.
+          // Mobile: vertical table. Fit within available height.
           const tableWidth = offsetWidth * (1 - 2 * SEAT_MARGIN_X_PCT);
-          const tableHeight = tableWidth * (7 / 4); // portrait ratio
-          const totalHeight = tableHeight / (1 - 2 * SEAT_MARGIN_Y_PCT);
+          const idealHeight = tableWidth * (7 / 4); // portrait ratio
+          const idealTotalHeight = idealHeight / (1 - 2 * SEAT_MARGIN_Y_PCT);
+          // Constrain to available height
+          const totalHeight = Math.min(idealTotalHeight, availableHeight);
           setDimensions({ width: offsetWidth, height: totalHeight });
         } else {
           // Desktop: horizontal table

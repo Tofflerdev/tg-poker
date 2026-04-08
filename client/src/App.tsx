@@ -107,6 +107,14 @@ const App: React.FC = () => {
       expand();
       setHeaderColor('#2481cc');
       setBackgroundColor('#f1f1f1');
+
+      // Lock orientation to portrait on mobile
+      try {
+        const orientation = (screen as any).orientation;
+        if (orientation?.lock) {
+          orientation.lock('portrait').catch(() => {});
+        }
+      } catch {}
     }
   }, [isReady, ready, expand, setHeaderColor, setBackgroundColor]);
 
