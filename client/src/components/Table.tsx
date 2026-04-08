@@ -5,7 +5,8 @@ import PotDisplay from "./PotDisplay";
 import DealerButton from "./DealerButton";
 import BetChipsDisplay from "./BetChipsDisplay";
 import { useIsMobile } from "../hooks/useIsMobile";
-import { Player, Spectator, Pot } from "../../../types/index";
+import PayoutChipsDisplay from "./PayoutChipsDisplay";
+import { Player, Spectator, Pot, ShowdownResult } from "../../../types/index";
 
 interface TableProps {
   seats?: (Player | null)[];
@@ -20,6 +21,7 @@ interface TableProps {
   stage?: string;
   lastRoundBets?: number[];
   blinds?: { small: number; big: number };
+  showdown?: ShowdownResult | null;
   onSit: (seat: number) => void;
 }
 
@@ -39,6 +41,7 @@ const Table: React.FC<TableProps> = ({
   stage = "waiting",
   lastRoundBets = [],
   blinds,
+  showdown = null,
   onSit,
 }) => {
   const isMobile = useIsMobile();
@@ -163,6 +166,14 @@ const Table: React.FC<TableProps> = ({
               mySeat={mySeat}
               stage={stage}
               lastRoundBets={lastRoundBets}
+              isMobile={isMobile}
+            />
+
+            {/* Payout chips animation */}
+            <PayoutChipsDisplay
+              showdown={showdown}
+              seats={seats}
+              mySeat={mySeat}
               isMobile={isMobile}
             />
 

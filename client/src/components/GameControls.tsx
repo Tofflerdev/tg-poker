@@ -34,6 +34,53 @@ const useCountdown = (targetTime: number | null): number | null => {
   return remaining;
 };
 
+/* ── Neon color tokens ── */
+const NEON = {
+  fold:    { color: '#ff4757', glow: 'rgba(255,71,87,0.35)' },
+  check:   { color: '#00e5ff', glow: 'rgba(0,229,255,0.30)' },
+  call:    { color: '#00e5ff', glow: 'rgba(0,229,255,0.30)' },
+  raise:   { color: '#ffab00', glow: 'rgba(255,171,0,0.35)' },
+  allin:   { color: '#ff6d00', glow: 'rgba(255,109,0,0.40)' },
+  preset:  { color: '#b0bec5', glow: 'rgba(176,190,197,0.15)' },
+} as const;
+
+/* ── Shared button base (neon strip style) ── */
+const neonBtn = (
+  n: typeof NEON[keyof typeof NEON],
+  active = false,
+): React.CSSProperties => ({
+  background: active
+    ? `linear-gradient(180deg, ${n.color}18 0%, ${n.color}08 100%)`
+    : 'transparent',
+  border: `1.5px solid ${n.color}60`,
+  borderRadius: 14,
+  color: n.color,
+  fontWeight: 700,
+  letterSpacing: '0.03em',
+  textTransform: 'uppercase' as const,
+  position: 'relative' as const,
+  overflow: 'hidden' as const,
+  transition: 'box-shadow .15s, background .15s, transform .1s',
+  WebkitTapHighlightColor: 'transparent',
+  boxShadow: active ? `0 0 18px ${n.glow}, inset 0 0 12px ${n.glow}` : 'none',
+});
+
+/* ── Glow bar at bottom of button ── */
+const GlowBar: React.FC<{ color: string }> = ({ color }) => (
+  <span
+    style={{
+      position: 'absolute',
+      bottom: 0,
+      left: '15%',
+      right: '15%',
+      height: 2,
+      borderRadius: 2,
+      background: color,
+      boxShadow: `0 0 8px ${color}, 0 0 20px ${color}50`,
+    }}
+  />
+);
+
 const GameControls: React.FC<Props> = ({ socket, gameState, mySeat }) => {
   const [raiseAmount, setRaiseAmount] = useState(20);
   const [showBetPanel, setShowBetPanel] = useState(false);
@@ -76,7 +123,6 @@ const GameControls: React.FC<Props> = ({ socket, gameState, mySeat }) => {
   const minRaise = currentBet > 0 ? currentBet * 2 : gameState.bigBlind * 2;
   const potSize = gameState.totalPot;
 
-  // Update raise amount when it's my turn
   useEffect(() => {
     if (isMyTurn) {
       setRaiseAmount(Math.max(minRaise, raiseAmount));
@@ -84,7 +130,14 @@ const GameControls: React.FC<Props> = ({ socket, gameState, mySeat }) => {
     }
   }, [isMyTurn, minRaise]);
 
-  // Status messages (waiting / showdown)
+  /* ── Safe-area bottom padding (Android nav bar + iOS home indicator) ── */
+  const safeBottom: React.CSSProperties = {
+    paddingBottom: 'max(env(safe-area-inset-bottom, 0px), 12px)',
+  };
+
+  /* ═══════════════════════════════════════════
+     Status states (waiting / showdown)
+     ═══════════════════════════════════════════ */
   if (gameState.stage === 'waiting' || gameState.stage === 'showdown') {
     const activePlayers = gameState.seats.filter(p => p && !p.folded);
     const isWinByFold = gameState.stage === 'showdown' && activePlayers.length === 1;
@@ -92,27 +145,33 @@ const GameControls: React.FC<Props> = ({ socket, gameState, mySeat }) => {
     const eligiblePlayers = gameState.seats.filter(p => p && p.chips > 0 && !p.waitingForBB).length;
 
     return (
-      <div className="p-3 pb-10 md:p-4 md:pb-4 text-center bg-black/40 backdrop-blur-md border-t border-white/10">
+      <div
+        className="text-center backdrop-blur-md border-t border-white/5"
+        style={{ ...safeBottom, background: 'rgba(10,10,14,0.85)', padding: '14px 16px' }}
+      >
         {gameState.stage === 'showdown' && (
-          <div className="mb-2 text-yellow-400 font-bold text-base md:text-lg animate-pulse">
-            Hand Completed!
+          <div
+            className="mb-2 font-bold text-base tracking-wide"
+            style={{ color: NEON.raise.color, textShadow: `0 0 12px ${NEON.raise.glow}` }}
+          >
+            Hand Complete
           </div>
         )}
 
         {countdown !== null && countdown > 0 && (
-          <div className="mb-2 text-blue-300 font-medium text-sm">
-            Next hand in {countdown}s...
+          <div className="mb-2 text-sm" style={{ color: NEON.check.color, opacity: 0.8 }}>
+            Next hand in {countdown}s
           </div>
         )}
 
         {gameState.stage === 'waiting' && (
-          <div className="mb-2 text-gray-400 text-sm">
+          <div className="mb-2 text-sm" style={{ color: '#78909c' }}>
             Waiting for players... ({eligiblePlayers}/2 min)
           </div>
         )}
 
         {myPlayer?.waitingForBB && (
-          <div className="mb-2 text-orange-400 text-sm">
+          <div className="mb-2 text-sm" style={{ color: NEON.raise.color }}>
             Waiting for Big Blind...
           </div>
         )}
@@ -120,8 +179,13 @@ const GameControls: React.FC<Props> = ({ socket, gameState, mySeat }) => {
         {amIWinner && !myPlayer?.showCards && (
           <button
             onClick={() => socket.emit("showCards")}
-            className="px-6 py-2.5 bg-blue-500 text-white rounded-xl font-bold shadow-lg active:scale-95 transition-transform"
+            style={{
+              ...neonBtn(NEON.check, true),
+              padding: '12px 32px',
+              fontSize: 14,
+            }}
           >
+            <GlowBar color={NEON.check.color} />
             Show Cards
           </button>
         )}
@@ -129,22 +193,27 @@ const GameControls: React.FC<Props> = ({ socket, gameState, mySeat }) => {
     );
   }
 
-  // Not my turn or folded/all-in
+  /* ═══════════════════════════════════════════
+     Not my turn / folded / all-in
+     ═══════════════════════════════════════════ */
   if (!myPlayer || !isMyTurn || myPlayer.folded || myPlayer.allIn) {
     return (
-      <div className="p-3 pb-10 md:p-4 md:pb-4 text-center bg-black/40 backdrop-blur-md border-t border-white/10">
-        <div className="text-gray-400 font-medium text-sm">
+      <div
+        className="text-center backdrop-blur-md border-t border-white/5"
+        style={{ ...safeBottom, background: 'rgba(10,10,14,0.85)', padding: '14px 16px' }}
+      >
+        <div className="text-sm" style={{ color: '#546e7a' }}>
           {gameState.currentPlayer !== null
-            ? `Player ${gameState.seats[gameState.currentPlayer]?.displayName || gameState.seats[gameState.currentPlayer]?.id.slice(0, 4)} is thinking...`
+            ? `${gameState.seats[gameState.currentPlayer]?.displayName || gameState.seats[gameState.currentPlayer]?.id.slice(0, 4)} is thinking...`
             : "Waiting..."}
         </div>
       </div>
     );
   }
 
-  // === My Turn Controls ===
-
-  // Bet preset handler
+  /* ═══════════════════════════════════════════
+     Bet presets & amount helpers
+     ═══════════════════════════════════════════ */
   const applyPreset = (preset: string) => {
     hapticFeedback?.impactOccurred('light');
     switch (preset) {
@@ -172,62 +241,122 @@ const GameControls: React.FC<Props> = ({ socket, gameState, mySeat }) => {
     setRaiseAmount(Math.max(minRaise, raiseAmount + delta * step));
   };
 
-  // Mobile bet panel (second screenshot style)
+  /* ═══════════════════════════════════════════
+     MOBILE — Bet Panel (slide-up)
+     ═══════════════════════════════════════════ */
   if (isMobile && showBetPanel) {
     return (
-      <div className="bg-[#1c1c1e] border-t border-white/10 pb-12">
-        {/* Presets row */}
-        <div className="flex gap-1.5 px-3 pt-3 pb-2">
-          {['Min', '1/2', '3/4', 'POT', 'All In'].map((label) => (
+      <div
+        className="border-t border-white/5"
+        style={{ ...safeBottom, background: 'rgba(10,10,14,0.95)' }}
+      >
+        {/* Presets */}
+        <div className="flex gap-2 px-4 pt-3 pb-2">
+          {[
+            { label: 'Min', key: 'min' },
+            { label: '½', key: '1/2' },
+            { label: '¾', key: '3/4' },
+            { label: 'Pot', key: 'pot' },
+            { label: 'All In', key: 'allin' },
+          ].map(({ label, key }) => (
             <button
-              key={label}
-              onClick={() => applyPreset(label === 'All In' ? 'allin' : label === 'Min' ? 'min' : label.toLowerCase())}
-              className="flex-1 py-2.5 bg-[#2c2c2e] text-white text-xs font-bold rounded-lg border border-white/10 active:bg-[#3a3a3c] transition-colors"
+              key={key}
+              onClick={() => applyPreset(key)}
+              className="flex-1 active:scale-95 transition-transform"
+              style={{
+                ...neonBtn(key === 'allin' ? NEON.allin : NEON.preset),
+                padding: '10px 0',
+                fontSize: 12,
+              }}
             >
               {label}
             </button>
           ))}
         </div>
 
-        {/* Amount + action row */}
-        <div className="flex items-center gap-2 px-3 pb-1">
-          {/* BACK button */}
+        {/* Amount row */}
+        <div className="flex items-center gap-3 px-4 pt-1 pb-2">
+          {/* Back */}
           <button
             onClick={() => { setShowBetPanel(false); hapticFeedback?.impactOccurred('light'); }}
-            className="py-3 px-5 bg-transparent text-red-500 border border-red-500/50 rounded-xl font-bold text-sm active:bg-red-500/10 transition-colors"
+            className="active:scale-95 transition-transform"
+            style={{
+              ...neonBtn(NEON.fold),
+              padding: '14px 18px',
+              fontSize: 13,
+            }}
           >
-            BACK
+            <GlowBar color={NEON.fold.color} />
+            Back
           </button>
 
-          {/* BET button */}
+          {/* Confirm raise */}
           <button
             onClick={() => { emitAction("raise", raiseAmount); setShowBetPanel(false); }}
-            className="py-3 px-6 bg-gradient-to-b from-yellow-400 to-yellow-600 text-black rounded-xl font-bold text-sm shadow-lg active:scale-95 transition-transform"
+            className="active:scale-95 transition-transform"
+            style={{
+              ...neonBtn(NEON.raise, true),
+              padding: '14px 22px',
+              fontSize: 13,
+            }}
           >
-            BET
+            <GlowBar color={NEON.raise.color} />
+            {currentBet > 0 ? 'Raise' : 'Bet'}
           </button>
 
-          {/* Spacer */}
           <div className="flex-1" />
 
           {/* Minus */}
           <button
             onClick={() => adjustAmount(-1)}
-            className="w-11 h-11 flex items-center justify-center bg-[#2c2c2e] rounded-lg text-white text-lg font-bold border border-white/10 active:bg-[#3a3a3c]"
+            className="active:scale-95 transition-transform"
+            style={{
+              ...neonBtn(NEON.preset),
+              width: 44,
+              height: 44,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: 18,
+              padding: 0,
+            }}
           >
             −
           </button>
 
-          {/* Amount display */}
-          <div className="bg-[#2c2c2e] border border-white/10 rounded-lg px-3 py-2 min-w-[70px] text-center">
-            <div className="text-[9px] text-gray-400 uppercase">Bet:</div>
-            <div className="text-white font-bold text-sm">{raiseAmount}</div>
+          {/* Amount */}
+          <div
+            className="text-center"
+            style={{
+              minWidth: 68,
+              padding: '6px 10px',
+              borderRadius: 10,
+              border: `1px solid ${NEON.raise.color}40`,
+              background: `${NEON.raise.color}08`,
+            }}
+          >
+            <div style={{ fontSize: 9, color: '#78909c', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+              Bet
+            </div>
+            <div style={{ fontSize: 16, fontWeight: 800, color: NEON.raise.color, fontVariantNumeric: 'tabular-nums' }}>
+              {raiseAmount}
+            </div>
           </div>
 
           {/* Plus */}
           <button
             onClick={() => adjustAmount(1)}
-            className="w-11 h-11 flex items-center justify-center bg-[#2c2c2e] rounded-lg text-white text-lg font-bold border border-white/10 active:bg-[#3a3a3c]"
+            className="active:scale-95 transition-transform"
+            style={{
+              ...neonBtn(NEON.preset),
+              width: 44,
+              height: 44,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: 18,
+              padding: 0,
+            }}
           >
             +
           </button>
@@ -236,59 +365,124 @@ const GameControls: React.FC<Props> = ({ socket, gameState, mySeat }) => {
     );
   }
 
-  // Mobile: main action bar (screenshot style)
+  /* ═══════════════════════════════════════════
+     MOBILE — Main action bar
+     ═══════════════════════════════════════════ */
   if (isMobile) {
     return (
-      <div className="bg-[#1c1c1e] border-t border-white/10 px-3 pt-3 pb-12">
-        <div className="flex gap-2">
+      <div
+        className="border-t border-white/5"
+        style={{ ...safeBottom, background: 'rgba(10,10,14,0.92)' }}
+      >
+        {/* Three main buttons */}
+        <div className="flex gap-2.5 px-4 pt-3 pb-1.5">
           {/* Fold */}
           <button
             onClick={() => emitAction("fold")}
-            className="flex-1 py-3.5 bg-transparent text-red-500 border border-red-500/50 rounded-xl font-bold text-sm active:bg-red-500/10 transition-colors"
+            className="flex-1 active:scale-95 transition-transform"
+            style={{
+              ...neonBtn(NEON.fold),
+              height: 56,
+              fontSize: 14,
+            }}
           >
+            <GlowBar color={NEON.fold.color} />
             Fold
           </button>
 
-          {/* Call / Check */}
+          {/* Check / Call */}
           <button
             onClick={() => emitAction(toCall === 0 ? "check" : "call")}
-            className="flex-1 py-3.5 bg-[#2c2c2e] text-white rounded-xl font-bold text-sm active:bg-[#3a3a3c] transition-colors"
+            className="flex-[1.3] active:scale-95 transition-transform"
+            style={{
+              ...neonBtn(NEON.check, true),
+              height: 56,
+              fontSize: 14,
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 1,
+            }}
           >
-            {toCall === 0 ? "Check" : `Call ${toCall}`}
+            <GlowBar color={NEON.check.color} />
+            <span>{toCall === 0 ? 'Check' : 'Call'}</span>
+            {toCall > 0 && (
+              <span style={{ fontSize: 11, opacity: 0.7, fontWeight: 600 }}>{toCall}</span>
+            )}
           </button>
 
-          {/* Bet / Raise */}
+          {/* Raise */}
           <button
             onClick={() => { setShowBetPanel(true); hapticFeedback?.impactOccurred('light'); }}
-            className="flex-1 py-3.5 bg-[#2c2c2e] text-white rounded-xl font-bold text-sm active:bg-[#3a3a3c] transition-colors"
+            className="flex-1 active:scale-95 transition-transform"
+            style={{
+              ...neonBtn(NEON.raise),
+              height: 56,
+              fontSize: 14,
+            }}
           >
-            {currentBet > 0 ? "Raise" : "Bet"}
+            <GlowBar color={NEON.raise.color} />
+            {currentBet > 0 ? 'Raise' : 'Bet'}
           </button>
+        </div>
 
-          {/* All-In */}
+        {/* All-In strip */}
+        <div className="px-4 pb-1.5">
           <button
             onClick={() => emitAction("allIn")}
-            className="flex-1 py-3.5 bg-[#2c2c2e] text-yellow-400 rounded-xl font-bold text-sm active:bg-[#3a3a3c] transition-colors"
+            className="w-full active:scale-[0.98] transition-transform"
+            style={{
+              ...neonBtn(NEON.allin),
+              height: 38,
+              fontSize: 12,
+              letterSpacing: '0.12em',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 8,
+            }}
           >
-            All In
+            <GlowBar color={NEON.allin.color} />
+            <span>All-In</span>
+            <span style={{ opacity: 0.5, fontSize: 11, fontWeight: 600 }}>{myChips}</span>
           </button>
         </div>
       </div>
     );
   }
 
-  // Desktop: existing layout with slider
+  /* ═══════════════════════════════════════════
+     DESKTOP — Full layout
+     ═══════════════════════════════════════════ */
   return (
-    <div className="p-4 bg-[#1c1c1e] border-t border-white/10 pb-8">
+    <div
+      className="border-t border-white/5"
+      style={{ background: 'rgba(10,10,14,0.90)', padding: '14px 20px 20px' }}
+    >
       {/* Raise controls */}
-      <div className="mb-4 flex items-center gap-3 bg-[#2c2c2e] p-2 rounded-xl">
+      <div
+        className="mb-3 flex items-center gap-3"
+        style={{
+          padding: '10px 14px',
+          borderRadius: 14,
+          border: `1px solid ${NEON.raise.color}20`,
+          background: `${NEON.raise.color}06`,
+        }}
+      >
         {/* Presets */}
-        <div className="flex gap-1">
+        <div className="flex gap-1.5">
           {['Min', '1/2', '3/4', 'POT'].map((label) => (
             <button
               key={label}
               onClick={() => applyPreset(label === 'Min' ? 'min' : label.toLowerCase())}
-              className="px-2 py-1 bg-[#3a3a3c] text-white text-[10px] font-bold rounded active:bg-[#48484a]"
+              className="active:scale-95 transition-transform"
+              style={{
+                ...neonBtn(NEON.preset),
+                padding: '6px 10px',
+                fontSize: 11,
+                borderRadius: 8,
+              }}
             >
               {label}
             </button>
@@ -296,53 +490,113 @@ const GameControls: React.FC<Props> = ({ socket, gameState, mySeat }) => {
         </div>
 
         <button
-          className="w-10 h-10 flex items-center justify-center bg-[#3a3a3c] rounded-lg text-white font-bold active:bg-[#48484a]"
+          className="active:scale-95 transition-transform"
           onClick={() => adjustAmount(-1)}
+          style={{
+            ...neonBtn(NEON.preset),
+            width: 40,
+            height: 40,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontSize: 16,
+            padding: 0,
+          }}
         >
-          -
+          −
         </button>
+
         <div className="flex-1 text-center">
-          <span className="text-xs text-gray-400 block">Raise Amount</span>
-          <span className="text-xl font-bold text-white">{raiseAmount}</span>
+          <span style={{ display: 'block', fontSize: 10, color: '#78909c', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+            Raise Amount
+          </span>
+          <span style={{ fontSize: 22, fontWeight: 800, color: NEON.raise.color, fontVariantNumeric: 'tabular-nums' }}>
+            {raiseAmount}
+          </span>
         </div>
+
         <button
-          className="w-10 h-10 flex items-center justify-center bg-[#3a3a3c] rounded-lg text-white font-bold active:bg-[#48484a]"
+          className="active:scale-95 transition-transform"
           onClick={() => adjustAmount(1)}
+          style={{
+            ...neonBtn(NEON.preset),
+            width: 40,
+            height: 40,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontSize: 16,
+            padding: 0,
+          }}
         >
           +
         </button>
       </div>
 
-      {/* Action Buttons Grid */}
+      {/* Action buttons */}
       <div className="grid grid-cols-4 gap-3">
         <button
           onClick={() => emitAction("fold")}
-          className="col-span-1 py-3 bg-red-500/20 text-red-500 border border-red-500/50 rounded-xl font-bold active:bg-red-500/30 transition-colors flex flex-col items-center justify-center"
+          className="active:scale-95 transition-transform"
+          style={{
+            ...neonBtn(NEON.fold),
+            padding: '14px 0',
+            fontSize: 14,
+          }}
         >
-          <span className="text-sm">Fold</span>
+          <GlowBar color={NEON.fold.color} />
+          Fold
         </button>
 
         <button
           onClick={() => emitAction(toCall === 0 ? "check" : "call")}
-          className="col-span-1 py-3 bg-blue-500/20 text-blue-400 border border-blue-500/50 rounded-xl font-bold active:bg-blue-500/30 transition-colors flex flex-col items-center justify-center"
+          className="active:scale-95 transition-transform"
+          style={{
+            ...neonBtn(NEON.check, true),
+            padding: '14px 0',
+            fontSize: 14,
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 1,
+          }}
         >
-          <span className="text-sm">{toCall === 0 ? "Check" : "Call"}</span>
-          {toCall > 0 && <span className="text-xs opacity-80">{toCall}</span>}
+          <GlowBar color={NEON.check.color} />
+          <span>{toCall === 0 ? 'Check' : 'Call'}</span>
+          {toCall > 0 && <span style={{ fontSize: 11, opacity: 0.7 }}>{toCall}</span>}
         </button>
 
         <button
           onClick={() => emitAction("raise", raiseAmount)}
-          className="col-span-1 py-3 bg-yellow-500/20 text-yellow-400 border border-yellow-500/50 rounded-xl font-bold active:bg-yellow-500/30 transition-colors flex flex-col items-center justify-center"
+          className="active:scale-95 transition-transform"
+          style={{
+            ...neonBtn(NEON.raise, true),
+            padding: '14px 0',
+            fontSize: 14,
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 1,
+          }}
         >
-          <span className="text-sm">Raise</span>
-          <span className="text-xs opacity-80">{raiseAmount}</span>
+          <GlowBar color={NEON.raise.color} />
+          <span>Raise</span>
+          <span style={{ fontSize: 11, opacity: 0.7 }}>{raiseAmount}</span>
         </button>
 
         <button
           onClick={() => emitAction("allIn")}
-          className="col-span-1 py-3 bg-red-600 text-white rounded-xl font-bold shadow-lg active:scale-95 transition-transform flex flex-col items-center justify-center"
+          className="active:scale-95 transition-transform"
+          style={{
+            ...neonBtn(NEON.allin, true),
+            padding: '14px 0',
+            fontSize: 14,
+          }}
         >
-          <span className="text-sm">All-In</span>
+          <GlowBar color={NEON.allin.color} />
+          All-In
         </button>
       </div>
     </div>

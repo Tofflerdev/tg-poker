@@ -182,6 +182,7 @@ export const GameRoom: React.FC<GameRoomProps> = ({
             stage={gameState.stage}
             lastRoundBets={gameState.lastRoundBets}
             blinds={{ small: gameState.smallBlind, big: gameState.bigBlind }}
+            showdown={showdown}
             onSit={handleSeatClick}
           />
         </div>
