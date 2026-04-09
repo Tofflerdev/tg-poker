@@ -120,7 +120,7 @@ const GameControls: React.FC<Props> = ({ socket, gameState, mySeat }) => {
   const myBet = myPlayer?.bet || 0;
   const toCall = currentBet - myBet;
   const myChips = myPlayer?.chips || 0;
-  const minRaise = currentBet > 0 ? currentBet * 2 : gameState.bigBlind * 2;
+  const minRaise = gameState.bigBlind;
   const potSize = gameState.totalPot;
 
   useEffect(() => {

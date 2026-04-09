@@ -80,17 +80,39 @@ See `.env.example`:
 
 ## UI Design — "Neon Strip" Style
 
-Game controls (`GameControls.tsx`) use a **"Neon Strip"** design language:
-- Dark translucent backgrounds (`rgba(10,10,14,0.9+)`) with `backdrop-blur`
-- Each action has a distinct neon color: **red** (Fold `#ff4757`), **cyan** (Check/Call `#00e5ff`), **amber** (Raise `#ffab00`), **orange** (All-In `#ff6d00`)
-- Buttons are transparent with colored borders (`1.5px solid`) and a glowing bar (`GlowBar`) at the bottom edge
+The game UI uses a **"Neon Strip"** design language across controls and player seats:
+
+### Shared Tokens & Principles
+- Dark translucent backgrounds (`rgba(10,10,14,0.85-0.9)`) with `backdrop-blur(12px)`
+- Neon color palette: **red** (Fold `#ff4757`), **cyan** (Check/Call/Active `#00e5ff`), **amber** (Raise/Chips `#ffab00`), **orange** (All-In `#ff6d00`), **green** (Sit `#4caf50`), **gray** (Neutral `#b0bec5`)
+- Borders: `1.5px solid` with color at 50-60% opacity; dashed for empty/interactive elements
+- Glow effects: `box-shadow` with color-matched `rgba` glow values; `text-shadow` for chip counts
+- `NEON` token objects defined at top of `GameControls.tsx` and `SeatsDisplay.tsx`
+
+### Game Controls (`GameControls.tsx`)
+- Buttons are transparent with colored borders and a glowing bar (`GlowBar`) at the bottom edge
 - Active/primary buttons get an inner glow via `box-shadow: inset 0 0 12px`
 - Mobile: 3 main buttons in a row (56px height) + separate All-In strip below
-- All bottom-docked panels use `paddingBottom: max(env(safe-area-inset-bottom), 12px)` for Android nav bar / iOS home indicator
+- All bottom-docked panels use `paddingBottom: max(env(safe-area-inset-bottom), 12px)`
 - Touch targets minimum 44px, `active:scale-95` for tap feedback
-- Neon color tokens defined in `NEON` object at top of `GameControls.tsx`
 
-When adding new UI controls, follow this neon style with colored borders, glow effects, and dark backgrounds.
+### Player Seats (`SeatsDisplay.tsx`) — "Compact Card" design
+- **Layout**: Vertical card-style seats — avatar on top (floats above card edge), cards in middle, name + stack at bottom
+- **Fixed seat sizes**: 64px wide (mobile) / 80px wide (desktop), aspect ratio 1.35; padding `4px 6px 8px`
+- **Seat positions**: 6 seats around the table with position arrays `SEAT_POSITIONS_DESKTOP` / `SEAT_POSITIONS_MOBILE`; seats rotate so "my seat" is always at bottom
+- **Avatar**: Circular 22px (mobile) / 28px (desktop) with initial-letter fallback; cyan glow ring + `box-shadow` when active
+- **Timer**: SVG circular progress ring (`TimerRing`) around avatar; depletes over turn duration; cyan → red when <5s
+- **Active turn**: Pulsing neon glow border (`seat-glow-pulse` animation, border 45%→70% opacity) + bottom accent `GlowBar` in cyan
+- **Folded players**: Seat card opacity `0.65` to visually dim
+- **Name**: Truncated, white, 9-10px; **Stack**: Monospace `#ffab00` with `text-shadow` glow
+- **Cards**: `HandDisplay` component scaled `0.7` (mobile) / `0.85` (desktop) via `transform: scale()`
+- **Status badges**: Pill-shaped (`StatusBadge`) — Fold (red), All-in (orange), Sit out (gray), Wait BB (amber)
+- **Empty seats**: Dashed green border with `empty-seat-breathe` animation (30%→60%), `+` icon, green glow on hover
+- **WaitBB seats**: Amber border at 40% opacity
+- **Mobile "my seat"**: Expanded layout — large cards above (`HandDisplay` at `seatWidth * 0.75`), compact info strip below (avatar + name + chips); strip has `borderRadius: 14px`
+- Keyframe animations (`neon-pulse`, `seat-glow-pulse`, `timer-urgency`, `empty-seat-breathe`) injected via `<style>` tag
+
+When adding new UI elements, follow this neon style with colored borders, glow effects, and dark translucent backgrounds.
 
 ## DB Schema
 
