@@ -31,9 +31,11 @@ export default class Game {
   public lastShowdown: ShowdownResult | null = null;
   public nextHandIn: number | null = null;  // NEW: timestamp когда начнется следующая раздача
 
-  // Вспомогательный метод для получения общей суммы всех потов
+  // Вспомогательный метод для получения общей суммы всех потов (включая текущие ставки)
   private getTotalPot(): number {
-    return this.pots.reduce((sum, pot) => sum + pot.amount, 0);
+    const collectedPots = this.pots.reduce((sum, pot) => sum + pot.amount, 0);
+    const currentBets = this.seats.reduce((sum, player) => sum + (player ? player.bet : 0), 0);
+    return collectedPots + currentBets;
   }
 
   // Добавление игрока (разрешаем в любое время)
