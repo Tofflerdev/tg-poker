@@ -62,6 +62,20 @@ html, body {
   overscroll-behavior: none;
 }
 
+/* Force portrait: counter-rotate content when device is in landscape */
+@media screen and (orientation: landscape) and (max-height: 600px) {
+  #root {
+    transform: rotate(-90deg);
+    transform-origin: top left;
+    width: 100vh;
+    height: 100vw;
+    position: absolute;
+    top: 100%;
+    left: 0;
+    overflow: hidden;
+  }
+}
+
 body {
   font-family: var(--tg-font-family);
   background-color: var(--tg-color-bg);
