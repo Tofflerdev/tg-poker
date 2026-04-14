@@ -1,0 +1,23 @@
+@import "tailwindcss";
+
+/* Neon Strip — single source of truth. Do not add hex literals to components; consume these tokens. See .planning/phases/01-foundations-design-system/01-CONTEXT.md D-01/D-02. */
+
+@theme {
+  /* Semantic action-tier colors (D-02) */
+  --color-action-fold: #ff4757;
+  --color-action-call: #00e5ff;
+  --color-action-raise: #ffab00;
+  --color-action-allin: #ff6d00;
+  --color-action-sit: #4caf50;
+  --color-active: #00e5ff;
+  --color-chip: #ffab00;
+  --color-neutral: #b0bec5;
+
+  /* Derived rgba glow tokens */
+  --glow-fold: rgba(255, 71, 87, 0.35);
+  --glow-call: rgba(0, 229, 255, 0.30);
+  --glow-raise: rgba(255, 171, 0, 0.35);
+  --glow-allin: rgba(255, 109, 0, 0.40);
+  --glow-sit: rgba(76, 175, 80, 0.35);
+  --glow-neutral: rgba(176, 190, 197, 0.15);
+}
