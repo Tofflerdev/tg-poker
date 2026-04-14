@@ -139,4 +139,59 @@ All requirements above are:
 
 ## Traceability
 
-_This section will be populated by the roadmapper. Each requirement will be mapped to exactly one phase with its success criterion._
+| Requirement | Phase | Status |
+|-------------|-------|--------|
+| BRAND-01 | Phase 2 | Pending |
+| BRAND-02 | Phase 2 | Pending |
+| BRAND-03 | Phase 1 | Pending |
+| UI-01 | Phase 2 | Pending |
+| UI-02 | Phase 2 | Pending |
+| UI-03 | Phase 2 | Pending |
+| UI-04 | Phase 2 | Pending |
+| UI-05 | Phase 2 | Pending |
+| AVATAR-01 | Phase 2 | Pending |
+| AVATAR-02 | Phase 2 | Pending |
+| AVATAR-03 | Phase 2 | Pending |
+| AVATAR-04 | Phase 2 | Pending |
+| PROFILE-01 | Phase 2 | Pending |
+| PROFILE-02 | Phase 3 | Pending |
+| PROFILE-03 | Phase 3 | Pending |
+| PROFILE-04 | Phase 3 | Pending |
+| DEPOSIT-01 | Phase 2 | Pending |
+| DEPOSIT-02 | Phase 2 | Pending |
+| GAME-01 | Phase 3 | Pending |
+| GAME-02 | Phase 3 | Pending |
+| GAME-03 | Phase 3 | Pending |
+| GAME-04 | Phase 1 | Pending |
+| RESILIENCE-01 | Phase 1 | Pending |
+| RESILIENCE-02 | Phase 3 | Pending |
+| RESILIENCE-03 | Phase 1 | Pending |
+| RESILIENCE-04 | Phase 4 | Pending |
+| RESILIENCE-05 | Phase 4 | Pending |
+| RESILIENCE-06 | Phase 4 | Pending |
+| RESILIENCE-07 | Phase 4 | Pending |
+| SECURITY-01 | Phase 1 | Pending |
+| SECURITY-02 | Phase 1 | Pending |
+| SECURITY-03 | Phase 1 | Pending |
+| SECURITY-04 | Phase 5 | Pending |
+| ADMIN-01 | Phase 5 | Pending |
+| ADMIN-02 | Phase 5 | Pending |
+| ADMIN-03 | Phase 5 | Pending |
+| ADMIN-04 | Phase 5 | Pending |
+| ADMIN-05 | Phase 5 | Pending |
+| ADMIN-06 | Phase 5 | Pending |
+| TEST-01 | Phase 6 | Pending |
+| TEST-02 | Phase 6 | Pending |
+| TEST-03 | Phase 6 | Pending |
+| TEST-04 | Phase 6 | Pending |
+| OBS-01 | Phase 5 | Pending |
+| OBS-02 | Phase 5 | Pending |
+| OBS-03 | Phase 5 | Pending |
+| OBS-04 | Phase 5 | Pending |
+| COMPLIANCE-01 | Phase 2 | Pending |
+| COMPLIANCE-02 | Phase 2 | Pending |
+| COMPLIANCE-03 | Phase 2 | Pending |
+| COMPLIANCE-04 | Phase 5 | Pending |
+| COMPLIANCE-05 | Phase 2 | Pending |
+
+**Coverage:** 44/44 requirements mapped (100%).
