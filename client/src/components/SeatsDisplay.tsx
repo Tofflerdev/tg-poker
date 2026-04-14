@@ -14,17 +14,34 @@ interface SeatsDisplayProps {
   isMobile?: boolean;
 }
 
-/* ── Neon color tokens ── */
-const NEON = {
-  active:  { color: '#00e5ff', glow: 'rgba(0,229,255,0.45)',  glowStrong: 'rgba(0,229,255,0.7)' },
-  fold:    { color: '#ff4757', glow: 'rgba(255,71,87,0.35)',   glowStrong: 'rgba(255,71,87,0.6)' },
-  allin:   { color: '#ff6d00', glow: 'rgba(255,109,0,0.40)',   glowStrong: 'rgba(255,109,0,0.65)' },
-  chips:   { color: '#ffab00', glow: 'rgba(255,171,0,0.35)',   glowStrong: 'rgba(255,171,0,0.6)' },
-  sit:     { color: '#4caf50', glow: 'rgba(76,175,80,0.35)',   glowStrong: 'rgba(76,175,80,0.6)' },
-  neutral: { color: '#b0bec5', glow: 'rgba(176,190,197,0.15)', glowStrong: 'rgba(176,190,197,0.3)' },
-  waitbb:  { color: '#ffab00', glow: 'rgba(255,171,0,0.30)',   glowStrong: 'rgba(255,171,0,0.5)' },
-  sitout:  { color: '#b0bec5', glow: 'rgba(176,190,197,0.15)', glowStrong: 'rgba(176,190,197,0.3)' },
+/* ── Neon tokens — consumed from client/src/styles/neon.css via CSS custom properties.
+   Do not introduce hex literals here. See .planning/phases/01-foundations-design-system/01-CONTEXT.md D-01/D-02. ── */
+type NeonTier = {
+  color: string;       // var(--color-*)
+  glow: string;        // var(--glow-*) — rgba at ~0.30-0.40 alpha
+  glowStrong: string;  // stronger glow for active states (color-mix ~60% alpha)
+};
+
+const tier = (color: string, glow: string): NeonTier => ({
+  color,
+  glow,
+  glowStrong: `color-mix(in srgb, ${color} 60%, transparent)`,
+});
+
+const N = {
+  active:  tier('var(--color-active)',        'var(--glow-call)'),
+  fold:    tier('var(--color-action-fold)',   'var(--glow-fold)'),
+  allin:   tier('var(--color-action-allin)',  'var(--glow-allin)'),
+  chips:   tier('var(--color-chip)',          'var(--glow-raise)'),
+  sit:     tier('var(--color-action-sit)',    'var(--glow-sit)'),
+  neutral: tier('var(--color-neutral)',       'var(--glow-neutral)'),
+  waitbb:  tier('var(--color-action-raise)',  'var(--glow-raise)'),
+  sitout:  tier('var(--color-neutral)',       'var(--glow-neutral)'),
 } as const;
+
+/* Helper: compose a partially-transparent variant of a token color without hex literals. */
+const alpha = (color: string, pct: number) =>
+  `color-mix(in srgb, ${color} ${pct}%, transparent)`;
 
 /* ── TimerRing — SVG circular progress around avatar ── */
 const TimerRing: React.FC<{ size: number; timeLeft: number; totalTime: number }> = ({
@@ -36,8 +53,8 @@ const TimerRing: React.FC<{ size: number; timeLeft: number; totalTime: number }>
   const progress = totalTime > 0 ? Math.max(0, timeLeft / totalTime) : 0;
   const offset = circumference * (1 - progress);
   const urgent = timeLeft <= 5;
-  const color = urgent ? NEON.fold.color : NEON.active.color;
-  const glowColor = urgent ? NEON.fold.glowStrong : NEON.active.glowStrong;
+  const color = urgent ? N.fold.color : N.active.color;
+  const glowColor = urgent ? N.fold.glowStrong : N.active.glowStrong;
 
   return (
     <svg
@@ -88,8 +105,8 @@ const StatusBadge: React.FC<{ label: string; color: string; glow?: string }> = (
       letterSpacing: '0.05em',
       textTransform: 'uppercase',
       color,
-      border: `1px solid ${color}40`,
-      background: `${color}07`,
+      border: `1px solid ${alpha(color, 25)}`,
+      background: alpha(color, 3),
       textShadow: glow ? `0 0 6px ${glow}` : 'none',
       lineHeight: '14px',
       whiteSpace: 'nowrap',
@@ -100,7 +117,7 @@ const StatusBadge: React.FC<{ label: string; color: string; glow?: string }> = (
 );
 
 /* ── GlowBar — accent bar at bottom edge ── */
-const GlowBar: React.FC<{ color: string }> = ({ color }) => (
+const GlowBar: React.FC<{ color: string; glow?: string }> = ({ color, glow }) => (
   <span
     style={{
       position: 'absolute',
@@ -110,7 +127,7 @@ const GlowBar: React.FC<{ color: string }> = ({ color }) => (
       height: 2,
       borderRadius: 2,
       background: color,
-      boxShadow: `0 0 6px ${color}, 0 0 16px ${color}40`,
+      boxShadow: `0 0 6px ${color}, 0 0 16px ${glow ?? alpha(color, 25)}`,
       pointerEvents: 'none',
     }}
   />
@@ -129,16 +146,16 @@ const Avatar: React.FC<{
       height: size,
       borderRadius: '50%',
       background: 'rgba(14,14,20,0.95)',
-      border: `1.5px solid ${isActive ? NEON.active.color + '90' : 'rgba(176,190,197,0.25)'}`,
+      border: `1.5px solid ${isActive ? alpha(N.active.color, 56) : 'rgba(176,190,197,0.25)'}`,
       boxShadow: isActive
-        ? `0 0 10px ${NEON.active.glow}, 0 0 3px ${NEON.active.glowStrong}`
+        ? `0 0 10px ${N.active.glow}, 0 0 3px ${N.active.glowStrong}`
         : 'none',
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
       fontSize: Math.round(size * 0.45),
       fontWeight: 800,
-      color: isActive ? NEON.active.color : '#e0e0e0',
+      color: isActive ? N.active.color : '#e0e0e0',
       overflow: 'hidden',
       transition: 'border-color 0.3s, box-shadow 0.3s',
       flexShrink: 0,
@@ -181,10 +198,10 @@ const TURN_DURATION = 30;
 
 /* ── Resolve which status to display ── */
 const getStatus = (p: Player): { label: string; color: string; glow: string } | null => {
-  if (p.folded)       return { label: 'Fold',    color: NEON.fold.color,   glow: NEON.fold.glow };
-  if (p.allIn)        return { label: 'All-in',  color: NEON.allin.color,  glow: NEON.allin.glow };
-  if (p.sittingOut)   return { label: 'Sit out',  color: NEON.sitout.color, glow: NEON.sitout.glow };
-  if (p.waitingForBB) return { label: 'Wait BB',  color: NEON.waitbb.color, glow: NEON.waitbb.glow };
+  if (p.folded)       return { label: 'Fold',    color: N.fold.color,   glow: N.fold.glow };
+  if (p.allIn)        return { label: 'All-in',  color: N.allin.color,  glow: N.allin.glow };
+  if (p.sittingOut)   return { label: 'Sit out', color: N.sitout.color, glow: N.sitout.glow };
+  if (p.waitingForBB) return { label: 'Wait BB', color: N.waitbb.color, glow: N.waitbb.glow };
   return null;
 };
 
@@ -215,7 +232,7 @@ const SeatsDisplay: React.FC<SeatsDisplayProps> = ({
 
   return (
     <>
-      {/* ── Inject keyframe animations ── */}
+      {/* ── Inject keyframe animations. Keyframes reference CSS vars directly via var(--...). ── */}
       <style>{`
         @keyframes neon-pulse {
           0%, 100% { opacity: 1; }
@@ -224,16 +241,16 @@ const SeatsDisplay: React.FC<SeatsDisplayProps> = ({
         @keyframes seat-glow-pulse {
           0%, 100% {
             box-shadow:
-              0 0 8px ${NEON.active.glow},
-              inset 0 0 6px ${NEON.active.glow};
-            border-color: ${NEON.active.color}45;
+              0 0 8px var(--glow-call),
+              inset 0 0 6px var(--glow-call);
+            border-color: color-mix(in srgb, var(--color-active) 27%, transparent);
           }
           50% {
             box-shadow:
-              0 0 20px ${NEON.active.glow},
-              0 0 40px ${NEON.active.glow},
-              inset 0 0 14px ${NEON.active.glow};
-            border-color: ${NEON.active.color}70;
+              0 0 20px var(--glow-call),
+              0 0 40px var(--glow-call),
+              inset 0 0 14px var(--glow-call);
+            border-color: color-mix(in srgb, var(--color-active) 44%, transparent);
           }
         }
         @keyframes timer-urgency {
@@ -241,8 +258,8 @@ const SeatsDisplay: React.FC<SeatsDisplayProps> = ({
           50% { opacity: 0.3; }
         }
         @keyframes empty-seat-breathe {
-          0%, 100% { border-color: ${NEON.sit.color}30; }
-          50% { border-color: ${NEON.sit.color}60; }
+          0%, 100% { border-color: color-mix(in srgb, var(--color-action-sit) 19%, transparent); }
+          50% { border-color: color-mix(in srgb, var(--color-action-sit) 38%, transparent); }
         }
       `}</style>
 
@@ -299,13 +316,13 @@ const SeatsDisplay: React.FC<SeatsDisplayProps> = ({
                   background: 'rgba(10,10,14,0.9)',
                   backdropFilter: 'blur(12px)',
                   WebkitBackdropFilter: 'blur(12px)',
-                  border: `1.5px solid ${isActive ? NEON.active.color + '50' : 'rgba(176,190,197,0.18)'}`,
+                  border: `1.5px solid ${isActive ? alpha(N.active.color, 31) : 'rgba(176,190,197,0.18)'}`,
                   ...(isActive ? {
                     animation: 'seat-glow-pulse 2s ease-in-out infinite',
                   } : {}),
                 }}
               >
-                {isActive && <GlowBar color={NEON.active.color} />}
+                {isActive && <GlowBar color={N.active.color} glow={N.active.glow} />}
 
                 {/* Avatar + timer ring */}
                 <div style={{ position: 'relative', width: avatarSize, height: avatarSize, flexShrink: 0 }}>
@@ -338,8 +355,8 @@ const SeatsDisplay: React.FC<SeatsDisplayProps> = ({
                     fontSize: 10,
                     fontWeight: 800,
                     fontFamily: 'monospace',
-                    color: NEON.chips.color,
-                    textShadow: `0 0 8px ${NEON.chips.glow}`,
+                    color: N.chips.color,
+                    textShadow: `0 0 8px ${N.chips.glow}`,
                     lineHeight: '13px',
                     fontVariantNumeric: 'tabular-nums',
                   }}>
@@ -388,16 +405,16 @@ const SeatsDisplay: React.FC<SeatsDisplayProps> = ({
                 textAlign: 'center',
                 padding: '4px 6px 8px',
                 background: isFree
-                  ? (canSit ? 'rgba(76,175,80,0.04)' : 'rgba(20,20,28,0.4)')
+                  ? (canSit ? alpha(N.sit.color, 4) : 'rgba(20,20,28,0.4)')
                   : 'rgba(10,10,14,0.88)',
                 backdropFilter: 'blur(12px)',
                 WebkitBackdropFilter: 'blur(12px)',
                 border: isActive
-                  ? `1.5px solid ${NEON.active.color}50`
+                  ? `1.5px solid ${alpha(N.active.color, 31)}`
                   : player?.waitingForBB
-                    ? `1.5px solid ${NEON.waitbb.color}40`
+                    ? `1.5px solid ${alpha(N.waitbb.color, 25)}`
                     : canSit
-                      ? `1.5px dashed ${NEON.sit.color}40`
+                      ? `1.5px dashed ${alpha(N.sit.color, 25)}`
                       : isFree
                         ? '1.5px dashed rgba(176,190,197,0.15)'
                         : '1.5px solid rgba(176,190,197,0.12)',
@@ -413,8 +430,8 @@ const SeatsDisplay: React.FC<SeatsDisplayProps> = ({
               }}
               onMouseEnter={(e) => {
                 if (canSit) {
-                  e.currentTarget.style.boxShadow = `0 0 16px ${NEON.sit.glow}, inset 0 0 8px ${NEON.sit.glow}`;
-                  e.currentTarget.style.borderColor = NEON.sit.color + '70';
+                  e.currentTarget.style.boxShadow = `0 0 16px ${N.sit.glow}, inset 0 0 8px ${N.sit.glow}`;
+                  e.currentTarget.style.borderColor = alpha(N.sit.color, 44);
                 }
               }}
               onMouseLeave={(e) => {
@@ -424,7 +441,7 @@ const SeatsDisplay: React.FC<SeatsDisplayProps> = ({
                 }
               }}
             >
-              {isActive && <GlowBar color={NEON.active.color} />}
+              {isActive && <GlowBar color={N.active.color} glow={N.active.glow} />}
 
               {player ? (
                 <>
@@ -487,8 +504,8 @@ const SeatsDisplay: React.FC<SeatsDisplayProps> = ({
                     fontWeight: 800,
                     fontFamily: 'monospace',
                     fontVariantNumeric: 'tabular-nums',
-                    color: NEON.chips.color,
-                    textShadow: `0 0 8px ${NEON.chips.glow}`,
+                    color: N.chips.color,
+                    textShadow: `0 0 8px ${N.chips.glow}`,
                     lineHeight: '13px',
                   }}>
                     {player.chips.toLocaleString()}
@@ -507,10 +524,10 @@ const SeatsDisplay: React.FC<SeatsDisplayProps> = ({
                   <div style={{
                     fontSize: 24,
                     fontWeight: 300,
-                    color: canSit ? NEON.sit.color : NEON.neutral.color,
+                    color: canSit ? N.sit.color : N.neutral.color,
                     opacity: canSit ? 0.8 : 0.25,
                     lineHeight: 1,
-                    textShadow: canSit ? `0 0 10px ${NEON.sit.glow}` : 'none',
+                    textShadow: canSit ? `0 0 10px ${N.sit.glow}` : 'none',
                     transition: 'opacity 0.3s',
                   }}>
                     +
@@ -519,11 +536,11 @@ const SeatsDisplay: React.FC<SeatsDisplayProps> = ({
                     <div style={{
                       fontSize: 8,
                       fontWeight: 800,
-                      color: NEON.sit.color,
+                      color: N.sit.color,
                       textTransform: 'uppercase',
                       letterSpacing: '0.08em',
                       marginTop: 2,
-                      textShadow: `0 0 6px ${NEON.sit.glow}`,
+                      textShadow: `0 0 6px ${N.sit.glow}`,
                     }}>
                       Sit
                     </div>
