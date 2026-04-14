@@ -399,7 +399,7 @@ if (!telegramId) { socket.emit('errorMessage', 'Not authenticated'); return; }
 | A4 | `ALLOW_DEV_AUTH=false` default via "unset or not === 'true'" is sufficient | User Constraints (D-18) | None — D-18 explicitly locks this semantic. |
 | A5 | No production deployment exists yet, so the fail-closed boot assertion has no hot-path production impact to test on real infra | Domain | None — deploy is out of scope per REQUIREMENTS.md OOS list. Verified with manual env-var test at boot. |
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **Should `Game.ts` own a `tableId` reference?**
    - What we know: Current `Game.ts` is table-agnostic; `Table.ts` wraps it. The `onPlayerAction` / `onHandComplete` payloads include `tableId`.
