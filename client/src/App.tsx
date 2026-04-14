@@ -6,6 +6,7 @@ import { TableList } from "./pages/TableList";
 import { GameRoom } from "./pages/GameRoom";
 import { ProfileSettings } from "./pages/ProfileSettings";
 import "./styles/telegram.css";
+import "./styles/neon.css";
 import type {
   GameState,
   ShowdownResult,
