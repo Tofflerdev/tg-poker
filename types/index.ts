@@ -4,10 +4,11 @@
 */
 
 export interface Player {
-  id: string;
-  telegramId?: number;    // NEW: for persistent identity
-  displayName?: string;   // NEW: shown at table
-  avatarUrl?: string;     // NEW: shown at table
+  id: string;             // telegramId (stringified) — durable identity key (RESILIENCE-03)
+  socketId?: string;      // mutable transport handle — updated on reconnect (D-05)
+  telegramId?: number;    // numeric form kept for display / DB use
+  displayName?: string;   // shown at table
+  avatarUrl?: string;     // shown at table
   seat: number;
   hand: string[]; // ["As", "Kd"] или ["back", "back"] для скрытых
   chips: number;  // Стек игрока

@@ -3,14 +3,15 @@ import Game from '../Game.js';
 
 /**
  * Table model representing a poker table
- * Wraps a Game instance and manages table-level state
+ * Wraps a Game instance and manages table-level state.
+ * All player-facing methods accept telegramId (string) as the durable key — RESILIENCE-03.
  */
 export class Table {
   id: string;
   name: string;
   config: TableConfig;
   game: Game;
-  playerIds: Set<string>; // socketIds of players at this table
+  playerIds: Set<string>; // telegramIds of players at this table
   status: TableStatus;
   createdAt: Date;
 
@@ -28,9 +29,6 @@ export class Table {
     this.status = 'waiting';
     this.createdAt = new Date();
 
-    // Configure the game with table settings (via config methods if available)
-    // Note: Game class has hardcoded blinds, we'll work with defaults for now
-    
     // Setup state change callback
     this.game.setOnStateChange(() => {
       this.updateStatus();
@@ -60,7 +58,7 @@ export class Table {
   private updateStatus(): void {
     const state = this.game.getState();
     const activePlayers = state.seats.filter(p => p !== null).length;
-    
+
     if (activePlayers >= this.config.maxPlayers) {
       this.status = 'full';
     } else if (state.stage !== 'waiting') {
@@ -94,15 +92,16 @@ export class Table {
 
   /**
    * Add a player to the table
+   * @param telegramId  durable player key (stringified Telegram ID)
    */
-  addPlayer(socketId: string, seat: number, chips: number, telegramId?: number, displayName?: string, avatarUrl?: string): boolean {
+  addPlayer(telegramId: string, seat: number, chips: number, telegramIdNumeric?: number, displayName?: string, avatarUrl?: string): boolean {
     if (!this.isSeatAvailable(seat)) {
       return false;
     }
 
-    const success = this.game.addPlayer(socketId, seat, chips, telegramId, displayName, avatarUrl);
+    const success = this.game.addPlayer(telegramId, seat, chips, telegramIdNumeric, displayName, avatarUrl);
     if (success) {
-      this.playerIds.add(socketId);
+      this.playerIds.add(telegramId);
       this.updateStatus();
       // Пробуем автоматически начать раздачу
       this.tryStartNextHand();
@@ -113,11 +112,11 @@ export class Table {
   /**
    * Remove a player from the table (handles mid-hand fold if needed)
    */
-  removePlayer(socketId: string): void {
-    this.game.removePlayer(socketId);
-    this.playerIds.delete(socketId);
+  removePlayer(telegramId: string): void {
+    this.game.removePlayer(telegramId);
+    this.playerIds.delete(telegramId);
     this.updateStatus();
-    
+
     // Проверяем, нужно ли продолжить/завершить текущую раздачу
     const state = this.game.getState();
     if (state.stage === 'showdown' || state.stage === 'waiting') {
@@ -128,8 +127,16 @@ export class Table {
   /**
    * Remove player mid-game with auto-fold
    */
-  removePlayerMidGame(socketId: string): void {
-    this.removePlayer(socketId);
+  removePlayerMidGame(telegramId: string): void {
+    this.removePlayer(telegramId);
+  }
+
+  /**
+   * Update the mutable socketId transport handle for a seated player.
+   * Called on connect (set new socketId) and disconnect (set undefined).
+   */
+  updatePlayerSocketId(telegramId: string, newSocketId: string | undefined): void {
+    this.game.updatePlayerSocketId(telegramId, newSocketId);
   }
 
   /**
@@ -147,7 +154,7 @@ export class Table {
     this.notifyStateChange();
 
     const eligibleCount = this.game.getEligiblePlayers().length;
-    
+
     // Если игроков достаточно ИЛИ мы в стадии showdown (нужно показать победителя перед переходом в waiting)
     const state = this.game.getState();
     const shouldSchedule = eligibleCount >= 2 || state.stage === 'showdown';
@@ -156,8 +163,8 @@ export class Table {
       this.nextHandTimer = setTimeout(() => {
         this.nextHandTimer = null;
         this.game.nextHandIn = null;
-        const started = this.game.startNextHand();
-        
+        this.game.startNextHand();
+
         // Уведомляем об изменении состояния, даже если игра не началась (переход в waiting)
         if (this.onStateChangeCallback) {
           this.onStateChangeCallback();
@@ -174,7 +181,7 @@ export class Table {
    */
   tryStartNextHand(): void {
     const state = this.game.getState();
-    
+
     // Запускаем только если:
     // 1. Сейчас waiting stage ИЛИ showdown
     // 2. Нет активного таймера
@@ -206,23 +213,23 @@ export class Table {
   /**
    * Add a spectator to the table
    */
-  addSpectator(socketId: string): void {
-    this.game.addSpectator(socketId);
+  addSpectator(telegramId: string): void {
+    this.game.addSpectator(telegramId);
   }
 
   /**
-   * Get player by socket ID
+   * Get player by telegramId
    */
-  getPlayer(socketId: string): any | undefined {
+  getPlayer(telegramId: string): any | undefined {
     const state = this.game.getState();
-    return state.seats.find(p => p?.id === socketId) || undefined;
+    return state.seats.find(p => p?.id === telegramId) || undefined;
   }
 
   /**
    * Get player state (with hidden cards for other players)
    */
-  getStateForPlayer(socketId: string): GameState {
-    return this.game.getStateForPlayer(socketId);
+  getStateForPlayer(telegramId: string): GameState {
+    return this.game.getStateForPlayer(telegramId);
   }
 
   /**
@@ -249,37 +256,37 @@ export class Table {
   }
 
   /**
-   * Game actions
+   * Game actions — all keyed by telegramId (durable identity)
    */
-  fold(socketId: string): boolean {
-    return this.game.fold(socketId);
+  fold(telegramId: string): boolean {
+    return this.game.fold(telegramId);
   }
 
-  check(socketId: string): boolean {
-    return this.game.check(socketId);
+  check(telegramId: string): boolean {
+    return this.game.check(telegramId);
   }
 
-  call(socketId: string): boolean {
-    return this.game.call(socketId);
+  call(telegramId: string): boolean {
+    return this.game.call(telegramId);
   }
 
-  raise(socketId: string, amount: number): boolean {
-    return this.game.raise(socketId, amount);
+  raise(telegramId: string, amount: number): boolean {
+    return this.game.raise(telegramId, amount);
   }
 
-  allIn(socketId: string): boolean {
-    return this.game.allIn(socketId);
+  allIn(telegramId: string): boolean {
+    return this.game.allIn(telegramId);
   }
 
-  showCards(socketId: string): boolean {
-    return this.game.showCards(socketId);
+  showCards(telegramId: string): boolean {
+    return this.game.showCards(telegramId);
   }
 
   /**
    * Sit out - player voluntarily sits out
    */
-  sitOut(socketId: string): boolean {
-    const result = this.game.sitOut(socketId);
+  sitOut(telegramId: string): boolean {
+    const result = this.game.sitOut(telegramId);
     if (result) {
       this.notifyStateChange();
     }
@@ -289,8 +296,8 @@ export class Table {
   /**
    * Sit in - player returns from sit out
    */
-  sitIn(socketId: string): boolean {
-    const result = this.game.sitIn(socketId);
+  sitIn(telegramId: string): boolean {
+    const result = this.game.sitIn(telegramId);
     if (result) {
       this.tryStartNextHand();
       this.notifyStateChange();
@@ -327,22 +334,22 @@ export class Table {
   }
 
   /**
-   * Check if player is at this table
+   * Check if player is at this table (by telegramId)
    */
-  hasPlayer(socketId: string): boolean {
-    return this.playerIds.has(socketId);
+  hasPlayer(telegramId: string): boolean {
+    return this.playerIds.has(telegramId);
   }
 
   /**
-   * Get all player socket IDs (including spectators)
+   * Get all player telegramIds (including spectators)
    */
   getAllPlayerIds(): string[] {
     const state = this.game.getState();
     const ids: string[] = [];
-    
+
     state.seats.forEach(p => { if (p) ids.push(p.id); });
     state.spectators.forEach(s => ids.push(s.id));
-    
+
     return ids;
   }
 }

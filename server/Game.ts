@@ -50,11 +50,12 @@ export default class Game {
   }
 
   // Добавление игрока (разрешаем в любое время)
-  addPlayer(id: string, seat: number, chips: number = 1000, telegramId?: number, displayName?: string, avatarUrl?: string): boolean {
+  // telegramId (stringified) is the durable identity key stored in player.id (RESILIENCE-03)
+  addPlayer(telegramId: string, seat: number, chips: number = 1000, telegramIdNumeric?: number, displayName?: string, avatarUrl?: string, socketId?: string): boolean {
     if (seat < 0 || seat >= this.seats.length) return false;
     if (this.seats[seat]) return false;
 
-    this.spectators = this.spectators.filter((p) => p.id !== id);
+    this.spectators = this.spectators.filter((p) => p.id !== telegramId);
 
     // Определяем, нужно ли ждать большой блайнд
     // Если стол в waiting ИЛИ нет eligible игроков (стол фактически пуст) - не ждем
@@ -65,9 +66,10 @@ export default class Game {
     const waitingForBB = this.stage !== 'waiting' && eligiblePlayers.length > 0;
 
     const player: Player = {
-      id,
+      id: telegramId,      // player.id holds telegramId (durable key)
+      socketId,            // mutable transport handle (D-05)
       seat,
-      telegramId,
+      telegramId: telegramIdNumeric,
       displayName,
       avatarUrl,
       hand: [],
@@ -83,6 +85,14 @@ export default class Game {
     };
     this.seats[seat] = player;
     return true;
+  }
+
+  // Update the mutable socketId transport handle for a seated player
+  updatePlayerSocketId(telegramId: string, newSocketId: string | undefined): void {
+    const player = this.seats.find(p => p?.id === telegramId);
+    if (player) {
+      player.socketId = newSocketId;
+    }
   }
 
   // Получить список игроков, которые могут участвовать в СЛЕДУЮЩЕЙ раздаче
