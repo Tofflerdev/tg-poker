@@ -3,7 +3,7 @@ import express from "express";
 import http from "http";
 import path from "path";
 import { fileURLToPath } from "url";
-import { Server } from "socket.io";
+import { Server, type DefaultEventsMap } from "socket.io";
 import { assertSafeBootOrExit, validateInitData, createUserFromInitData } from "./middleware/auth.js";
 import { userStorage } from "./models/User.js";
 import { tableManager } from "./TableManager.js";
@@ -11,9 +11,9 @@ import { UserRepository } from "./db/UserRepository.js";
 import type {
   TelegramUser,
   AuthPayload,
-  ServerEvents,
   ExtendedClientEvents,
-  ExtendedServerEvents
+  ExtendedServerEvents,
+  SocketData,
 } from "../types/index.js";
 
 // Boot guard — exits with code 1 if the env is unsafe for production
@@ -30,7 +30,7 @@ const CORS_ORIGIN = process.env.NODE_ENV === 'production'
   ? ["https://tgp.isgood.host"]
   : ["http://localhost:5173", "http://127.0.0.1:5173", "http://localhost:3000"];
 
-const io = new Server<ExtendedClientEvents, ExtendedServerEvents>(server, {
+const io = new Server<ExtendedClientEvents, ExtendedServerEvents, DefaultEventsMap, SocketData>(server, {
   cors: {
     origin: CORS_ORIGIN,
     credentials: true
@@ -56,17 +56,29 @@ app.get("/api/tables", (_req, res) => {
 });
 
 /**
- * Send game state to all players at a specific table
+ * Resolve the live socketId for a telegramId.
+ * Returns undefined if the player has no active socket.
+ */
+const getSocketId = (telegramId: string): string | undefined => {
+  return tableManager.getSocketIdForTelegram(telegramId);
+};
+
+/**
+ * Send game state to all players at a specific table.
+ * Each player receives a personalised view (their own cards revealed).
  */
 const updateTableState = (tableId: string) => {
   const table = tableManager.getTable(tableId);
   if (!table) return;
 
-  const playerIds = table.getAllPlayerIds();
-  
-  playerIds.forEach((socketId) => {
-    const playerState = table.getStateForPlayer(socketId);
-    io.to(socketId).emit("state", playerState);
+  const playerIds = table.getAllPlayerIds(); // telegramIds
+
+  playerIds.forEach((telegramId) => {
+    const playerState = table.getStateForPlayer(telegramId);
+    const socketId = getSocketId(telegramId);
+    if (socketId) {
+      io.to(socketId).emit("state", playerState);
+    }
   });
 };
 
@@ -78,18 +90,25 @@ const handleTableShowdown = (tableId: string, result: any) => {
   if (!table) return;
 
   // Emit showdown to all players at the table
-  const playerIds = table.getAllPlayerIds();
-  playerIds.forEach((socketId) => {
-    io.to(socketId).emit("showdown", result);
+  const playerIds = table.getAllPlayerIds(); // telegramIds
+  playerIds.forEach((telegramId) => {
+    const socketId = getSocketId(telegramId);
+    if (socketId) {
+      io.to(socketId).emit("showdown", result);
+    }
   });
 
   // Check for players with zero chips
   const state = table.getState();
   state.seats.forEach((player) => {
     if (player && player.chips === 0) {
-      table.removePlayer(player.id);
-      table.addSpectator(player.id);
-      io.to(player.id).emit("errorMessage", "Ваш стек равен 0. Вы покидаете стол.");
+      const telegramId = player.id; // player.id === telegramId
+      table.removePlayer(telegramId);
+      table.addSpectator(telegramId);
+      const socketId = getSocketId(telegramId);
+      if (socketId) {
+        io.to(socketId).emit("errorMessage", "Ваш стек равен 0. Вы покидаете стол.");
+      }
     }
   });
 
@@ -151,19 +170,43 @@ io.on("connection", (socket) => {
 
     try {
       // Create user from validated initData
-      const user = await createUserFromInitData(socket.id, validatedData, payload.devId);
-      
-      // Store user in persistent storage (session cache)
-      userStorage.addUser(socket.id, user);
-      
+      const user = await createUserFromInitData(validatedData, payload.devId);
+
+      // Populate socket.data.telegramId BEFORE any downstream storage calls (T-01-04-01)
+      socket.data.telegramId = String(user.telegramId);
+      const telegramId = socket.data.telegramId;
+
+      // Store user in session cache — keyed by telegramId
+      userStorage.addUser(telegramId, user);
+
+      // Wire eviction: if a prior socket is mapped for this telegramId, disconnect it (D-07 scaffold)
+      tableManager.setSocketForTelegram(
+        telegramId,
+        socket.id,
+        (priorSocketId) => {
+          const prior = io.sockets.sockets.get(priorSocketId);
+          if (prior) {
+            // Phase 1 scaffold only — Phase 4 will emit replacedBySession + snapshot.
+            // For now: disconnect the prior socket cleanly so no split-brain state.
+            prior.emit('sessionReplaced' as any); // placeholder event; Phase 4 expands payload
+            prior.disconnect(true);
+          }
+        }
+      );
+
+      // If the player is already seated at a table, refresh the transport handle
+      const seatedTable = tableManager.getPlayerTable(telegramId);
+      if (seatedTable) {
+        seatedTable.updatePlayerSocketId(telegramId, socket.id);
+      }
+
       socket.emit("authSuccess", user);
       console.log("[Auth] Success for:", user.username || user.displayName || user.telegramId,
         payload.devId ? `(dev mode, devId=${payload.devId})` : '');
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : String(error);
       console.error("[Auth] Error for socket:", socket.id, "| Error:", errorMsg);
-      
-      // In dev mode, provide more detailed error info
+
       if (process.env.NODE_ENV === 'development') {
         socket.emit("authError", `Authentication failed: ${errorMsg}`);
       } else {
@@ -177,21 +220,26 @@ io.on("connection", (socket) => {
   // ==========================================
 
   socket.on("claimDailyBonus", async () => {
-    const user = userStorage.getUser(socket.id);
+    const telegramId = socket.data.telegramId;
+    if (!telegramId) {
+      socket.emit("authError", { message: 'Not authenticated' } as any);
+      return;
+    }
+    const user = userStorage.getUser(telegramId);
     if (!user) return;
 
     try {
       const result = await UserRepository.claimDailyBonus(user.telegramId);
-      
+
       if (result.success) {
         // Update local session
         user.balance = result.balance;
         user.lastDailyRefill = new Date().toISOString();
         user.canClaimDaily = false;
-        
-        socket.emit("dailyBonusClaimed", { 
-          balance: result.balance, 
-          nextClaimAt: result.nextClaimAt!.toISOString() 
+
+        socket.emit("dailyBonusClaimed", {
+          balance: result.balance,
+          nextClaimAt: result.nextClaimAt!.toISOString()
         });
         socket.emit("balanceUpdate", result.balance);
       } else {
@@ -204,7 +252,12 @@ io.on("connection", (socket) => {
   });
 
   socket.on("getProfile", async () => {
-    const user = userStorage.getUser(socket.id);
+    const telegramId = socket.data.telegramId;
+    if (!telegramId) {
+      socket.emit("authError", { message: 'Not authenticated' } as any);
+      return;
+    }
+    const user = userStorage.getUser(telegramId);
     if (!user) return;
 
     try {
@@ -221,7 +274,12 @@ io.on("connection", (socket) => {
   });
 
   socket.on("updateProfile", async (data) => {
-    const user = userStorage.getUser(socket.id);
+    const telegramId = socket.data.telegramId;
+    if (!telegramId) {
+      socket.emit("authError", { message: 'Not authenticated' } as any);
+      return;
+    }
+    const user = userStorage.getUser(telegramId);
     if (!user) return;
 
     try {
@@ -232,19 +290,16 @@ io.on("connection", (socket) => {
       }
 
       const updatedProfile = await UserRepository.updateProfile(
-        user.telegramId, 
-        data.displayName, 
+        user.telegramId,
+        data.displayName,
         data.avatarUrl
       );
-      
+
       // Update local session
       if (data.displayName) user.displayName = data.displayName;
       if (data.avatarUrl) user.avatarUrl = data.avatarUrl;
-      
+
       socket.emit("profileUpdated", updatedProfile);
-      
-      // If user is at a table, we might want to update the table state to show new name
-      // But that's complex, let's leave it for now or just update on next action
     } catch (error) {
       console.error("[Profile] Update Error:", error);
       socket.emit("profileError", "Failed to update profile");
@@ -254,19 +309,25 @@ io.on("connection", (socket) => {
   // ==========================================
   // Table Management
   // ==========================================
-  
+
   // Get list of available tables
   socket.on("getTables", () => {
     const tables = tableManager.getAllTablesInfo();
     socket.emit("tablesList", tables);
-    console.log(`[Tables] Sent ${tables.length} tables to ${socket.id}`);
+    console.log(`[Tables] Sent ${tables.length} tables to socket ${socket.id}`);
   });
 
   // Join a specific table and seat
   socket.on("joinTable", async (payload: { tableId: string; seat: number }) => {
+    const telegramId = socket.data.telegramId;
+    if (!telegramId) {
+      socket.emit("authError", { message: 'Not authenticated' } as any);
+      return;
+    }
+
     const { tableId, seat } = payload;
-    const user = userStorage.getUser(socket.id);
-    
+    const user = userStorage.getUser(telegramId);
+
     if (!user) {
       socket.emit("errorMessage", "Authentication required");
       return;
@@ -278,17 +339,17 @@ io.on("connection", (socket) => {
       socket.emit("tableError", `Insufficient balance. Buy-in is ${tableInfo.config.buyIn}`);
       return;
     }
-    
+
     // Leave current table if at one
-    const currentTableId = tableManager.getPlayerTableId(socket.id);
+    const currentTableId = tableManager.getPlayerTableId(telegramId);
     if (currentTableId) {
       socket.leave(currentTableId);
-      tableManager.leaveTable(socket.id);
+      tableManager.leaveTable(telegramId);
     }
 
     // Join new table
-    const result = tableManager.joinTable(socket.id, tableId, seat);
-    
+    const result = tableManager.joinTable(telegramId, tableId, seat);
+
     if (!result.success) {
       socket.emit("tableError", result.error || "Failed to join table");
       return;
@@ -306,33 +367,39 @@ io.on("connection", (socket) => {
 
     // Join socket room for this table
     socket.join(tableId);
-    
+
     const table = tableManager.getTable(tableId);
     if (table) {
-      const state = table.getStateForPlayer(socket.id);
-      socket.emit("tableJoined", { tableId, seat, state });
+      const state = table.getStateForPlayer(telegramId);
+      socket.emit("tableJoined", { tableId, seat: result.seat!, state });
       updateTableState(tableId);
-      console.log(`[Table] ${socket.id} joined ${tableId} at seat ${seat}`);
+      console.log(`[Table] telegramId=${telegramId} (socket ${socket.id}) joined ${tableId} at seat ${result.seat}`);
     }
   });
 
   // Leave current table
   socket.on("leaveTable", async () => {
-    const tableId = tableManager.getPlayerTableId(socket.id);
+    const telegramId = socket.data.telegramId;
+    if (!telegramId) {
+      socket.emit("authError", { message: 'Not authenticated' } as any);
+      return;
+    }
+
+    const tableId = tableManager.getPlayerTableId(telegramId);
     if (tableId) {
       // Get chips before leaving
       const table = tableManager.getTable(tableId);
-      const player = table?.getPlayer(socket.id);
+      const player = table?.getPlayer(telegramId);
       const chipsToReturn = player ? player.chips : 0;
 
       socket.leave(tableId);
-      tableManager.leaveTable(socket.id);
+      tableManager.leaveTable(telegramId);
       socket.emit("tableLeft");
       updateTableState(tableId);
-      console.log(`[Table] ${socket.id} left ${tableId}`);
+      console.log(`[Table] telegramId=${telegramId} (socket ${socket.id}) left ${tableId}`);
 
       // Return chips to DB
-      const user = userStorage.getUser(socket.id);
+      const user = userStorage.getUser(telegramId);
       if (user && chipsToReturn > 0) {
         try {
           const newBalance = await UserRepository.updateBalance(user.telegramId, chipsToReturn);
@@ -348,82 +415,88 @@ io.on("connection", (socket) => {
   // ==========================================
   // Game Actions (forward to appropriate table)
   // ==========================================
-  
+
   const handleGameAction = (action: string, ...args: any[]) => {
-    const table = tableManager.getPlayerTable(socket.id);
+    const telegramId = socket.data.telegramId;
+    if (!telegramId) {
+      socket.emit("authError", { message: 'Not authenticated' } as any);
+      return false;
+    }
+
+    const table = tableManager.getPlayerTable(telegramId);
     if (!table) {
       socket.emit("errorMessage", "You are not at a table");
       return false;
     }
 
     const tableId = table.id;
-    
+
     switch (action) {
       case 'fold':
-        if (table.fold(socket.id)) {
+        if (table.fold(telegramId)) {
           checkShowdownAndUpdate(table, tableId);
         } else {
           socket.emit("errorMessage", "Cannot fold now");
         }
         break;
-      
+
       case 'check':
-        if (table.check(socket.id)) {
+        if (table.check(telegramId)) {
           checkShowdownAndUpdate(table, tableId);
         } else {
           socket.emit("errorMessage", "Cannot check now");
         }
         break;
-      
+
       case 'call':
-        if (table.call(socket.id)) {
+        if (table.call(telegramId)) {
           checkShowdownAndUpdate(table, tableId);
         } else {
           socket.emit("errorMessage", "Cannot call now");
         }
         break;
-      
+
       case 'raise':
         const amount = args[0];
-        if (table.raise(socket.id, amount)) {
+        if (table.raise(telegramId, amount)) {
           checkShowdownAndUpdate(table, tableId);
         } else {
           socket.emit("errorMessage", "Cannot raise now");
         }
         break;
-      
+
       case 'allIn':
-        if (table.allIn(socket.id)) {
+        if (table.allIn(telegramId)) {
           checkShowdownAndUpdate(table, tableId);
         } else {
           socket.emit("errorMessage", "Cannot go all-in now");
         }
         break;
-      
+
       case 'showCards':
-        if (table.showCards(socket.id)) {
+        if (table.showCards(telegramId)) {
           updateTableState(tableId);
         }
         break;
-      
+
       case 'showdown':
         const result = table.showdown();
         handleTableShowdown(tableId, result);
         break;
-      
+
       case 'getState':
-        const state = table.getStateForPlayer(socket.id);
+        const state = table.getStateForPlayer(telegramId);
         socket.emit("state", state);
         break;
 
       case 'sitOut':
-        if (table.sitOut(socket.id)) {
+        if (table.sitOut(telegramId)) {
           updateTableState(tableId);
         }
         break;
 
       case 'sitIn':
-        if (table.sitIn(socket.id)) {
+        if (table.sitIn(telegramId)) {
           updateTableState(tableId);
         }
         break;
@@ -455,35 +528,41 @@ io.on("connection", (socket) => {
 
   // Legacy "join" handler - auto-assigns to first available table
   socket.on("join", async (seat: number) => {
+    const telegramId = socket.data.telegramId;
+    if (!telegramId) {
+      socket.emit("errorMessage", "Auth required");
+      return;
+    }
+
     // Find first available table
     const tables = tableManager.getAllTablesInfo();
     const availableTable = tables.find(t => t.status !== 'full');
-    
+
     if (!availableTable) {
       socket.emit("errorMessage", "No available tables");
       return;
     }
 
     // Use joinTable logic
-    const currentTableId = tableManager.getPlayerTableId(socket.id);
+    const currentTableId = tableManager.getPlayerTableId(telegramId);
     if (currentTableId) {
       socket.leave(currentTableId);
-      tableManager.leaveTable(socket.id);
+      tableManager.leaveTable(telegramId);
     }
 
     // Check balance
-    const user = userStorage.getUser(socket.id);
+    const user = userStorage.getUser(telegramId);
     if (!user) {
-        socket.emit("errorMessage", "Auth required");
-        return;
+      socket.emit("errorMessage", "Auth required");
+      return;
     }
     if (user.balance < availableTable.config.buyIn) {
-        socket.emit("errorMessage", "Insufficient balance");
-        return;
+      socket.emit("errorMessage", "Insufficient balance");
+      return;
     }
 
-    const result = tableManager.joinTable(socket.id, availableTable.id, seat);
-    
+    const result = tableManager.joinTable(telegramId, availableTable.id, seat);
+
     if (!result.success) {
       socket.emit("errorMessage", result.error || "Failed to join table");
       return;
@@ -491,21 +570,21 @@ io.on("connection", (socket) => {
 
     // Deduct buy-in
     try {
-        const newBalance = await UserRepository.updateBalance(user.telegramId, -availableTable.config.buyIn);
-        user.balance = newBalance;
-        socket.emit("balanceUpdate", newBalance);
+      const newBalance = await UserRepository.updateBalance(user.telegramId, -availableTable.config.buyIn);
+      user.balance = newBalance;
+      socket.emit("balanceUpdate", newBalance);
     } catch (error) {
-        console.error("Failed to deduct buy-in", error);
+      console.error("Failed to deduct buy-in", error);
     }
 
     socket.join(availableTable.id);
-    
+
     const table = tableManager.getTable(availableTable.id);
     if (table) {
-      const state = table.getStateForPlayer(socket.id);
-      socket.emit("tableJoined", { tableId: availableTable.id, seat, state });
+      const state = table.getStateForPlayer(telegramId);
+      socket.emit("tableJoined", { tableId: availableTable.id, seat: result.seat!, state });
       updateTableState(availableTable.id);
-      console.log(`[Table] ${socket.id} auto-joined ${availableTable.id} at seat ${seat}`);
+      console.log(`[Table] telegramId=${telegramId} (socket ${socket.id}) auto-joined ${availableTable.id} at seat ${result.seat}`);
     }
   });
 
@@ -513,7 +592,13 @@ io.on("connection", (socket) => {
   // Chat
   // ==========================================
   socket.on("sendChatMessage", (messageData) => {
-    const tableId = tableManager.getPlayerTableId(socket.id);
+    const telegramId = socket.data.telegramId;
+    if (!telegramId) {
+      socket.emit("authError", { message: 'Not authenticated' } as any);
+      return;
+    }
+
+    const tableId = tableManager.getPlayerTableId(telegramId);
     if (!tableId) {
       socket.emit("errorMessage", "You are not at a table");
       return;
@@ -525,14 +610,17 @@ io.on("connection", (socket) => {
     // Create full message with ID and timestamp
     const fullMessage = {
       ...messageData,
-      id: `${socket.id}-${Date.now()}`,
+      id: `${telegramId}-${Date.now()}`, // use telegramId in message ID for traceability
       timestamp: Date.now(),
     };
 
-    // Broadcast to all players at the table
-    const playerIds = table.getAllPlayerIds();
-    playerIds.forEach((playerId) => {
-      io.to(playerId).emit("chatMessage", fullMessage);
+    // Broadcast to all players at the table (telegramIds → resolve socketIds)
+    const playerIds = table.getAllPlayerIds(); // telegramIds
+    playerIds.forEach((pid) => {
+      const sid = getSocketId(pid);
+      if (sid) {
+        io.to(sid).emit("chatMessage", fullMessage);
+      }
     });
 
     console.log(`[Chat] ${tableId}: ${messageData.authorName}: ${messageData.text.substring(0, 50)}`);
@@ -543,19 +631,31 @@ io.on("connection", (socket) => {
   // ==========================================
   socket.on("disconnect", async () => {
     console.log("[Socket] Player disconnected:", socket.id);
-    
-    const tableId = tableManager.getPlayerTableId(socket.id);
+
+    const telegramId = socket.data.telegramId;
+    if (!telegramId) {
+      // Socket never authenticated — nothing to clean up
+      return;
+    }
+
+    // Clear transport handle on the seated player (Phase 4 adds grace window / sit-out)
+    const seatedTable = tableManager.getPlayerTable(telegramId);
+    if (seatedTable) {
+      seatedTable.updatePlayerSocketId(telegramId, undefined);
+    }
+
+    const tableId = tableManager.getPlayerTableId(telegramId);
     if (tableId) {
       // Get chips before leaving
       const table = tableManager.getTable(tableId);
-      const player = table?.getPlayer(socket.id);
+      const player = table?.getPlayer(telegramId);
       const chipsToReturn = player ? player.chips : 0;
 
       updateTableState(tableId);
-      tableManager.handleDisconnect(socket.id);
+      tableManager.handleDisconnect(telegramId);
 
       // Return chips to DB
-      const user = userStorage.getUser(socket.id);
+      const user = userStorage.getUser(telegramId);
       if (user && chipsToReturn > 0) {
         try {
           await UserRepository.updateBalance(user.telegramId, chipsToReturn);
@@ -564,8 +664,14 @@ io.on("connection", (socket) => {
         }
       }
     }
-    
-    userStorage.removeUser(socket.id);
+
+    // Only clear socketByTelegram if this socket is still the current mapping
+    // (guards against out-of-order events during eviction — T-01-04-04)
+    if (tableManager.getSocketIdForTelegram(telegramId) === socket.id) {
+      tableManager.clearSocketForTelegram(telegramId);
+    }
+
+    userStorage.removeUser(telegramId);
   });
 });
 

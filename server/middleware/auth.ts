@@ -142,7 +142,6 @@ export function validateInitData(initData: string): WebAppInitData | null {
  * Dev path (via devId) is active ONLY when DEV_BYPASS_ACTIVE is true.
  */
 export async function createUserFromInitData(
-  socketId: string,
   data: WebAppInitData,
   devId?: number
 ): Promise<TelegramUser> {
