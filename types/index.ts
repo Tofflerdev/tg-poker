@@ -259,3 +259,35 @@ export interface ExtendedClientEvents extends ClientEvents {
   getProfile: () => void;
   updateProfile: (data: { displayName?: string; avatarUrl?: string }) => void;
 }
+
+// --- Phase 1 Game callback contracts (GAME-04, D-10/D-11) ---
+
+export type PlayerActionKind = 'fold' | 'check' | 'call' | 'bet' | 'raise' | 'allin';
+
+export interface PlayerActionEvent {
+  tableId: string;
+  telegramId: string;           // stringified; see Pitfall 5
+  seat: number;
+  action: PlayerActionKind;
+  amount: number;               // chips committed by this action (delta)
+  totalBetThisStreet: number;   // player.bet after the action
+  potAfter: number;             // game.getTotalPot() after the action
+}
+
+export interface HandCompletePerPlayer {
+  telegramId: string;
+  seat: number;
+  holeCards: string[];          // server filters before broadcasting — do not broadcast raw
+  finalChips: number;
+  netDelta: number;             // finalChips - handStartChips[seat]
+  won: boolean;
+  showedDown: boolean;
+}
+
+export interface HandCompleteEvent {
+  handId: string;
+  tableId: string;
+  completedAt: Date;
+  board: string[];              // game.communityCards snapshot
+  perPlayer: HandCompletePerPlayer[];
+}
