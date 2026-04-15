@@ -4,7 +4,7 @@ import http from "http";
 import path from "path";
 import { fileURLToPath } from "url";
 import { Server } from "socket.io";
-import { validateInitData, createUserFromInitData } from "./middleware/auth.js";
+import { assertSafeBootOrExit, validateInitData, createUserFromInitData } from "./middleware/auth.js";
 import { userStorage } from "./models/User.js";
 import { tableManager } from "./TableManager.js";
 import { UserRepository } from "./db/UserRepository.js";
@@ -15,6 +15,9 @@ import type {
   ExtendedClientEvents,
   ExtendedServerEvents
 } from "../types/index.js";
+
+// Boot guard — exits with code 1 if the env is unsafe for production
+assertSafeBootOrExit();
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -136,9 +139,9 @@ io.on("connection", (socket) => {
   // Authentication
   // ==========================================
   socket.on("auth", async (payload: AuthPayload) => {
-    const { valid, data } = validateInitData(payload.initData);
-    
-    if (!valid) {
+    const validatedData = validateInitData(payload.initData);
+
+    if (!validatedData) {
       console.warn("[Auth] Invalid initData from socket:", socket.id,
         "| initData length:", payload.initData?.length || 0,
         "| NODE_ENV:", process.env.NODE_ENV);
@@ -147,8 +150,8 @@ io.on("connection", (socket) => {
     }
 
     try {
-      // Create user from initData (handles dev mode mock user automatically)
-      const user = await createUserFromInitData(socket.id, data || { auth_date: 0, hash: '' }, payload.devId);
+      // Create user from validated initData
+      const user = await createUserFromInitData(socket.id, validatedData, payload.devId);
       
       // Store user in persistent storage (session cache)
       userStorage.addUser(socket.id, user);
