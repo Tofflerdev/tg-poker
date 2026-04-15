@@ -21,5 +21,50 @@ model User {
   createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz
   updatedAt         DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
 
+  // --- v1_mvp_launch additions ---
+  avatarId          String?
+  currentTableId    String?
+  currentSeat       Int?
+  currentChips      Int?
+  sessionToken      String?
+  disconnectedAt    DateTime?
+  lastSeenAt        DateTime?
+  bannedAt          DateTime?
+  tosAcceptedAt     DateTime?
+  tosVersion        String?
+
+  @@index([currentTableId])
   @@map("users")
+}
+
+model HandHistory {
+  id         String   @id @default(cuid())
+  handId     String
+  telegramId String
+  tableId    String
+  playedAt   DateTime @default(now())
+  board      String[]
+  holeCards  String[]
+  seat       Int
+  netDelta   Int
+  finalChips Int
+  showedDown Boolean
+  won        Boolean
+
+  @@index([telegramId, playedAt(sort: Desc)])
+  @@index([playedAt])
+}
+
+model AdminAuditLog {
+  id              String   @id @default(cuid())
+  adminTelegramId String
+  action          String
+  targetType      String
+  targetId        String
+  beforeJson      Json?
+  afterJson       Json?
+  createdAt       DateTime @default(now())
+
+  @@index([adminTelegramId, createdAt(sort: Desc)])
+  @@index([action, createdAt(sort: Desc)])
 }
