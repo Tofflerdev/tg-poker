@@ -4,11 +4,13 @@ import type { TableConfig, TableInfo, TableStatus } from '../types/index.js';
 
 /**
  * TableManager manages all poker tables in the system
- * Handles table creation, player assignment, and lookups
+ * Handles table creation, player assignment, and lookups.
+ * All player maps are keyed by telegramId (string) — RESILIENCE-03.
  */
 export class TableManager {
   private tables: Map<string, Table> = new Map();
-  private playerToTable: Map<string, string> = new Map(); // socketId -> tableId
+  private playerToTable: Map<string /* telegramId */, string /* tableId */> = new Map();
+  private socketByTelegram: Map<string /* telegramId */, string /* socketId */> = new Map(); // D-06
 
   constructor() {
     // Initialize with predefined tables
@@ -142,10 +144,10 @@ export class TableManager {
   }
 
   /**
-   * Get table where player is currently seated
+   * Get table where player is currently seated (keyed by telegramId)
    */
-  getPlayerTable(socketId: string): Table | undefined {
-    const tableId = this.playerToTable.get(socketId);
+  getPlayerTable(telegramId: string): Table | undefined {
+    const tableId = this.playerToTable.get(telegramId);
     if (tableId) {
       return this.tables.get(tableId);
     }
@@ -153,19 +155,22 @@ export class TableManager {
   }
 
   /**
-   * Get table ID where player is currently seated
+   * Get table ID where player is currently seated (keyed by telegramId)
    */
-  getPlayerTableId(socketId: string): string | undefined {
-    return this.playerToTable.get(socketId);
+  getPlayerTableId(telegramId: string): string | undefined {
+    return this.playerToTable.get(telegramId);
   }
 
   /**
-   * Add player to a table
-   * If seat is -1, automatically finds the first available seat
+   * Add player to a table.
+   * If seat is -1, automatically finds the first available seat.
+   * @param telegramId  durable player key (stringified Telegram ID)
+   * @param tableId     target table
+   * @param seat        seat number, or -1 for auto-assign
    */
-  joinTable(socketId: string, tableId: string, seat: number): { success: boolean; error?: string; seat?: number } {
+  joinTable(telegramId: string, tableId: string, seat: number): { success: boolean; error?: string; seat?: number } {
     // Check if player is already at another table
-    const currentTableId = this.playerToTable.get(socketId);
+    const currentTableId = this.playerToTable.get(telegramId);
     if (currentTableId && currentTableId !== tableId) {
       return { success: false, error: 'You are already at another table. Leave it first.' };
     }
@@ -186,22 +191,22 @@ export class TableManager {
       return { success: false, error: 'Seat is occupied' };
     }
 
-    const user = userStorage.getUser(socketId);
+    const user = userStorage.getUser(telegramId);
     if (!user) {
       return { success: false, error: 'User not found' };
     }
 
     const success = table.addPlayer(
-      socketId,
+      telegramId,
       seat,
       table.config.buyIn,
       user.telegramId,
       user.displayName,
       user.avatarUrl
     );
-    
+
     if (success) {
-      this.playerToTable.set(socketId, tableId);
+      this.playerToTable.set(telegramId, tableId);
       return { success: true, seat };
     }
 
@@ -211,37 +216,77 @@ export class TableManager {
   /**
    * Add spectator to a table
    */
-  spectateTable(socketId: string, tableId: string): { success: boolean; error?: string } {
+  spectateTable(telegramId: string, tableId: string): { success: boolean; error?: string } {
     const table = this.tables.get(tableId);
     if (!table) {
       return { success: false, error: 'Table not found' };
     }
 
-    table.addSpectator(socketId);
-    this.playerToTable.set(socketId, tableId);
+    table.addSpectator(telegramId);
+    this.playerToTable.set(telegramId, tableId);
     return { success: true };
   }
 
   /**
-   * Remove player from their current table
+   * Remove player from their current table (keyed by telegramId)
    */
-  leaveTable(socketId: string): void {
-    const tableId = this.playerToTable.get(socketId);
+  leaveTable(telegramId: string): void {
+    const tableId = this.playerToTable.get(telegramId);
     if (tableId) {
       const table = this.tables.get(tableId);
       if (table) {
-        table.removePlayer(socketId);
+        table.removePlayer(telegramId);
       }
-      this.playerToTable.delete(socketId);
+      this.playerToTable.delete(telegramId);
     }
   }
 
   /**
-   * Handle player disconnect
+   * Handle player disconnect (Phase 1: removes player from table).
+   * Phase 4 will replace this with a grace-window sit-out instead.
    */
-  handleDisconnect(socketId: string): void {
-    this.leaveTable(socketId);
+  handleDisconnect(telegramId: string): void {
+    this.leaveTable(telegramId);
   }
+
+  // ==========================================
+  // Socket-by-telegramId map (D-06 / D-07)
+  // ==========================================
+
+  /**
+   * Register (or replace) the live socket for a telegramId.
+   * If a different socket was already registered, `onEvict` is called with the
+   * prior socketId BEFORE the map entry is updated (D-07 scaffold).
+   */
+  setSocketForTelegram(
+    telegramId: string,
+    socketId: string,
+    onEvict: (priorSocketId: string) => void
+  ): void {
+    const prior = this.socketByTelegram.get(telegramId);
+    if (prior !== undefined && prior !== socketId) {
+      onEvict(prior);
+    }
+    this.socketByTelegram.set(telegramId, socketId);
+  }
+
+  /**
+   * Returns the current live socketId for a telegramId, or undefined.
+   */
+  getSocketIdForTelegram(telegramId: string): string | undefined {
+    return this.socketByTelegram.get(telegramId);
+  }
+
+  /**
+   * Clear the socket mapping for a telegramId (called on clean disconnect).
+   */
+  clearSocketForTelegram(telegramId: string): void {
+    this.socketByTelegram.delete(telegramId);
+  }
+
+  // ==========================================
+  // Metrics / status helpers
+  // ==========================================
 
   /**
    * Get total number of tables

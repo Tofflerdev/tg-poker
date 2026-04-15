@@ -260,6 +260,12 @@ export interface ExtendedClientEvents extends ClientEvents {
   updateProfile: (data: { displayName?: string; avatarUrl?: string }) => void;
 }
 
+// --- Socket.io socket.data extension (RESILIENCE-03) ---
+
+export interface SocketData {
+  telegramId?: string;   // populated on successful auth; string form of TelegramUser.telegramId
+}
+
 // --- Phase 1 Game callback contracts (GAME-04, D-10/D-11) ---
 
 export type PlayerActionKind = 'fold' | 'check' | 'call' | 'bet' | 'raise' | 'allin';

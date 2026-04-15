@@ -2,19 +2,19 @@ import type { TelegramUser, UserProfile } from '../../types/index.js';
 
 /**
  * In-memory user storage
+ * Keyed by telegramId (stringified) — RESILIENCE-03
  * TODO: Replace with Redis/MongoDB in production
  */
 class UserStorage {
-  private users = new Map<string, TelegramUser>(); // socketId -> TelegramUser
+  private users = new Map<string /* telegramId */, TelegramUser>();
   private profiles = new Map<number, UserProfile>(); // telegramId -> UserProfile
-  private socketToTelegram = new Map<string, number>(); // socketId -> telegramId
 
   /**
    * Get or create user profile
    */
   getOrCreateProfile(telegramId: number, username?: string): UserProfile {
     let profile = this.profiles.get(telegramId);
-    
+
     if (!profile) {
       profile = {
         telegramId,
@@ -28,7 +28,7 @@ class UserStorage {
       };
       this.profiles.set(telegramId, profile);
     }
-    
+
     return profile;
   }
 
@@ -36,11 +36,11 @@ class UserStorage {
    * Update user profile stats
    */
   updateProfileStats(
-    telegramId: number, 
+    telegramId: number,
     stats: Partial<Omit<UserProfile, 'telegramId' | 'username' | 'joinedAt'>>
   ): UserProfile | null {
     const profile = this.profiles.get(telegramId);
-    
+
     if (!profile) {
       return null;
     }
@@ -50,30 +50,27 @@ class UserStorage {
   }
 
   /**
-   * Add user connection
+   * Add / refresh user — keyed by telegramId string
    */
-  addUser(socketId: string, user: TelegramUser): void {
-    this.users.set(socketId, user);
-    this.socketToTelegram.set(socketId, user.telegramId);
-    
+  addUser(telegramId: string, user: TelegramUser): void {
+    this.users.set(telegramId, user);
+
     // Ensure profile exists
     this.getOrCreateProfile(user.telegramId, user.username);
   }
 
   /**
-   * Remove user connection
+   * Remove user by telegramId string
    */
-  removeUser(socketId: string): void {
-    const telegramId = this.socketToTelegram.get(socketId);
-    this.users.delete(socketId);
-    this.socketToTelegram.delete(socketId);
+  removeUser(telegramId: string): void {
+    this.users.delete(telegramId);
   }
 
   /**
-   * Get user by socket ID
+   * Get user by telegramId string
    */
-  getUser(socketId: string): TelegramUser | undefined {
-    return this.users.get(socketId);
+  getUser(telegramId: string): TelegramUser | undefined {
+    return this.users.get(telegramId);
   }
 
   /**
@@ -84,21 +81,12 @@ class UserStorage {
   }
 
   /**
-   * Get user profile by socket ID
+   * Update user balance by telegramId string
    */
-  getProfileBySocket(socketId: string): UserProfile | undefined {
-    const telegramId = this.socketToTelegram.get(socketId);
-    if (!telegramId) return undefined;
-    return this.profiles.get(telegramId);
-  }
-
-  /**
-   * Update user balance
-   */
-  updateBalance(socketId: string, delta: number): number | null {
-    const user = this.users.get(socketId);
+  updateBalance(telegramId: string, delta: number): number | null {
+    const user = this.users.get(telegramId);
     if (!user) return null;
-    
+
     user.balance += delta;
     return user.balance;
   }
