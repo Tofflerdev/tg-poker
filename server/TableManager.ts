@@ -114,6 +114,13 @@ export class TableManager {
   }
 
   /**
+   * Get all Table instances
+   */
+  getAllTables(): Table[] {
+    return Array.from(this.tables.values());
+  }
+
+  /**
    * Get all tables info (for listing)
    */
   getAllTablesInfo(): TableInfo[] {

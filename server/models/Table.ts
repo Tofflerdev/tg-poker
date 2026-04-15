@@ -1,4 +1,4 @@
-import type { TableConfig, TableStatus, GameState } from '../../types/index.js';
+import type { TableConfig, TableStatus, GameState, PlayerActionEvent, HandCompleteEvent } from '../../types/index.js';
 import Game from '../Game.js';
 
 /**
@@ -23,7 +23,7 @@ export class Table {
     this.id = id;
     this.name = name;
     this.config = config;
-    this.game = new Game();
+    this.game = new Game(id);
     this.playerIds = new Set();
     this.status = 'waiting';
     this.createdAt = new Date();
@@ -303,6 +303,20 @@ export class Table {
    */
   setOnShowdown(callback: (result: any) => void): void {
     this.game.setOnShowdown(callback);
+  }
+
+  /**
+   * Set player action callback (Phase 1: no-op consumer registered in index.ts)
+   */
+  setOnPlayerAction(cb: (evt: PlayerActionEvent) => void): void {
+    this.game.setOnPlayerAction(cb);
+  }
+
+  /**
+   * Set hand complete callback (Phase 1: no-op consumer registered in index.ts)
+   */
+  setOnHandComplete(cb: (evt: HandCompleteEvent) => void): void {
+    this.game.setOnHandComplete(cb);
   }
 
   /**

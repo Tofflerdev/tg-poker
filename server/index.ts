@@ -112,6 +112,15 @@ const setupTableEvents = (tableId: string) => {
   table.setOnStateChange(() => {
     updateTableState(tableId);
   });
+
+  table.setOnPlayerAction((_evt) => {
+    // Phase 1: no-op. Phase 3 broadcasts actionBubble. Phase 3 writes HandHistory.
+    // Keep block empty to preserve Phase 1 success criterion "no behavior change".
+  });
+
+  table.setOnHandComplete((_evt) => {
+    // Phase 1: no-op. Phase 3 queues HandHistory writes; Phase 3 checkpoints chips.
+  });
 };
 
 // Initialize table events for all predefined tables
