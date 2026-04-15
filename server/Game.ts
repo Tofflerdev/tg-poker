@@ -1,11 +1,14 @@
+import crypto from 'crypto';
 import Deck from "./Deck.js";
 import pkg from "pokersolver";
 import { Player, GameState, GameStage, Spectator, ShowdownResult, Pot, PotResult } from "../types/index.js";
+import type { PlayerActionEvent, HandCompleteEvent, PlayerActionKind } from '../types/index.js';
 const { Hand } = pkg;
 
 
 
 export default class Game {
+  private tableId: string;
   private seats: (Player | null)[] = Array(6).fill(null);
   private spectators: Spectator[] = [];
   private communityCards: string[] = [];
@@ -27,9 +30,17 @@ export default class Game {
   private onTurnTimeout: (() => void) | null = null;
   private onStateChange: (() => void) | null = null;
   private onShowdown: ((result: ShowdownResult) => void) | null = null;
+  private onPlayerAction: ((evt: PlayerActionEvent) => void) | null = null;
+  private onHandComplete: ((evt: HandCompleteEvent) => void) | null = null;
+  private currentHandId: string | null = null;
+  private handStartChips: Record<number, number> = {};  // seat -> chips at startNextHand
 
   public lastShowdown: ShowdownResult | null = null;
   public nextHandIn: number | null = null;  // NEW: timestamp когда начнется следующая раздача
+
+  constructor(tableId: string = '') {
+    this.tableId = tableId;
+  }
 
   // Вспомогательный метод для получения общей суммы всех потов (включая текущие ставки)
   private getTotalPot(): number {
@@ -187,11 +198,15 @@ export default class Game {
     this.activateWaitingPlayers();
 
     const eligiblePlayers = this.getEligiblePlayers();
-    
+
     if (eligiblePlayers.length < 2) {
       this.stage = 'waiting';
       return false;
     }
+
+    this.currentHandId = crypto.randomUUID();
+    this.handStartChips = {};
+    for (const p of this.seats) if (p) this.handStartChips[p.seat] = p.chips;
 
     this.reset();
     this.deck = new Deck();
@@ -280,6 +295,15 @@ export default class Game {
 
     player.folded = true;
     player.acted = true;
+    this.onPlayerAction?.({
+      tableId: this.tableId,
+      telegramId: String(player.telegramId ?? player.id),
+      seat: player.seat,
+      action: 'fold' as PlayerActionKind,
+      amount: 0,
+      totalBetThisStreet: player.bet,
+      potAfter: this.getTotalPot(),
+    });
     this.nextPlayer();
     return true;
   }
@@ -290,6 +314,15 @@ export default class Game {
     if (player.bet < this.currentBet) return false; // нельзя чекать, нужно коллировать
 
     player.acted = true;
+    this.onPlayerAction?.({
+      tableId: this.tableId,
+      telegramId: String(player.telegramId ?? player.id),
+      seat: player.seat,
+      action: 'check' as PlayerActionKind,
+      amount: 0,
+      totalBetThisStreet: player.bet,
+      potAfter: this.getTotalPot(),
+    });
     this.nextPlayer();
     return true;
   }
@@ -300,7 +333,7 @@ export default class Game {
 
     const toCall = this.currentBet - player.bet;
     const actualBet = Math.min(toCall, player.chips);
-    
+
     player.bet += actualBet;
     player.totalBet += actualBet;
     player.chips -= actualBet;
@@ -308,6 +341,15 @@ export default class Game {
     if (player.chips === 0) player.allIn = true;
 
     player.acted = true;
+    this.onPlayerAction?.({
+      tableId: this.tableId,
+      telegramId: String(player.telegramId ?? player.id),
+      seat: player.seat,
+      action: 'call' as PlayerActionKind,
+      amount: actualBet,
+      totalBetThisStreet: player.bet,
+      potAfter: this.getTotalPot(),
+    });
     this.nextPlayer();
     return true;
   }
@@ -322,6 +364,7 @@ export default class Game {
     if (totalBet > player.chips) return false;
     if (amount < this.bigBlind) return false;
 
+    const prevBet = player.bet;
     player.chips -= totalBet;
     player.bet += totalBet;
     player.totalBet += totalBet;
@@ -332,10 +375,19 @@ export default class Game {
     // ОБНОВЛЕННАЯ ЛОГИКА:
     // Райзер походил, но все остальные теперь должны ответить заново
     this.seats.forEach(p => {
-        if (p) p.acted = false; 
+        if (p) p.acted = false;
     });
-    player.acted = true; 
+    player.acted = true;
 
+    this.onPlayerAction?.({
+      tableId: this.tableId,
+      telegramId: String(player.telegramId ?? player.id),
+      seat: player.seat,
+      action: 'raise' as PlayerActionKind,
+      amount: player.bet - prevBet,
+      totalBetThisStreet: player.bet,
+      potAfter: this.getTotalPot(),
+    });
     this.nextPlayer();
     return true;
   }
@@ -370,6 +422,15 @@ export default class Game {
       });
     }
 
+    this.onPlayerAction?.({
+      tableId: this.tableId,
+      telegramId: String(player.telegramId ?? player.id),
+      seat: player.seat,
+      action: 'allin' as PlayerActionKind,
+      amount: allInAmount,
+      totalBetThisStreet: player.bet,
+      potAfter: this.getTotalPot(),
+    });
     this.nextPlayer();
     return true;
   }
@@ -496,6 +557,25 @@ export default class Game {
 
       // Переключаем стадию, auto-start сработает через Table.scheduleNextHand()
       this.stage = 'showdown';
+      if (this.currentHandId) {
+        const handCompleteEvt: HandCompleteEvent = {
+          handId: this.currentHandId,
+          tableId: this.tableId,
+          completedAt: new Date(),
+          board: [...this.communityCards],
+          perPlayer: this.seats.filter((p): p is NonNullable<typeof p> => p !== null).map(p => ({
+            telegramId: String(p.telegramId ?? p.id),
+            seat: p.seat,
+            holeCards: [...p.hand],
+            finalChips: p.chips,
+            netDelta: p.chips - (this.handStartChips[p.seat] ?? p.chips),
+            won: p.id === winner.id,
+            showedDown: false,
+          })),
+        };
+        this.onHandComplete?.(handCompleteEvt);
+        this.currentHandId = null;
+      }
       if (this.onShowdown) {
         this.onShowdown(this.lastShowdown!);
       }
@@ -668,6 +748,27 @@ export default class Game {
 
     // Дилер передвинется при старте следующей раздачи в startNextHand()
 
+    if (this.currentHandId) {
+      const winnerIds = new Set(this.lastShowdown.winners.map(w => w.id));
+      const handCompleteEvt: HandCompleteEvent = {
+        handId: this.currentHandId,
+        tableId: this.tableId,
+        completedAt: new Date(),
+        board: [...this.communityCards],
+        perPlayer: this.seats.filter((p): p is NonNullable<typeof p> => p !== null).map(p => ({
+          telegramId: String(p.telegramId ?? p.id),
+          seat: p.seat,
+          holeCards: [...p.hand],
+          finalChips: p.chips,
+          netDelta: p.chips - (this.handStartChips[p.seat] ?? p.chips),
+          won: winnerIds.has(p.id),
+          showedDown: p.showCards || (!p.folded),
+        })),
+      };
+      this.onHandComplete?.(handCompleteEvt);
+      this.currentHandId = null;
+    }
+
     return this.lastShowdown;
   }
 
@@ -831,5 +932,13 @@ export default class Game {
 
   public setOnShowdown(callback: (result: ShowdownResult) => void) {
     this.onShowdown = callback;
+  }
+
+  public setOnPlayerAction(cb: (evt: PlayerActionEvent) => void): void {
+    this.onPlayerAction = cb;
+  }
+
+  public setOnHandComplete(cb: (evt: HandCompleteEvent) => void): void {
+    this.onHandComplete = cb;
   }
 }
