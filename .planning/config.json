@@ -1,0 +1,18 @@
+{
+  "mode": "interactive",
+  "granularity": "coarse",
+  "execution": "parallel",
+  "commit_docs": true,
+  "research_enabled": true,
+  "plan_check_enabled": true,
+  "verifier_enabled": true,
+  "models": {
+    "researcher": "sonnet",
+    "synthesizer": "sonnet",
+    "roadmapper": "sonnet",
+    "planner": "sonnet",
+    "executor": "sonnet"
+  },
+  "ui_test_framework": "vitest+rtl",
+  "project_codename": "NightRiver"
+}
