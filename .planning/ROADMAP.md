@@ -10,7 +10,7 @@
 
 ## Phases
 
-- [ ] **Phase 1: Foundations & Design System** — Shared contracts, Prisma migration, telegramId refactor, Game callbacks, auth hardening, Neon Strip tokens
+- [x] **Phase 1: Foundations & Design System** — Shared contracts, Prisma migration, telegramId refactor, Game callbacks, auth hardening, Neon Strip tokens ✓ 2026-04-15
 - [ ] **Phase 2: Design System Rollout & Avatars** — Full UI redesign, 20-animal avatar system, deposit stub, compliance/consent pages
 - [ ] **Phase 3: Gameplay Additions** — Action bubbles, hand history, async write queue, chip checkpointing
 - [ ] **Phase 4: Resilience** — Reconnect with full-snapshot resume, crash-safe recovery, atomic buy-in
@@ -31,7 +31,14 @@
   3. `TableManager`, `userStorage`, and socket mappings are keyed by `telegramId`; a single telegramId can be traced across connect/disconnect cycles.
   4. `Game.ts` exposes `setOnPlayerAction` and `setOnHandComplete` callbacks consumed by `server/index.ts`, with no behavior change to existing gameplay.
   5. Booting with `NODE_ENV=production` plus `ALLOW_DEV_AUTH=true` (or empty `BOT_TOKEN`) exits with code 1; HMAC comparison uses `crypto.timingSafeEqual`; failed validation never fabricates a dev user.
-**Plans:** TBD
+**Plans:** 5 plans
+
+Plans:
+- [x] 01-01-PLAN.md — Neon Strip tokens (neon.css + consumer refactor)
+- [x] 01-02-PLAN.md — Prisma v1_mvp_launch migration
+- [x] 01-03-PLAN.md — Game.ts callback seams (setOnPlayerAction/setOnHandComplete)
+- [x] 01-04-PLAN.md — telegramId identity refactor + eviction scaffold
+- [x] 01-05-PLAN.md — Auth hardening (timingSafeEqual, fail-closed boot)
 
 ### Phase 2: Design System Rollout & Avatars
 **Goal:** Every player-facing page is redesigned in Neon Strip, new users receive an animal avatar atomically on signup and can re-pick it, and first-launch ToS/Privacy/RG consent is shipped.
@@ -100,7 +107,7 @@
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Foundations & Design System | 0/0 | Not started | — |
+| 1. Foundations & Design System | 5/5 | Complete | 2026-04-15 |
 | 2. Design System Rollout & Avatars | 0/0 | Not started | — |
 | 3. Gameplay Additions | 0/0 | Not started | — |
 | 4. Resilience | 0/0 | Not started | — |
