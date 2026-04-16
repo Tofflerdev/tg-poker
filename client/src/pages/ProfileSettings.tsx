@@ -3,7 +3,7 @@ import { useTelegram } from '../hooks/useTelegram';
 import type { UserProfile, TelegramUser } from '../../../types/index';
 import { Socket } from 'socket.io-client';
 import { Button, Card, TabBar } from '../components/ui';
-import { avatarUrl, type AvatarId } from '../assets/avatars/manifest';
+import { AVATARS, avatarUrl, type AvatarId } from '../assets/avatars/manifest';
 
 /**
  * Phase 2 / Plan 02-06: Redesigned Profile/Settings page.
@@ -51,6 +51,20 @@ export const ProfileSettings: React.FC<ProfileSettingsProps> = ({ socket, onBack
   const [nameDraft, setNameDraft] = useState('');
   const [nameSaving, setNameSaving] = useState(false);
   const nameInputRef = useRef<HTMLInputElement | null>(null);
+
+  // Avatar picker state — D-13 / D-22 / Pitfall 5: explicit Confirm, no instant-save.
+  // pendingAvatar tracks the user's tapped selection before they Confirm. It
+  // syncs to the live currentUser.avatarId whenever the server acks a change
+  // (via App.tsx's avatarUpdated listener → currentUser.avatarId changes →
+  // this effect realigns pending, which makes `dirty` false and disables
+  // the Confirm button).
+  const [pendingAvatar, setPendingAvatar] = useState<AvatarId | undefined>(
+    currentUser?.avatarId as AvatarId | undefined
+  );
+  useEffect(() => {
+    setPendingAvatar(currentUser?.avatarId as AvatarId | undefined);
+  }, [currentUser?.avatarId]);
+  const dirty = pendingAvatar !== undefined && pendingAvatar !== currentUser?.avatarId;
 
   // Telegram hardware back-button → onBack
   useEffect(() => {
@@ -127,6 +141,21 @@ export const ProfileSettings: React.FC<ProfileSettingsProps> = ({ socket, onBack
   const handleClaimBonus = () => {
     hapticFeedback?.impactOccurred('medium');
     socket.emit('claimDailyBonus');
+  };
+
+  const handleSelectAvatar = (id: AvatarId) => {
+    hapticFeedback?.selectionChanged?.();
+    setPendingAvatar(id);
+  };
+
+  const handleConfirmAvatar = () => {
+    if (!dirty || !pendingAvatar) return;
+    hapticFeedback?.impactOccurred('medium');
+    // Pitfall 5 / D-13: only Confirm emits — tile taps alone never persist.
+    // Server validates the slug against the AVATARS allowlist (Plan 02-02
+    // T-02-02-02) and broadcasts avatarUpdated; App.tsx listener updates
+    // currentUser.avatarId, which causes `dirty` to become false.
+    socket.emit('updateAvatar', { avatarId: pendingAvatar });
   };
 
   const renderProfileTab = () => {
@@ -365,6 +394,110 @@ export const ProfileSettings: React.FC<ProfileSettingsProps> = ({ socket, onBack
     );
   };
 
+  const renderAvatarTab = () => (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <Card variant="neutral" padding={16}>
+        <div
+          style={{
+            color: 'var(--color-neutral)',
+            fontSize: 11,
+            fontWeight: 700,
+            letterSpacing: '0.08em',
+            textTransform: 'uppercase',
+            marginBottom: 12,
+          }}
+        >
+          Pick an Avatar
+        </div>
+        {/* 4×5 grid of 20 avatars (D-22) — tap to select, Confirm to commit */}
+        <div
+          role="radiogroup"
+          aria-label="Choose an avatar"
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(4, 1fr)',
+            gap: 8,
+          }}
+        >
+          {AVATARS.map((id) => {
+            const selected = pendingAvatar === id;
+            const src = avatarUrl(id);
+            return (
+              <button
+                key={id}
+                type="button"
+                role="radio"
+                aria-checked={selected}
+                aria-label={id}
+                onClick={() => handleSelectAvatar(id)}
+                style={{
+                  position: 'relative',
+                  aspectRatio: '1 / 1',
+                  minWidth: 60,
+                  minHeight: 60,
+                  padding: 0,
+                  background: 'rgba(10,10,14,0.6)',
+                  border: selected
+                    ? '1.5px solid color-mix(in srgb, var(--color-active) 56%, transparent)'
+                    : '1px solid color-mix(in srgb, var(--color-neutral) 18%, transparent)',
+                  borderRadius: 14,
+                  boxShadow: selected
+                    ? '0 0 16px var(--glow-call), inset 0 0 8px var(--glow-call)'
+                    : 'none',
+                  overflow: 'hidden',
+                  cursor: 'pointer',
+                  transition: 'box-shadow .15s, border-color .15s, transform .1s',
+                  WebkitTapHighlightColor: 'transparent',
+                }}
+                className="active:scale-95"
+              >
+                {src ? (
+                  <img
+                    src={src}
+                    alt={id}
+                    style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                  />
+                ) : (
+                  <span
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      width: '100%',
+                      height: '100%',
+                      color: selected ? 'var(--color-active)' : 'var(--color-neutral)',
+                      fontSize: 11,
+                      fontWeight: 700,
+                      letterSpacing: '0.05em',
+                      textTransform: 'uppercase',
+                      textShadow: selected ? '0 0 6px var(--glow-call)' : undefined,
+                    }}
+                  >
+                    {id}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+      </Card>
+
+      {/* Explicit Confirm (D-13 / Pitfall 5) — disabled when pending == current */}
+      <div style={{ padding: '0 2px' }}>
+        <Button
+          variant="active"
+          emphasis
+          fullWidth
+          disabled={!dirty}
+          onClick={handleConfirmAvatar}
+          style={{ opacity: dirty ? 1 : 0.45, cursor: dirty ? 'pointer' : 'not-allowed' }}
+        >
+          {dirty ? 'Confirm' : 'No changes'}
+        </Button>
+      </div>
+    </div>
+  );
+
   const renderHistoryTab = () => (
     <Card variant="neutral" padding={28} glow>
       <div
@@ -479,11 +612,7 @@ export const ProfileSettings: React.FC<ProfileSettingsProps> = ({ socket, onBack
         }}
       >
         {activeTab === 'profile' && renderProfileTab()}
-        {activeTab === 'avatar' && (
-          <div style={{ color: 'var(--color-neutral)', textAlign: 'center', padding: 24 }}>
-            (Avatar picker — Task 2)
-          </div>
-        )}
+        {activeTab === 'avatar' && renderAvatarTab()}
         {activeTab === 'history' && renderHistoryTab()}
       </div>
     </div>
