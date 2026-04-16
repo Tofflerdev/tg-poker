@@ -8,7 +8,8 @@ export interface Player {
   socketId?: string;      // mutable transport handle — updated on reconnect (D-05)
   telegramId?: number;    // numeric form kept for display / DB use
   displayName?: string;   // shown at table
-  avatarUrl?: string;     // shown at table
+  avatarUrl?: string;     // DEPRECATED — legacy Telegram photo_url; not rendered (D-15). Kept during transition.
+  avatarId?: string;      // Plan 02-02: one of AVATARS slugs; SeatsDisplay resolves via manifest
   seat: number;
   hand: string[]; // ["As", "Kd"] или ["back", "back"] для скрытых
   chips: number;  // Стек игрока
@@ -119,7 +120,9 @@ export interface TelegramUser {
   firstName: string;
   lastName?: string;
   photoUrl?: string;
-  avatarUrl?: string;    // NEW: custom avatar (overrides photoUrl)
+  avatarUrl?: string;    // DEPRECATED — legacy Telegram photo_url; not rendered (D-15). Kept during transition.
+  avatarId?: string;     // Plan 02-02: slug in AVATARS; rendered via avatarUrl(id) manifest resolver
+  tosAcceptedAt?: string; // Plan 02-08: ISO timestamp of TOS acceptance (substrate added here for build hygiene)
   balance: number;
   lastDailyRefill?: string; // NEW: ISO timestamp
   canClaimDaily?: boolean;  // NEW: computed field
@@ -232,6 +235,9 @@ export interface ExtendedServerEvents extends ServerEvents {
   profileUpdated: (profile: UserProfile) => void;
   profileError: (msg: string) => void;
   balanceUpdate: (balance: number) => void;
+  // Plan 02-02: avatar + TOS substrate (picker UI lands in Plan 06; TOS gate in Plan 08)
+  avatarUpdated: (payload: { avatarId: string }) => void;
+  tosAccepted: (payload: { tosAcceptedAt: string; tosVersion: string }) => void;
 }
 
 // ==========================================
@@ -259,6 +265,9 @@ export interface ExtendedClientEvents extends ClientEvents {
   claimDailyBonus: () => void;
   getProfile: () => void;
   updateProfile: (data: { displayName?: string; avatarUrl?: string }) => void;
+  // Plan 02-02: avatar + TOS substrate (picker UI lands in Plan 06; TOS gate in Plan 08)
+  updateAvatar: (payload: { avatarId: string }) => void;
+  acceptTos: (payload: { version: string }) => void;
 }
 
 // --- Socket.io socket.data extension (RESILIENCE-03) ---

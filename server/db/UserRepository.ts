@@ -1,29 +1,42 @@
 import prisma from './prisma.js';
 import { generateRandomName } from '../utils/nameGenerator.js';
 import { TelegramUser, UserProfile } from '../../types/index.js';
+import { randomAvatarId } from '../../types/avatars.js';
 
 export class UserRepository {
-  static async findOrCreate(telegramId: number, username?: string, photoUrl?: string): Promise<TelegramUser> {
+  static async findOrCreate(telegramId: number, username?: string, _photoUrl?: string): Promise<TelegramUser> {
     let user = await prisma.user.findUnique({
       where: { telegramId: BigInt(telegramId) }
     });
 
     if (!user) {
+      // D-12: atomic assign — single INSERT writes avatarId.
+      // D-15: Telegram photo_url is NOT stored for rendering — column left null.
       user = await prisma.user.create({
         data: {
           telegramId: BigInt(telegramId),
           telegramUsername: username,
           displayName: generateRandomName(),
-          avatarUrl: photoUrl,
+          avatarUrl: null,
+          avatarId: randomAvatarId(),
           balance: 1000
         }
       });
     } else {
-      // Update username/photo if changed (optional, but good for keeping data fresh)
+      // Update username if changed (optional, but good for keeping data fresh)
       if (username && user.telegramUsername !== username) {
-        await prisma.user.update({
+        user = await prisma.user.update({
           where: { id: user.id },
           data: { telegramUsername: username }
+        });
+      }
+      // Idempotent backfill for grandfathered users (RESEARCH Open Q4).
+      // One-time UPDATE the first time a null-avatarId user hits findOrCreate;
+      // subsequent calls no-op because avatarId is now populated.
+      if (!user.avatarId) {
+        user = await prisma.user.update({
+          where: { id: user.id },
+          data: { avatarId: randomAvatarId() }
         });
       }
     }
@@ -99,6 +112,18 @@ export class UserRepository {
     return this.mapToUserProfile(user);
   }
 
+  /**
+   * Plan 02-02: persist a validated AvatarId slug.
+   * Caller MUST have already verified the slug against AVATARS (T-02-02-02);
+   * this method does not re-validate — it is a trusted write path.
+   */
+  static async updateAvatarId(telegramId: number, avatarId: string): Promise<void> {
+    await prisma.user.update({
+      where: { telegramId: BigInt(telegramId) },
+      data: { avatarId }
+    });
+  }
+
   static async getProfile(telegramId: number): Promise<UserProfile | null> {
     const user = await prisma.user.findUnique({
       where: { telegramId: BigInt(telegramId) }
@@ -152,6 +177,8 @@ export class UserRepository {
       displayName: user.displayName,
       firstName: '', // Not stored in DB, usually comes from initData
       avatarUrl: user.avatarUrl || undefined,
+      avatarId: user.avatarId || undefined,
+      tosAcceptedAt: user.tosAcceptedAt?.toISOString(),
       balance: user.balance,
       lastDailyRefill: user.lastDailyRefill?.toISOString(),
       canClaimDaily

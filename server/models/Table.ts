@@ -94,12 +94,12 @@ export class Table {
    * Add a player to the table
    * @param telegramId  durable player key (stringified Telegram ID)
    */
-  addPlayer(telegramId: string, seat: number, chips: number, telegramIdNumeric?: number, displayName?: string, avatarUrl?: string): boolean {
+  addPlayer(telegramId: string, seat: number, chips: number, telegramIdNumeric?: number, displayName?: string, avatarUrl?: string, avatarId?: string): boolean {
     if (!this.isSeatAvailable(seat)) {
       return false;
     }
 
-    const success = this.game.addPlayer(telegramId, seat, chips, telegramIdNumeric, displayName, avatarUrl);
+    const success = this.game.addPlayer(telegramId, seat, chips, telegramIdNumeric, displayName, avatarUrl, undefined, avatarId);
     if (success) {
       this.playerIds.add(telegramId);
       this.updateStatus();

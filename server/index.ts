@@ -8,6 +8,7 @@ import { assertSafeBootOrExit, validateInitData, createUserFromInitData } from "
 import { userStorage } from "./models/User.js";
 import { tableManager } from "./TableManager.js";
 import { UserRepository } from "./db/UserRepository.js";
+import { isValidAvatarId } from "../types/avatars.js";
 import type {
   TelegramUser,
   AuthPayload,
@@ -303,6 +304,46 @@ io.on("connection", (socket) => {
     } catch (error) {
       console.error("[Profile] Update Error:", error);
       socket.emit("profileError", "Failed to update profile");
+    }
+  });
+
+  // Plan 02-02: persist an avatar slug chosen by the user.
+  // T-02-02-01: require populated socket.data.telegramId.
+  // T-02-02-02: reject slugs not in the AVATARS allowlist (ASVS V5).
+  socket.on("updateAvatar", async (payload) => {
+    const telegramId = socket.data.telegramId;
+    if (!telegramId) {
+      socket.emit("authError", { message: 'Not authenticated' } as any);
+      return;
+    }
+
+    if (!payload || !isValidAvatarId(payload.avatarId)) {
+      console.warn("[UpdateAvatar] rejected invalid avatarId from telegramId=%s payload=%o", telegramId, payload);
+      return; // silent drop — do not echo tampered input back
+    }
+
+    const user = userStorage.getUser(telegramId);
+    if (!user) return;
+
+    try {
+      await UserRepository.updateAvatarId(user.telegramId, payload.avatarId);
+      user.avatarId = payload.avatarId;
+
+      // Ack to sender
+      socket.emit("avatarUpdated", { avatarId: payload.avatarId });
+
+      // If the user is seated, broadcast so other clients at the same table
+      // see the new avatar in SeatsDisplay without waiting for the next hand.
+      const seatedTable = tableManager.getPlayerTable(telegramId);
+      if (seatedTable) {
+        const player = seatedTable.getPlayer(telegramId);
+        if (player) {
+          player.avatarId = payload.avatarId;
+        }
+        updateTableState(seatedTable.id);
+      }
+    } catch (error) {
+      console.error("[UpdateAvatar] Error:", error);
     }
   });
 

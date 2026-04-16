@@ -51,7 +51,7 @@ export default class Game {
 
   // Добавление игрока (разрешаем в любое время)
   // telegramId (stringified) is the durable identity key stored in player.id (RESILIENCE-03)
-  addPlayer(telegramId: string, seat: number, chips: number = 1000, telegramIdNumeric?: number, displayName?: string, avatarUrl?: string, socketId?: string): boolean {
+  addPlayer(telegramId: string, seat: number, chips: number = 1000, telegramIdNumeric?: number, displayName?: string, avatarUrl?: string, socketId?: string, avatarId?: string): boolean {
     if (seat < 0 || seat >= this.seats.length) return false;
     if (this.seats[seat]) return false;
 
@@ -71,7 +71,8 @@ export default class Game {
       seat,
       telegramId: telegramIdNumeric,
       displayName,
-      avatarUrl,
+      avatarUrl,           // DEPRECATED (D-15) — still forwarded during transition
+      avatarId,            // Plan 02-02: SeatsDisplay resolves via manifest
       hand: [],
       chips,
       bet: 0,

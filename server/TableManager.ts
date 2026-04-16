@@ -202,7 +202,8 @@ export class TableManager {
       table.config.buyIn,
       user.telegramId,
       user.displayName,
-      user.avatarUrl
+      user.avatarUrl,
+      user.avatarId
     );
 
     if (success) {
