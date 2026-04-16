@@ -270,6 +270,12 @@ const App: React.FC = () => {
       setCurrentUser(prev => prev ? { ...prev, avatarId: payload.avatarId } : prev);
     });
 
+    // Plan 02-08: propagate ToS acceptance ack so the defense-in-depth guard
+    // stops force-rendering <Consent /> and the grandfather banner disappears.
+    socket.on("tosAccepted", (payload) => {
+      setCurrentUser(prev => prev ? { ...prev, tosAcceptedAt: payload.tosAcceptedAt } : prev);
+    });
+
     return () => {
       socket.off("tablesList");
       socket.off("tableJoined");
@@ -282,6 +288,7 @@ const App: React.FC = () => {
       socket.off("dailyBonusClaimed");
       socket.off("profileUpdated");
       socket.off("avatarUpdated");
+      socket.off("tosAccepted");
     };
   }, [currentUser, hapticFeedback]);
 
@@ -385,21 +392,23 @@ const App: React.FC = () => {
         {devToolbar}
         <MainMenu
           user={currentUser}
+          socket={socket}
+          showGrandfatherBanner={!!currentUser && !currentUser.tosAcceptedAt}
+          onTosAccepted={() => { /* tosAccepted socket listener updates currentUser */ }}
           onNavigate={(target) => {
-            // Plan 02-04: MainMenu uses a single onNavigate(view) prop.
-            // Only the AppView variants that exist in this milestone are
-            // dispatched — legal/consent targets (Plan 02-08) and unrecognized
-            // values are intentionally dropped (no-op click).
+            // Plan 02-04/02-08: dispatch to AppView variants. Unknown values drop.
             if (
               target === 'menu' ||
               target === 'tables' ||
               target === 'game' ||
               target === 'profile' ||
-              target === 'deposit'
+              target === 'deposit' ||
+              target === 'consent' ||
+              target === 'legal-tos' ||
+              target === 'legal-privacy' ||
+              target === 'legal-rg'
             ) {
               hapticFeedback?.impactOccurred(target === 'profile' ? 'light' : 'medium');
-              // 'tables' shortcut also triggers a fresh fetch to match the
-              // pre-redesign handleShowTables() behavior.
               if (target === 'tables') socket.emit('getTables');
               setView(target);
             }
@@ -444,6 +453,69 @@ const App: React.FC = () => {
       <>
         {devToolbar}
         <Deposit onBack={() => setView('menu')} />
+      </>
+    );
+  }
+
+  // Plan 02-08: defense-in-depth consent guard. Users with no tosAcceptedAt
+  // are force-rendered <Consent /> regardless of target view. Legal pages
+  // remain reachable from the Consent screen via inline links (view='legal-*').
+  if (
+    currentUser &&
+    !currentUser.tosAcceptedAt &&
+    view !== 'consent' &&
+    view !== 'legal-tos' &&
+    view !== 'legal-privacy' &&
+    view !== 'legal-rg'
+  ) {
+    return (
+      <>
+        {devToolbar}
+        <Consent
+          socket={socket}
+          onAccept={() => setView('menu')}
+          onViewLegal={(which) => setView(which === 'tos' ? 'legal-tos' : which === 'privacy' ? 'legal-privacy' : 'legal-rg')}
+        />
+      </>
+    );
+  }
+
+  if (view === 'consent') {
+    return (
+      <>
+        {devToolbar}
+        <Consent
+          socket={socket}
+          onAccept={() => setView('menu')}
+          onViewLegal={(which) => setView(which === 'tos' ? 'legal-tos' : which === 'privacy' ? 'legal-privacy' : 'legal-rg')}
+        />
+      </>
+    );
+  }
+
+  if (view === 'legal-tos') {
+    return (
+      <>
+        {devToolbar}
+        <ToS onBack={() => setView(currentUser?.tosAcceptedAt ? 'menu' : 'consent')} />
+      </>
+    );
+  }
+
+  if (view === 'legal-privacy') {
+    return (
+      <>
+        {devToolbar}
+        <Privacy onBack={() => setView(currentUser?.tosAcceptedAt ? 'menu' : 'consent')} />
+      </>
+    );
+  }
+
+  if (view === 'legal-rg') {
+    return (
+      <>
+        {devToolbar}
+        <ResponsibleGaming onBack={() => setView(currentUser?.tosAcceptedAt ? 'menu' : 'consent')} />
       </>
     );
   }
