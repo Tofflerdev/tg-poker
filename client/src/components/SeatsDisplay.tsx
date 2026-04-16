@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import HandDisplay from "./HandDisplay";
 import { Player } from "../../../types/index";
+import { avatarUrl as resolveAvatar, type AvatarId } from "../assets/avatars/manifest";
 
 interface SeatsDisplayProps {
   seats: (Player | null)[];
@@ -333,7 +334,7 @@ const SeatsDisplay: React.FC<SeatsDisplayProps> = ({
                     initial={initial}
                     size={avatarSize}
                     isActive={isActive}
-                    avatarUrl={player.avatarUrl}
+                    avatarUrl={resolveAvatar(player.avatarId as AvatarId | undefined)}
                   />
                 </div>
 
@@ -464,7 +465,7 @@ const SeatsDisplay: React.FC<SeatsDisplayProps> = ({
                       initial={initial}
                       size={avatarSize}
                       isActive={isActive}
-                      avatarUrl={player.avatarUrl}
+                      avatarUrl={resolveAvatar(player.avatarId as AvatarId | undefined)}
                     />
                   </div>
 

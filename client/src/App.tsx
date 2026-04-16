@@ -235,6 +235,13 @@ const App: React.FC = () => {
         } : null);
     });
 
+    // Plan 02-02: propagate the user's own avatar change to MainMenu/Profile
+    // views immediately on server ack. MainMenu / ProfileSettings are redesigned
+    // in Plans 04 + 06 and will read currentUser.avatarId via avatarUrl(id).
+    socket.on("avatarUpdated", (payload) => {
+      setCurrentUser(prev => prev ? { ...prev, avatarId: payload.avatarId } : prev);
+    });
+
     return () => {
       socket.off("tablesList");
       socket.off("tableJoined");
@@ -246,6 +253,7 @@ const App: React.FC = () => {
       socket.off("balanceUpdate");
       socket.off("dailyBonusClaimed");
       socket.off("profileUpdated");
+      socket.off("avatarUpdated");
     };
   }, [currentUser, hapticFeedback]);
 
