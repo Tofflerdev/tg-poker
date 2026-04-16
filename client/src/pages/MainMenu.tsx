@@ -1,7 +1,9 @@
 import React from 'react';
+import { Socket } from 'socket.io-client';
 import { useTelegram } from '../hooks/useTelegram';
-import type { TelegramUser } from '../../../types/index';
+import type { TelegramUser, ExtendedClientEvents, ExtendedServerEvents } from '../../../types/index';
 import { DailyBonusButton } from '../components/DailyBonusButton';
+import { ConsentBanner } from '../components/ConsentBanner';
 import { Card } from '../components/ui';
 import { avatarUrl, type AvatarId } from '../assets/avatars/manifest';
 import logoUrl from '../assets/logo.svg';
@@ -45,6 +47,19 @@ interface MainMenuProps {
   user: TelegramUser | null;
   onNavigate: (view: AppNavigateTarget) => void;
   onClaimBonus: () => void;
+  // Plan 02-08: socket is required by ConsentBanner for the grandfather flow.
+  // Only the consent-related events are used from this socket here; all other
+  // MainMenu interactions stay on App.tsx's shared socket via onNavigate.
+  socket: Socket<ExtendedServerEvents, ExtendedClientEvents>;
+  // Plan 02-08: App.tsx informs MainMenu whether the grandfather banner should
+  // be considered for display. The banner itself owns the localStorage
+  // dismissal flag; we hoist the "user hasn't accepted" predicate up to App.tsx
+  // so the banner stays dumb.
+  showGrandfatherBanner: boolean;
+  // Plan 02-08: banner Accept / banner "Read terms" use the same App.tsx
+  // tosAccepted listener as the full-page Consent route — we just forward
+  // the onAccept callback upward so App.tsx can update currentUser.
+  onTosAccepted: () => void;
 }
 
 // Avatar sub-component with initial-letter fallback (D-14, D-15).
@@ -230,7 +245,14 @@ const ChevronRight: React.FC<{ color: string }> = ({ color }) => (
   </span>
 );
 
-export const MainMenu: React.FC<MainMenuProps> = ({ user, onNavigate, onClaimBonus }) => {
+export const MainMenu: React.FC<MainMenuProps> = ({
+  user,
+  onNavigate,
+  onClaimBonus,
+  socket,
+  showGrandfatherBanner,
+  onTosAccepted,
+}) => {
   const { hideMainButton, setHeaderColor, hapticFeedback } = useTelegram();
 
   React.useEffect(() => {
@@ -281,6 +303,27 @@ export const MainMenu: React.FC<MainMenuProps> = ({ user, onNavigate, onClaimBon
           style={{ height: 40, width: 'auto', maxWidth: '100%' }}
         />
       </header>
+
+      {/* ─── Grandfather banner (Plan 02-08 / D-29 / COMPLIANCE-03) ──
+          Non-blocking, dismissible. Rendered iff App.tsx determined the
+          user has no tosAcceptedAt. Banner owns its own localStorage
+          dismissal flag — this conditional is just the "should we ever
+          consider showing it?" gate. */}
+      {showGrandfatherBanner && (
+        <ConsentBanner
+          socket={socket}
+          onAccept={onTosAccepted}
+          onViewLegal={(which) =>
+            onNavigate(
+              which === 'tos'
+                ? 'legal-tos'
+                : which === 'privacy'
+                ? 'legal-privacy'
+                : 'legal-rg'
+            )
+          }
+        />
+      )}
 
       {/* ─── Block 1: Deposit (first-position per D-16 / DEPOSIT-01) ─ */}
       <BlockCard
@@ -436,17 +479,14 @@ export const MainMenu: React.FC<MainMenuProps> = ({ user, onNavigate, onClaimBon
         }}
       >
         {/*
-          NOTE (Plan 02-04): Plan 02-08 owns the legal AppView variants
-          ('legal-tos' / 'legal-privacy' / 'legal-rg') and the ConsentBanner.
-          At this plan's TS surface those variants don't exist yet, so the
-          click handlers are no-op placeholders that 02-08 will replace with
-          `onNavigate('legal-tos' | …)` calls once it extends the AppView.
+          Plan 02-08 wire-up: footer links dispatch onNavigate() with the
+          AppView variants that 02-08 adds to App.tsx. MainMenu's
+          AppNavigateTarget union already permissively allows these values
+          (pre-declared in Plan 02-04 for 02-08's extension).
         */}
         <button
           type="button"
-          onClick={() => {
-            /* Plan 02-08 wire-up */
-          }}
+          onClick={() => onNavigate('legal-tos')}
           style={linkButtonStyle}
         >
           Terms
@@ -454,9 +494,7 @@ export const MainMenu: React.FC<MainMenuProps> = ({ user, onNavigate, onClaimBon
         <span aria-hidden style={{ opacity: 0.4 }}>·</span>
         <button
           type="button"
-          onClick={() => {
-            /* Plan 02-08 wire-up */
-          }}
+          onClick={() => onNavigate('legal-privacy')}
           style={linkButtonStyle}
         >
           Privacy
@@ -464,9 +502,7 @@ export const MainMenu: React.FC<MainMenuProps> = ({ user, onNavigate, onClaimBon
         <span aria-hidden style={{ opacity: 0.4 }}>·</span>
         <button
           type="button"
-          onClick={() => {
-            /* Plan 02-08 wire-up */
-          }}
+          onClick={() => onNavigate('legal-rg')}
           style={linkButtonStyle}
         >
           Responsible Gaming

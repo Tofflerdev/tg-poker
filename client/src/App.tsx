@@ -6,6 +6,10 @@ import { TableList } from "./pages/TableList";
 import { GameRoom } from "./pages/GameRoom";
 import { ProfileSettings } from "./pages/ProfileSettings";
 import { Deposit } from "./pages/Deposit";
+import { Consent } from "./pages/Consent";
+import { ToS } from "./pages/legal/ToS";
+import { Privacy } from "./pages/legal/Privacy";
+import { ResponsibleGaming } from "./pages/legal/ResponsibleGaming";
 import "./styles/telegram.css";
 import "./styles/neon.css";
 import type {
@@ -28,11 +32,27 @@ const DevToolbar = import.meta.env.DEV
 const SOCKET_URL = import.meta.env.DEV ? "http://localhost:3000" : window.location.origin;
 const socket: Socket<ExtendedServerEvents, ExtendedClientEvents> = io(SOCKET_URL);
 
-// AppView union — Plan 02-04 adds 'deposit' (D-17, DEPOSIT-02).
-// Plan 02-08 will extend this with 'consent' + 'legal-tos'/'legal-privacy'/'legal-rg';
-// MainMenu's onNavigate prop already accepts those target strings as a permissive
-// union so 02-08's addition won't require reshaping the MainMenu API.
-type AppView = 'loading' | 'auth' | 'menu' | 'tables' | 'game' | 'profile' | 'deposit';
+// AppView union — Plan 02-04 added 'deposit' (D-17, DEPOSIT-02).
+// Plan 02-08 extends with:
+//   'consent'       — first-launch consent gate (D-27, COMPLIANCE-02)
+//   'legal-tos'     — static ToS page (D-26, COMPLIANCE-01)
+//   'legal-privacy' — static Privacy Policy page
+//   'legal-rg'      — static Responsible Gaming page (D-30, COMPLIANCE-05)
+// MainMenu's onNavigate prop already accepts these target strings permissively
+// (Plan 02-04 pre-declared them in the AppNavigateTarget union so 02-08's
+// addition here required no reshaping of the MainMenu API).
+type AppView =
+  | 'loading'
+  | 'auth'
+  | 'menu'
+  | 'tables'
+  | 'game'
+  | 'profile'
+  | 'deposit'
+  | 'consent'
+  | 'legal-tos'
+  | 'legal-privacy'
+  | 'legal-rg';
 
 /**
  * Get a stable dev player ID from URL params or sessionStorage.
