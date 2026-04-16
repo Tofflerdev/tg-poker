@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  NightRiver — icon-only favicon (SVG, served at /favicon.svg).
+  Modern browsers honor <link rel="icon" type="image/svg+xml"> at any size.
+  Fallback to favicon.ico (pending — no image-raster tooling in this env).
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <!-- dark Neon Strip surface -->
+  <rect width="64" height="64" rx="12" fill="#0a0a0e"/>
+  <!-- cyan crescent moon -->
+  <g>
+    <circle cx="32" cy="26" r="14"
+            fill="none" stroke="#00e5ff" stroke-width="2.5"/>
+    <circle cx="38" cy="22" r="12" fill="#0a0a0e"/>
+  </g>
+  <!-- river sweeps in cyan -->
+  <path d="M 6 48 C 18 42, 28 54, 38 48 S 54 42, 58 48"
+        fill="none" stroke="#00e5ff" stroke-width="2" stroke-linecap="round"/>
+  <path d="M 6 54 C 18 48, 28 60, 38 54 S 54 48, 58 54"
+        fill="none" stroke="#00e5ff" stroke-width="1.5"
+        stroke-linecap="round" opacity="0.6"/>
+  <!-- amber reflection dots -->
+  <circle cx="18" cy="50" r="1.2" fill="#ffab00"/>
+  <circle cx="32" cy="52" r="1.2" fill="#ffab00"/>
+  <circle cx="46" cy="50" r="1.2" fill="#ffab00"/>
+</svg>
