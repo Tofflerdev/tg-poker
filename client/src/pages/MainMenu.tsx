@@ -33,7 +33,8 @@ export const MainMenu: React.FC<MainMenuProps> = ({
   };
 
   React.useEffect(() => {
-    setHeaderColor('#2481cc');
+    // Plan 02-03: dark Neon Strip surface (matches --color-surface-base).
+    setHeaderColor('#0a0a0e');
     hideMainButton();
 
     return () => {
@@ -322,7 +323,7 @@ export const MainMenu: React.FC<MainMenuProps> = ({
           border-radius: 12px;
           cursor: pointer;
           transition: transform 0.2s, box-shadow 0.2s;
-          background: var(--tg-theme-button-color, #2481cc);
+          background: var(--tg-theme-button-color, #0a0a0e);
           color: var(--tg-theme-button-text-color, #fff);
           font-size: 14px;
           font-weight: 600;

@@ -154,7 +154,7 @@ export const ProfileSettings: React.FC<ProfileSettingsProps> = ({ socket, onBack
           height: 100px;
           border-radius: 50%;
           object-fit: cover;
-          border: 3px solid var(--tg-theme-button-color, #2481cc);
+          border: 3px solid var(--tg-theme-button-color, #0a0a0e);
         }
         .form-group {
           margin-bottom: 15px;
@@ -176,7 +176,7 @@ export const ProfileSettings: React.FC<ProfileSettingsProps> = ({ socket, onBack
         .save-btn {
           width: 100%;
           padding: 12px;
-          background: var(--tg-theme-button-color, #2481cc);
+          background: var(--tg-theme-button-color, #0a0a0e);
           color: var(--tg-theme-button-text-color, #fff);
           border: none;
           border-radius: 8px;

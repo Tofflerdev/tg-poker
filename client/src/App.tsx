@@ -106,8 +106,11 @@ const App: React.FC = () => {
     if (isReady) {
       ready();
       expand();
-      setHeaderColor('#2481cc');
-      setBackgroundColor('#f1f1f1');
+      // Plan 02-03: Telegram chrome follows the Neon Strip dark surface (#0a0a0e).
+      // Hex literal is required — Telegram WebApp API takes a literal string, not
+      // a CSS var. Value matches --color-surface-base in client/src/styles/neon.css.
+      setHeaderColor('#0a0a0e');
+      setBackgroundColor('#0a0a0e');
 
       // Lock orientation to portrait (Telegram Bot API 8.0+)
       const webApp = window.Telegram?.WebApp;

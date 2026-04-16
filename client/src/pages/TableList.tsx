@@ -12,7 +12,8 @@ export const TableList: React.FC<TableListProps> = ({ tables, onSelectTable, onB
   const { showBackButton, hideBackButton, hapticFeedback, setHeaderColor } = useTelegram();
 
   React.useEffect(() => {
-    setHeaderColor('#2481cc');
+    // Plan 02-03: dark Neon Strip surface (matches --color-surface-base).
+    setHeaderColor('#0a0a0e');
     showBackButton(onBack);
 
     return () => {
@@ -279,7 +280,7 @@ export const TableList: React.FC<TableListProps> = ({ tables, onSelectTable, onB
         }
 
         .join-button {
-          background: var(--tg-theme-button-color, #2481cc);
+          background: var(--tg-theme-button-color, #0a0a0e);
           color: var(--tg-theme-button-text-color, #fff);
           border: none;
           padding: 8px 16px;

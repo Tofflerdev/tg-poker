@@ -7,8 +7,11 @@
   --tg-color-bg: var(--tg-theme-bg-color, #ffffff);
   --tg-color-text: var(--tg-theme-text-color, #000000);
   --tg-color-hint: var(--tg-theme-hint-color, #999999);
-  --tg-color-link: var(--tg-theme-link-color, #2481cc);
-  --tg-color-button: var(--tg-theme-button-color, #2481cc);
+  /* Plan 02-03: fallback hex swapped from Telegram blue to the Neon Strip
+     dark surface (#0a0a0e). Telegram WebApp injects its own theme vars at
+     runtime; these fallbacks only fire outside Telegram. */
+  --tg-color-link: var(--tg-theme-link-color, #0a0a0e);
+  --tg-color-button: var(--tg-theme-button-color, #0a0a0e);
   --tg-color-button-text: var(--tg-theme-button-text-color, #ffffff);
   --tg-color-secondary-bg: var(--tg-theme-secondary-bg-color, #f1f1f1);
   
