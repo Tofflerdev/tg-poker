@@ -1,6 +1,7 @@
 import React from 'react';
 import type { TableInfo } from '../../../types/index';
 import { useTelegram } from '../hooks/useTelegram';
+import { Badge, Card, Button, type ActionTier } from '../components/ui';
 
 interface TableListProps {
   tables: TableInfo[];
@@ -8,8 +9,67 @@ interface TableListProps {
   onBack: () => void;
 }
 
-export const TableList: React.FC<TableListProps> = ({ tables, onSelectTable, onBack }) => {
-  const { showBackButton, hideBackButton, hapticFeedback, setHeaderColor } = useTelegram();
+/**
+ * Plan 02-05 (UI-02):
+ * Table List redesigned in Neon Strip — grouped by stake tier (D-18) with
+ * tier-colored section headers (D-19). High Stakes uses `fold` (red) per
+ * RESEARCH Q9 — red distinguishes more cleanly from Pro's amber than the
+ * allin orange does.
+ *
+ * Tier classification keyed off bigBlind (matches server/config/tables.ts):
+ *   bb ≤ 10  → Beginner    (sit / green)
+ *   bb ≤ 20  → Standard    (call / cyan)
+ *   bb ≤ 50  → Pro         (raise / amber)
+ *   else     → High Stakes (fold / red)
+ *
+ * Visual layer only — data flow (tables prop, onSelectTable, onBack)
+ * preserved from the previous implementation.
+ */
+
+type Tier = 'Beginner' | 'Standard' | 'Pro' | 'High Stakes';
+
+const TIER_ORDER: readonly Tier[] = [
+  'Beginner',
+  'Standard',
+  'Pro',
+  'High Stakes',
+] as const;
+
+const TIER_VARIANT: Record<Tier, ActionTier> = {
+  Beginner: 'sit',
+  Standard: 'call',
+  Pro: 'raise',
+  'High Stakes': 'fold',
+};
+
+function tierOf(t: TableInfo): Tier {
+  const bb = t.config.bigBlind;
+  if (bb <= 10) return 'Beginner';
+  if (bb <= 20) return 'Standard';
+  if (bb <= 50) return 'Pro';
+  return 'High Stakes';
+}
+
+function groupByTier(tables: TableInfo[]): Record<Tier, TableInfo[]> {
+  const groups: Record<Tier, TableInfo[]> = {
+    Beginner: [],
+    Standard: [],
+    Pro: [],
+    'High Stakes': [],
+  };
+  for (const t of tables) {
+    groups[tierOf(t)].push(t);
+  }
+  return groups;
+}
+
+export const TableList: React.FC<TableListProps> = ({
+  tables,
+  onSelectTable,
+  onBack,
+}) => {
+  const { showBackButton, hideBackButton, hapticFeedback, setHeaderColor } =
+    useTelegram();
 
   React.useEffect(() => {
     // Plan 02-03: dark Neon Strip surface (matches --color-surface-base).
@@ -21,279 +81,359 @@ export const TableList: React.FC<TableListProps> = ({ tables, onSelectTable, onB
     };
   }, [showBackButton, hideBackButton, setHeaderColor, onBack]);
 
-  const handleSelect = (tableId: string) => {
+  const handleSelect = (table: TableInfo) => {
     hapticFeedback?.impactOccurred('light');
-    onSelectTable(tableId);
+    onSelectTable(table.id);
   };
 
-  const getStatusIcon = (status: TableInfo['status']) => {
-    switch (status) {
-      case 'waiting':
-        return '🟢';
-      case 'playing':
-        return '🔵';
-      case 'full':
-        return '🔴';
-      default:
-        return '⚪';
-    }
+  const handleBackClick = () => {
+    hapticFeedback?.impactOccurred('light');
+    onBack();
   };
 
-  const getStatusText = (status: TableInfo['status']) => {
-    switch (status) {
-      case 'waiting':
-        return 'Ожидание';
-      case 'playing':
-        return 'Идёт игра';
-      case 'full':
-        return 'Полный';
-      default:
-        return 'Неизвестно';
-    }
-  };
-
-  const getCategoryIcon = (category: TableInfo['config']['category']) => {
-    switch (category) {
-      case 'cash':
-        return '💵';
-      case 'tournament':
-        return '🏆';
-      case 'sitngo':
-        return '⚡';
-      default:
-        return '🎲';
-    }
-  };
+  const groups = groupByTier(tables);
 
   return (
-    <div className="table-list">
-      <div className="list-header">
-        <h1>Выбор стола</h1>
-        <p className="subtitle">Доступно столов: {tables.length}</p>
+    <div
+      style={{
+        minHeight: '100vh',
+        background: 'var(--color-surface-base)',
+        paddingTop: 'max(env(safe-area-inset-top), 16px)',
+        paddingBottom: 'max(env(safe-area-inset-bottom), 16px)',
+        paddingLeft: 16,
+        paddingRight: 16,
+        color: '#fff',
+      }}
+    >
+      {/* Header: back + title */}
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 12,
+          marginBottom: 20,
+        }}
+      >
+        <Button
+          variant="neutral"
+          onClick={handleBackClick}
+          aria-label="Back"
+          style={{
+            minHeight: 40,
+            minWidth: 40,
+            padding: '0 12px',
+            fontSize: 14,
+          }}
+        >
+          ← Back
+        </Button>
+        <h1
+          style={{
+            margin: 0,
+            fontSize: 22,
+            fontWeight: 700,
+            letterSpacing: '0.04em',
+            textTransform: 'uppercase',
+            color: '#fff',
+          }}
+        >
+          Tables
+        </h1>
       </div>
 
-      <div className="tables-container">
-        {tables.length === 0 ? (
-          <div className="empty-state">
-            <span className="empty-icon">🎲</span>
-            <p>Нет доступных столов</p>
-          </div>
-        ) : (
-          tables.map((table) => (
-            <div
-              key={table.id}
-              className={`table-card ${table.status}`}
-              onClick={() => handleSelect(table.id)}
-            >
-              <div className="table-card-header">
-                <div className="table-name">
-                  {getCategoryIcon(table.config.category)}
-                  <span>{table.name}</span>
-                </div>
-                <div className={`table-status ${table.status}`}>
-                  {getStatusIcon(table.status)}
-                  <span>{getStatusText(table.status)}</span>
-                </div>
-              </div>
-
-              <div className="table-card-body">
-                <div className="info-row">
-                  <span className="info-label">Блайнды:</span>
-                  <span className="info-value">
-                    {table.config.smallBlind}/{table.config.bigBlind}
-                  </span>
-                </div>
-                <div className="info-row">
-                  <span className="info-label">Buy-in:</span>
-                  <span className="info-value">
-                    {table.config.buyIn.toLocaleString()}
-                  </span>
-                </div>
-                <div className="info-row">
-                  <span className="info-label">Ход:</span>
-                  <span className="info-value">
-                    {table.config.turnTime} сек
-                  </span>
-                </div>
-              </div>
-
-              <div className="table-card-footer">
-                <div className="players-count">
-                  <span className="players-icon">👥</span>
-                  <span>
-                    {table.playerCount}/{table.maxPlayers} игроков
-                  </span>
-                </div>
-                <button className="join-button">
-                  {table.status === 'full' ? 'Наблюдать' : 'Присоединиться'}
-                </button>
-              </div>
-            </div>
-          ))
-        )}
-      </div>
-
-      <style>{`
-        .table-list {
-          min-height: 100vh;
-          background: var(--tg-theme-bg-color, #f1f1f1);
-          padding: 16px;
-        }
-
-        .list-header {
-          margin-bottom: 20px;
-        }
-
-        .list-header h1 {
-          margin: 0;
-          font-size: 24px;
-          color: var(--tg-theme-text-color, #000);
-        }
-
-        .subtitle {
-          margin: 4px 0 0 0;
-          color: var(--tg-theme-hint-color, #999);
-          font-size: 14px;
-        }
-
-        .tables-container {
-          display: flex;
-          flex-direction: column;
-          gap: 12px;
-        }
-
-        .empty-state {
-          text-align: center;
-          padding: 60px 20px;
-          color: var(--tg-theme-hint-color, #999);
-        }
-
-        .empty-icon {
-          font-size: 48px;
-          display: block;
-          margin-bottom: 16px;
-        }
-
-        .table-card {
-          background: var(--tg-theme-secondary-bg-color, #fff);
-          border-radius: 12px;
-          padding: 16px;
-          cursor: pointer;
-          transition: transform 0.2s, box-shadow 0.2s;
-          border: 2px solid transparent;
-        }
-
-        .table-card:active {
-          transform: scale(0.98);
-        }
-
-        .table-card.waiting {
-          border-color: #4CAF50;
-        }
-
-        .table-card.playing {
-          border-color: #2196F3;
-        }
-
-        .table-card.full {
-          border-color: #f44336;
-          opacity: 0.8;
-        }
-
-        .table-card-header {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          margin-bottom: 12px;
-          padding-bottom: 12px;
-          border-bottom: 1px solid rgba(0,0,0,0.1);
-        }
-
-        .table-name {
-          display: flex;
-          align-items: center;
-          gap: 8px;
-          font-size: 16px;
-          font-weight: 600;
-          color: var(--tg-theme-text-color, #000);
-        }
-
-        .table-status {
-          display: flex;
-          align-items: center;
-          gap: 4px;
-          font-size: 12px;
-          padding: 4px 8px;
-          border-radius: 12px;
-          background: rgba(0,0,0,0.05);
-        }
-
-        .table-status.waiting {
-          background: rgba(76, 175, 80, 0.1);
-          color: #4CAF50;
-        }
-
-        .table-status.playing {
-          background: rgba(33, 150, 243, 0.1);
-          color: #2196F3;
-        }
-
-        .table-status.full {
-          background: rgba(244, 67, 54, 0.1);
-          color: #f44336;
-        }
-
-        .table-card-body {
-          margin-bottom: 12px;
-        }
-
-        .info-row {
-          display: flex;
-          justify-content: space-between;
-          margin-bottom: 4px;
-          font-size: 14px;
-        }
-
-        .info-label {
-          color: var(--tg-theme-hint-color, #999);
-        }
-
-        .info-value {
-          color: var(--tg-theme-text-color, #000);
-          font-weight: 500;
-        }
-
-        .table-card-footer {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          padding-top: 12px;
-          border-top: 1px solid rgba(0,0,0,0.1);
-        }
-
-        .players-count {
-          display: flex;
-          align-items: center;
-          gap: 4px;
-          font-size: 14px;
-          color: var(--tg-theme-hint-color, #999);
-        }
-
-        .join-button {
-          background: var(--tg-theme-button-color, #0a0a0e);
-          color: var(--tg-theme-button-text-color, #fff);
-          border: none;
-          padding: 8px 16px;
-          border-radius: 8px;
-          font-size: 14px;
-          font-weight: 500;
-          cursor: pointer;
-        }
-
-        .table-card.full .join-button {
-          background: var(--tg-theme-hint-color, #999);
-        }
-      `}</style>
+      {tables.length === 0 ? (
+        <EmptyState />
+      ) : (
+        <div
+          style={{
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 20,
+          }}
+        >
+          {TIER_ORDER.map((tier) => {
+            const tierTables = groups[tier];
+            if (tierTables.length === 0) return null;
+            return (
+              <TierSection
+                key={tier}
+                tier={tier}
+                tables={tierTables}
+                onSelect={handleSelect}
+              />
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 };
+
+/* ---------- Internal pieces ---------- */
+
+interface TierSectionProps {
+  tier: Tier;
+  tables: TableInfo[];
+  onSelect: (table: TableInfo) => void;
+}
+
+const TierSection: React.FC<TierSectionProps> = ({ tier, tables, onSelect }) => {
+  const variant = TIER_VARIANT[tier];
+  return (
+    <section
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 8,
+      }}
+    >
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 10,
+          paddingLeft: 2,
+          marginBottom: 2,
+        }}
+      >
+        <Badge variant={variant}>{tier}</Badge>
+        <span
+          style={{
+            flex: 1,
+            height: 1,
+            background: `color-mix(in srgb, ${tierColorVar(variant)} 25%, transparent)`,
+          }}
+        />
+        <span
+          style={{
+            fontSize: 11,
+            color: 'var(--color-neutral)',
+            letterSpacing: '0.05em',
+            textTransform: 'uppercase',
+          }}
+        >
+          {tables.length} {tables.length === 1 ? 'table' : 'tables'}
+        </span>
+      </div>
+
+      <div
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 8,
+        }}
+      >
+        {tables.map((table) => (
+          <TableRow
+            key={table.id}
+            table={table}
+            variant={variant}
+            onSelect={onSelect}
+          />
+        ))}
+      </div>
+    </section>
+  );
+};
+
+interface TableRowProps {
+  table: TableInfo;
+  variant: ActionTier;
+  onSelect: (table: TableInfo) => void;
+}
+
+const TableRow: React.FC<TableRowProps> = ({ table, variant, onSelect }) => {
+  const isFull = table.playerCount >= table.maxPlayers;
+  const isActive = table.status === 'playing';
+
+  return (
+    <Card
+      variant={variant}
+      padding={0}
+      onClick={() => onSelect(table)}
+      role="button"
+      tabIndex={0}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          onSelect(table);
+        }
+      }}
+      style={{
+        cursor: 'pointer',
+        opacity: isFull ? 0.5 : 1,
+        transition: 'opacity .15s, box-shadow .15s, transform .1s',
+        WebkitTapHighlightColor: 'transparent',
+      }}
+      className="active:scale-[0.99]"
+    >
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 12,
+          padding: '12px 14px',
+          minHeight: 56,
+        }}
+      >
+        {/* Left: name + live indicator */}
+        <div
+          style={{
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 2,
+            minWidth: 0,
+            flex: 1,
+          }}
+        >
+          <div
+            style={{
+              color: '#fff',
+              fontSize: 14,
+              fontWeight: 600,
+              letterSpacing: '0.01em',
+              whiteSpace: 'nowrap',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+            }}
+          >
+            {table.name}
+          </div>
+          <div
+            style={{
+              fontSize: 10,
+              letterSpacing: '0.06em',
+              textTransform: 'uppercase',
+              color: isActive
+                ? 'var(--color-active)'
+                : 'var(--color-neutral)',
+              textShadow: isActive ? '0 0 6px var(--glow-call)' : 'none',
+            }}
+          >
+            {isActive ? 'Live' : isFull ? 'Full' : 'Open'}
+          </div>
+        </div>
+
+        {/* Middle: blinds */}
+        <div
+          style={{
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'flex-end',
+            minWidth: 58,
+          }}
+        >
+          <span
+            style={{
+              fontFamily:
+                'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
+              fontSize: 13,
+              color: 'var(--color-chip)',
+              textShadow: '0 0 6px var(--glow-raise)',
+              letterSpacing: '0.02em',
+            }}
+          >
+            {table.config.smallBlind}/{table.config.bigBlind}
+          </span>
+          <span
+            style={{
+              fontSize: 9,
+              color: 'var(--color-neutral)',
+              letterSpacing: '0.06em',
+              textTransform: 'uppercase',
+              marginTop: 1,
+            }}
+          >
+            Blinds
+          </span>
+        </div>
+
+        {/* Right: buy-in + N/6 */}
+        <div
+          style={{
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'flex-end',
+            minWidth: 64,
+          }}
+        >
+          <span
+            style={{
+              fontFamily:
+                'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
+              fontSize: 13,
+              color: 'var(--color-chip)',
+              textShadow: '0 0 6px var(--glow-raise)',
+              letterSpacing: '0.02em',
+            }}
+          >
+            {table.config.buyIn.toLocaleString()}
+          </span>
+          <span
+            style={{
+              fontSize: 10,
+              color: '#fff',
+              fontFamily:
+                'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
+              letterSpacing: '0.02em',
+              marginTop: 2,
+            }}
+          >
+            {table.playerCount}/{table.maxPlayers}
+          </span>
+        </div>
+      </div>
+    </Card>
+  );
+};
+
+const EmptyState: React.FC = () => (
+  <Card
+    variant="neutral"
+    style={{
+      marginTop: 40,
+      textAlign: 'center',
+      padding: '40px 20px',
+    }}
+  >
+    <div
+      style={{
+        fontSize: 14,
+        color: 'var(--color-neutral)',
+        letterSpacing: '0.04em',
+        textTransform: 'uppercase',
+      }}
+    >
+      No tables available
+    </div>
+  </Card>
+);
+
+/* ---------- Helpers ---------- */
+
+/**
+ * Map an ActionTier variant to its matching CSS custom property reference.
+ * Kept inline because this is the one place in this file where we need the
+ * raw token string for `color-mix()` interpolation (the separator rule).
+ * No hex literals — all routes through the shared neon.css tokens.
+ */
+function tierColorVar(variant: ActionTier): string {
+  switch (variant) {
+    case 'fold':
+      return 'var(--color-action-fold)';
+    case 'call':
+      return 'var(--color-action-call)';
+    case 'raise':
+      return 'var(--color-action-raise)';
+    case 'allin':
+      return 'var(--color-action-allin)';
+    case 'sit':
+      return 'var(--color-action-sit)';
+    case 'active':
+      return 'var(--color-active)';
+    case 'neutral':
+    default:
+      return 'var(--color-neutral)';
+  }
+}
