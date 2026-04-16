@@ -26,10 +26,10 @@ Requirements are grouped by category. Each has a unique `CATEGORY-NN` ID used by
 
 ### AVATAR — Custom Avatar System
 
-- [ ] **AVATAR-01** — 20 curated anthropomorphic-animal-playing-poker avatar assets ship as hashed Vite bundle assets (WebP).
-- [ ] **AVATAR-02** — New users are assigned a random avatar on first successful Telegram auth, atomically (UPDATE WHERE avatarId IS NULL — no client-side race).
-- [ ] **AVATAR-03** — User can re-pick their avatar from the Profile / Avatar tab; the choice replaces the Telegram avatar everywhere the app shows a user image.
-- [ ] **AVATAR-04** — `SeatsDisplay` renders each seat's avatar (falling back to initial-letter only if a user somehow has no `avatarId`).
+- [x] **AVATAR-01** — 20 curated anthropomorphic-animal-playing-poker avatar assets ship as hashed Vite bundle assets (WebP).
+- [x] **AVATAR-02** — New users are assigned a random avatar on first successful Telegram auth, atomically (UPDATE WHERE avatarId IS NULL — no client-side race).
+- [x] **AVATAR-03** — User can re-pick their avatar from the Profile / Avatar tab; the choice replaces the Telegram avatar everywhere the app shows a user image.
+- [x] **AVATAR-04** — `SeatsDisplay` renders each seat's avatar (falling back to initial-letter only if a user somehow has no `avatarId`).
 
 ### PROFILE — Profile Expansion & Hand History
 
@@ -149,10 +149,10 @@ All requirements above are:
 | UI-03 | Phase 2 | Pending |
 | UI-04 | Phase 2 | Pending |
 | UI-05 | Phase 2 | Pending |
-| AVATAR-01 | Phase 2 | Pending |
-| AVATAR-02 | Phase 2 | Pending |
-| AVATAR-03 | Phase 2 | Pending |
-| AVATAR-04 | Phase 2 | Pending |
+| AVATAR-01 | Phase 2 | Complete |
+| AVATAR-02 | Phase 2 | Complete |
+| AVATAR-03 | Phase 2 | Complete |
+| AVATAR-04 | Phase 2 | Complete |
 | PROFILE-01 | Phase 2 | Pending |
 | PROFILE-02 | Phase 3 | Pending |
 | PROFILE-03 | Phase 3 | Pending |
