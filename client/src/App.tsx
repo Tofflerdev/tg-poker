@@ -5,6 +5,7 @@ import { MainMenu } from "./pages/MainMenu";
 import { TableList } from "./pages/TableList";
 import { GameRoom } from "./pages/GameRoom";
 import { ProfileSettings } from "./pages/ProfileSettings";
+import { Deposit } from "./pages/Deposit";
 import "./styles/telegram.css";
 import "./styles/neon.css";
 import type {
@@ -27,7 +28,11 @@ const DevToolbar = import.meta.env.DEV
 const SOCKET_URL = import.meta.env.DEV ? "http://localhost:3000" : window.location.origin;
 const socket: Socket<ExtendedServerEvents, ExtendedClientEvents> = io(SOCKET_URL);
 
-type AppView = 'loading' | 'auth' | 'menu' | 'tables' | 'game' | 'profile';
+// AppView union — Plan 02-04 adds 'deposit' (D-17, DEPOSIT-02).
+// Plan 02-08 will extend this with 'consent' + 'legal-tos'/'legal-privacy'/'legal-rg';
+// MainMenu's onNavigate prop already accepts those target strings as a permissive
+// union so 02-08's addition won't require reshaping the MainMenu API.
+type AppView = 'loading' | 'auth' | 'menu' | 'tables' | 'game' | 'profile' | 'deposit';
 
 /**
  * Get a stable dev player ID from URL params or sessionStorage.
@@ -360,10 +365,25 @@ const App: React.FC = () => {
         {devToolbar}
         <MainMenu
           user={currentUser}
-          tables={tables}
-          onSelectTable={handleSelectTable}
-          onShowTables={handleShowTables}
-          onOpenProfile={handleOpenProfile}
+          onNavigate={(target) => {
+            // Plan 02-04: MainMenu uses a single onNavigate(view) prop.
+            // Only the AppView variants that exist in this milestone are
+            // dispatched — legal/consent targets (Plan 02-08) and unrecognized
+            // values are intentionally dropped (no-op click).
+            if (
+              target === 'menu' ||
+              target === 'tables' ||
+              target === 'game' ||
+              target === 'profile' ||
+              target === 'deposit'
+            ) {
+              hapticFeedback?.impactOccurred(target === 'profile' ? 'light' : 'medium');
+              // 'tables' shortcut also triggers a fresh fetch to match the
+              // pre-redesign handleShowTables() behavior.
+              if (target === 'tables') socket.emit('getTables');
+              setView(target);
+            }
+          }}
           onClaimBonus={handleClaimBonus}
         />
       </>
@@ -393,6 +413,16 @@ const App: React.FC = () => {
           socket={socket}
           onBack={handleBackFromProfile}
         />
+      </>
+    );
+  }
+
+  // Deposit view (Plan 02-04, D-17 / DEPOSIT-02) — "Coming soon" stub.
+  if (view === 'deposit') {
+    return (
+      <>
+        {devToolbar}
+        <Deposit onBack={() => setView('menu')} />
       </>
     );
   }
