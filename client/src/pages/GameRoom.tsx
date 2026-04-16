@@ -3,6 +3,7 @@ import { Socket } from "socket.io-client";
 import Table from "../components/Table";
 import GameControls from "../components/GameControls";
 import Chat from "../components/Chat";
+import { Button } from "../components/ui";
 import type { GameState, ShowdownResult, TelegramUser, ExtendedServerEvents, ExtendedClientEvents } from "../../../types/index";
 import { useTelegram } from "../hooks/useTelegram";
 import { useIsMobile } from "../hooks/useIsMobile";
@@ -110,59 +111,62 @@ export const GameRoom: React.FC<GameRoomProps> = ({
 
   return (
     <div className="h-[100dvh] bg-gradient-to-b from-[#0d1b0f] to-[#1a2e1a] flex flex-col overflow-hidden">
-      {/* Header — compact on mobile */}
-      <div className="flex justify-between items-center px-3 md:px-4 py-2 md:py-3 bg-black/30 text-white z-10">
-        <div className="flex items-center gap-3">
-          {/* Menu/back button area */}
-          <button
-            onClick={() => {
-              showConfirm("Покинуть стол?", (confirmed) => {
-                if (confirmed) onLeaveTable();
-              });
-            }}
-            className="p-1.5 bg-white/10 rounded-lg hover:bg-white/20 transition-colors"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-            </svg>
-          </button>
+      {/*
+        Chrome header (D-24 / D-25 / UI-04):
+        - Top-left table/phase label REMOVED outright (pot at center, phase self-evident).
+        - Top-right pot label REMOVED outright (redundant with PotDisplay).
+        - Back-to-menu affordance retained as small top-left chrome button (ui/Button variant="neutral").
+        - Chat button retained at top-right (chrome affordance, not a data label).
+        Safe-area paddingTop so the back button is reachable under Telegram header.
+      */}
+      <div
+        className="flex justify-between items-center px-3 md:px-4 py-2 md:py-3 text-white z-10"
+        style={{ paddingTop: 'max(env(safe-area-inset-top, 0px), 8px)' }}
+      >
+        <Button
+          variant="neutral"
+          onClick={() => {
+            showConfirm("Покинуть стол?", (confirmed) => {
+              if (confirmed) onLeaveTable();
+            });
+          }}
+          aria-label="Back to menu"
+          style={{
+            minHeight: 0,
+            width: 44,
+            height: 44,
+            padding: 0,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            borderRadius: 12,
+          }}
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+          </svg>
+        </Button>
 
-          <div className="flex flex-col">
-            <span className="text-xs opacity-70">Table #{tableId.slice(-4)}</span>
-            <span className="text-xs font-medium uppercase text-white/80">{getStageText(gameState.stage)}</span>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-2">
-          {/* Pot display in header (mobile only — saves space) */}
-          {isMobile && (
-            <div className="flex items-center gap-1">
-              <span className="text-[10px] opacity-50">Pot</span>
-              <span className={`text-sm font-bold text-[#ffd700] ${showdown ? "animate-pulse" : ""}`}>
-                {gameState.totalPot.toLocaleString()}
-              </span>
-            </div>
-          )}
-
-          {!isMobile && (
-            <div className="flex items-center gap-2">
-              <span className="text-xs opacity-70">Pot:</span>
-              <span className={`text-lg font-bold text-[#ffd700] ${showdown ? "animate-pulse" : ""}`}>
-                {gameState.totalPot.toLocaleString()}
-              </span>
-            </div>
-          )}
-
-          {/* Chat + emoji buttons */}
-          <button
-            onClick={() => setIsChatOpen(true)}
-            className="p-1.5 md:p-2 bg-white/10 rounded-full hover:bg-white/20 transition-colors"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 md:h-5 md:w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
-            </svg>
-          </button>
-        </div>
+        {/* Chat opener — chrome only, not a data label */}
+        <Button
+          variant="neutral"
+          onClick={() => setIsChatOpen(true)}
+          aria-label="Open chat"
+          style={{
+            minHeight: 0,
+            width: 44,
+            height: 44,
+            padding: 0,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            borderRadius: 999,
+          }}
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 md:h-5 md:w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
+          </svg>
+        </Button>
       </div>
 
       {/* Main Game Area */}
@@ -252,22 +256,3 @@ export const GameRoom: React.FC<GameRoomProps> = ({
     </div>
   );
 };
-
-function getStageText(stage: GameState["stage"]): string {
-  switch (stage) {
-    case "waiting":
-      return "Waiting";
-    case "preflop":
-      return "Preflop";
-    case "flop":
-      return "Flop";
-    case "turn":
-      return "Turn";
-    case "river":
-      return "River";
-    case "showdown":
-      return "Showdown";
-    default:
-      return stage;
-  }
-}
