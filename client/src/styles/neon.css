@@ -13,6 +13,10 @@
   --color-chip: #ffab00;
   --color-neutral: #b0bec5;
 
+  /* Base surface — dark app background. Used by Telegram `setHeaderColor` and
+     Card primitive default background. Added in Phase 2 / Plan 02-01. */
+  --color-surface-base: #0a0a0e;
+
   /* Derived rgba glow tokens */
   --glow-fold: rgba(255, 71, 87, 0.35);
   --glow-call: rgba(0, 229, 255, 0.30);
