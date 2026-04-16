@@ -412,6 +412,7 @@ const App: React.FC = () => {
         <ProfileSettings
           socket={socket}
           onBack={handleBackFromProfile}
+          currentUser={currentUser}
         />
       </>
     );
