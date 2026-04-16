@@ -1,5 +1,16 @@
 import React, { useState, useEffect } from 'react';
-import { useTelegram } from '../hooks/useTelegram';
+import { Button } from './ui';
+
+/**
+ * DailyBonusButton — claim-state CTA rendered inside the MainMenu Daily Bonus block.
+ *
+ * Plan 02-04 refactor:
+ * - Visual swap to `<Button variant="sit">` (Neon Strip green — affirmative tier
+ *   per D-05). `emphasis` turns on when the bonus is claimable, giving the
+ *   inner-glow + low-alpha gradient treatment from the Plan 01 primitive.
+ * - Claim-state computation (balance <1000 AND last-claim >24h, or
+ *   server-provided `canClaimDaily` flag) is unchanged.
+ */
 
 interface DailyBonusButtonProps {
   balance: number;
@@ -8,11 +19,11 @@ interface DailyBonusButtonProps {
   onClaim: () => void;
 }
 
-export const DailyBonusButton: React.FC<DailyBonusButtonProps> = ({ 
-  balance, 
-  lastDailyRefill, 
+export const DailyBonusButton: React.FC<DailyBonusButtonProps> = ({
+  balance,
+  lastDailyRefill,
   canClaimDaily,
-  onClaim 
+  onClaim,
 }) => {
   const [timeLeft, setTimeLeft] = useState<string>('');
   const [isEligible, setIsEligible] = useState<boolean>(false);
@@ -21,13 +32,13 @@ export const DailyBonusButton: React.FC<DailyBonusButtonProps> = ({
     const checkEligibility = () => {
       if (balance >= 1000) {
         setIsEligible(false);
-        setTimeLeft('Balance >= 1000');
+        setTimeLeft('Balance ≥ 1000');
         return;
       }
 
       if (!lastDailyRefill) {
         setIsEligible(true);
-        setTimeLeft('Ready!');
+        setTimeLeft('Ready');
         return;
       }
 
@@ -37,7 +48,7 @@ export const DailyBonusButton: React.FC<DailyBonusButtonProps> = ({
 
       if (now >= nextClaimDate) {
         setIsEligible(true);
-        setTimeLeft('Ready!');
+        setTimeLeft('Ready');
       } else {
         setIsEligible(false);
         const diff = nextClaimDate.getTime() - now.getTime();
@@ -57,32 +68,33 @@ export const DailyBonusButton: React.FC<DailyBonusButtonProps> = ({
   useEffect(() => {
     if (canClaimDaily !== undefined) {
       setIsEligible(canClaimDaily);
-      if (canClaimDaily) setTimeLeft('Ready!');
+      if (canClaimDaily) setTimeLeft('Ready');
     }
   }, [canClaimDaily]);
 
   return (
-    <button 
-      className={`daily-bonus-btn ${isEligible ? 'active' : 'disabled'}`}
-      onClick={isEligible ? onClaim : undefined}
+    <Button
+      variant="sit"
+      emphasis={isEligible}
+      fullWidth
       disabled={!isEligible}
+      onClick={isEligible ? onClaim : undefined}
       style={{
-        padding: '10px 20px',
-        borderRadius: '12px',
-        border: 'none',
-        background: isEligible ? 'linear-gradient(45deg, #FFD700, #FFA500)' : '#333',
-        color: isEligible ? '#000' : '#888',
-        fontWeight: 'bold',
-        cursor: isEligible ? 'pointer' : 'not-allowed',
-        marginTop: '10px',
-        width: '100%',
         display: 'flex',
         justifyContent: 'space-between',
-        alignItems: 'center'
+        alignItems: 'center',
+        padding: '0 16px',
+        opacity: isEligible ? 1 : 0.55,
+        cursor: isEligible ? 'pointer' : 'not-allowed',
       }}
     >
-      <span>🎁 Daily Bonus</span>
-      <span>{timeLeft}</span>
-    </button>
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+        <span aria-hidden>🎁</span>
+        <span>Daily Bonus</span>
+      </span>
+      <span style={{ fontSize: 11, opacity: 0.85, letterSpacing: '0.05em' }}>
+        {timeLeft}
+      </span>
+    </Button>
   );
 };

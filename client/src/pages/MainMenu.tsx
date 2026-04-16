@@ -1,373 +1,491 @@
 import React from 'react';
 import { useTelegram } from '../hooks/useTelegram';
-import type { TableInfo, TelegramUser } from '../../../types/index';
+import type { TelegramUser } from '../../../types/index';
 import { DailyBonusButton } from '../components/DailyBonusButton';
+import { Card } from '../components/ui';
+import { avatarUrl, type AvatarId } from '../assets/avatars/manifest';
+import logoUrl from '../assets/logo.svg';
+
+/**
+ * MainMenu — Neon Strip redesign (Plan 02-04).
+ *
+ * Layout (top→bottom, mobile-first):
+ *   1. NightRiver logo header (Plan 02-03 asset)
+ *   2. Four Card blocks in locked order (D-16):
+ *        Deposit → Tables → Daily Bonus → Profile
+ *   3. Footer legal links (ToS · Privacy · Responsible Gaming)
+ *
+ * Avatar rendering uses `avatarUrl(currentUser.avatarId)` via the Plan 02-02
+ * manifest resolver. Telegram `photo_url` / legacy `avatarUrl` is NOT rendered
+ * (D-15). Initial-letter fallback fires when avatarId is missing (D-14).
+ *
+ * All block styling routes through `<Card variant>` from `../components/ui`;
+ * no inline NEON literal maps remain here.
+ *
+ * AppView navigation uses a single `onNavigate(view)` prop going forward so
+ * Plan 02-08 can extend with `consent` / `legal-*` variants without reshaping
+ * the API (planner recommendation).
+ */
+
+// AppView mirror — kept permissive to allow Plan 02-08 additions (`legal-*`,
+// `consent`) without breaking this component's prop contract. App.tsx narrows
+// to the exact union it supports in this milestone.
+export type AppNavigateTarget =
+  | 'menu'
+  | 'tables'
+  | 'game'
+  | 'profile'
+  | 'deposit'
+  | 'legal-tos'
+  | 'legal-privacy'
+  | 'legal-rg'
+  | 'consent';
 
 interface MainMenuProps {
   user: TelegramUser | null;
-  tables: TableInfo[];
-  onSelectTable: (tableId: string) => void;
-  onShowTables: () => void;
-  onOpenProfile: () => void;
+  onNavigate: (view: AppNavigateTarget) => void;
   onClaimBonus: () => void;
 }
 
-export const MainMenu: React.FC<MainMenuProps> = ({ 
-  user, 
-  tables, 
-  onSelectTable, 
-  onShowTables,
-  onOpenProfile,
-  onClaimBonus
-}) => {
+// Avatar sub-component with initial-letter fallback (D-14, D-15).
+const MenuAvatar: React.FC<{ user: TelegramUser }> = ({ user }) => {
+  const src = avatarUrl(user.avatarId as AvatarId | undefined);
+  const initial = (user.displayName || user.firstName || '?').trim().charAt(0).toUpperCase();
+
+  if (src) {
+    return (
+      <img
+        src={src}
+        alt={user.displayName || user.firstName}
+        style={{
+          width: 48,
+          height: 48,
+          borderRadius: 999,
+          objectFit: 'cover',
+          border: '1.5px solid color-mix(in srgb, var(--color-active) 55%, transparent)',
+          boxShadow: '0 0 10px var(--glow-call)',
+          flexShrink: 0,
+        }}
+      />
+    );
+  }
+
+  return (
+    <div
+      aria-hidden
+      style={{
+        width: 48,
+        height: 48,
+        borderRadius: 999,
+        display: 'grid',
+        placeItems: 'center',
+        background: 'color-mix(in srgb, var(--color-active) 12%, transparent)',
+        border: '1.5px solid color-mix(in srgb, var(--color-active) 55%, transparent)',
+        color: 'var(--color-active)',
+        boxShadow: '0 0 10px var(--glow-call)',
+        fontSize: 20,
+        fontWeight: 700,
+        flexShrink: 0,
+        textShadow: '0 0 6px var(--glow-call)',
+      }}
+    >
+      {initial}
+    </div>
+  );
+};
+
+// Interactive Card wrapper — makes a Card behave like a button with an
+// accent GlowBar at its bottom edge (matches the GameControls GlowBar
+// vocabulary). No dedicated primitive yet; kept inline so MainMenu owns
+// its tap-target recipe without adding a new ui/ entry.
+const BlockCard: React.FC<{
+  variant: 'raise' | 'call' | 'sit' | 'active';
+  onClick?: () => void;
+  children: React.ReactNode;
+  ariaLabel?: string;
+}> = ({ variant, onClick, children, ariaLabel }) => (
+  <div
+    role={onClick ? 'button' : undefined}
+    aria-label={ariaLabel}
+    tabIndex={onClick ? 0 : undefined}
+    onClick={onClick}
+    onKeyDown={
+      onClick
+        ? (e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              onClick();
+            }
+          }
+        : undefined
+    }
+    className={onClick ? 'active:scale-[0.98]' : undefined}
+    style={{
+      cursor: onClick ? 'pointer' : 'default',
+      transition: 'transform .1s',
+      WebkitTapHighlightColor: 'transparent',
+    }}
+  >
+    <Card variant={variant} glow padding={14} style={{ position: 'relative', minHeight: 72 }}>
+      {children}
+      {/* GlowBar accent at bottom edge (Neon Strip convention) */}
+      <div
+        aria-hidden
+        style={{
+          position: 'absolute',
+          left: 14,
+          right: 14,
+          bottom: 6,
+          height: 2,
+          borderRadius: 2,
+          background: `var(${
+            variant === 'raise'
+              ? '--color-action-raise'
+              : variant === 'call'
+              ? '--color-action-call'
+              : variant === 'sit'
+              ? '--color-action-sit'
+              : '--color-active'
+          })`,
+          opacity: 0.55,
+          boxShadow: `0 0 6px var(${
+            variant === 'raise'
+              ? '--glow-raise'
+              : variant === 'call'
+              ? '--glow-call'
+              : variant === 'sit'
+              ? '--glow-sit'
+              : '--glow-call'
+          })`,
+        }}
+      />
+    </Card>
+  </div>
+);
+
+const BlockRow: React.FC<{
+  title: string;
+  subtitle?: string;
+  titleColor: string;
+  right?: React.ReactNode;
+  left?: React.ReactNode;
+}> = ({ title, subtitle, titleColor, right, left }) => (
+  <div
+    style={{
+      display: 'flex',
+      alignItems: 'center',
+      gap: 14,
+      minHeight: 56,
+    }}
+  >
+    {left}
+    <div style={{ flex: 1, minWidth: 0 }}>
+      <div
+        style={{
+          color: titleColor,
+          fontSize: 16,
+          fontWeight: 700,
+          letterSpacing: '0.04em',
+          textTransform: 'uppercase',
+          textShadow: `0 0 8px ${titleColor}`,
+          lineHeight: 1.2,
+        }}
+      >
+        {title}
+      </div>
+      {subtitle && (
+        <div
+          style={{
+            marginTop: 3,
+            color: 'var(--color-neutral)',
+            fontSize: 12,
+            letterSpacing: '0.02em',
+            opacity: 0.8,
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+          }}
+        >
+          {subtitle}
+        </div>
+      )}
+    </div>
+    {right}
+  </div>
+);
+
+const ChevronRight: React.FC<{ color: string }> = ({ color }) => (
+  <span
+    aria-hidden
+    style={{
+      color,
+      fontSize: 22,
+      lineHeight: 1,
+      opacity: 0.7,
+      textShadow: `0 0 6px ${color}`,
+      flexShrink: 0,
+    }}
+  >
+    ›
+  </span>
+);
+
+export const MainMenu: React.FC<MainMenuProps> = ({ user, onNavigate, onClaimBonus }) => {
   const { hideMainButton, setHeaderColor, hapticFeedback } = useTelegram();
 
-  const handleSelectTableClick = (tableId: string) => {
-    hapticFeedback?.impactOccurred('medium');
-    onSelectTable(tableId);
-  };
-
-  const handleShowAllTables = () => {
-    hapticFeedback?.impactOccurred('light');
-    onShowTables();
-  };
-
   React.useEffect(() => {
-    // Plan 02-03: dark Neon Strip surface (matches --color-surface-base).
+    // Plan 02-03: Telegram chrome follows Neon Strip dark surface (--color-surface-base).
+    // Hex literal required — setHeaderColor takes a string, not a CSS var.
     setHeaderColor('#0a0a0e');
     hideMainButton();
-
     return () => {
       hideMainButton();
     };
   }, [hideMainButton, setHeaderColor]);
 
-  const getStatusIcon = (status: TableInfo['status']) => {
-    switch (status) {
-      case 'waiting':
-        return '🟢';
-      case 'playing':
-        return '🔵';
-      case 'full':
-        return '🔴';
-      default:
-        return '⚪';
-    }
+  const nav = (target: AppNavigateTarget, haptic: 'medium' | 'light' = 'medium') => () => {
+    hapticFeedback?.impactOccurred(haptic);
+    onNavigate(target);
   };
 
-  const firstThreeTables = tables.slice(0, 3);
+  const displayName = user?.displayName || user?.firstName || 'Player';
+  const balanceFormatted = user ? user.balance.toLocaleString() : '—';
 
   return (
-    <div className="main-menu">
-      <div className="menu-header">
-        <div className="logo">🃏 Poker App</div>
-        {user && (
-          <div className="user-greeting" onClick={onOpenProfile} style={{ cursor: 'pointer' }}>
-            <div className="user-info">
-              <img 
-                src={user.avatarUrl || user.photoUrl || 'https://via.placeholder.com/40'} 
-                alt="Avatar" 
-                className="user-avatar-small"
-                onError={(e) => { (e.target as HTMLImageElement).src = 'https://via.placeholder.com/40'; }}
-              />
-              <span>{user.displayName || user.firstName}</span>
-            </div>
-            <span className="settings-icon">⚙️</span>
-          </div>
-        )}
-      </div>
+    <div
+      style={{
+        minHeight: '100vh',
+        background:
+          'radial-gradient(ellipse at top, rgba(0,229,255,0.06) 0%, transparent 55%), #0a0a0e',
+        padding: 'max(env(safe-area-inset-top), 16px) 16px max(env(safe-area-inset-bottom), 16px) 16px',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 14,
+        color: '#e0f7fa',
+        maxWidth: 480,
+        margin: '0 auto',
+      }}
+    >
+      {/* ─── Header: NightRiver logo ─────────────────────────── */}
+      <header
+        style={{
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          padding: '8px 0 14px',
+        }}
+      >
+        <img
+          src={logoUrl}
+          alt="NightRiver"
+          style={{ height: 40, width: 'auto', maxWidth: '100%' }}
+        />
+      </header>
 
-      <div className="menu-content">
-        {user && (
-          <div className="balance-card">
-            <div className="balance-info">
-              <span className="balance-label">Ваш баланс:</span>
-              <span className="balance-value">{user.balance.toLocaleString()} 💰</span>
+      {/* ─── Block 1: Deposit (first-position per D-16 / DEPOSIT-01) ─ */}
+      <BlockCard
+        variant="raise"
+        onClick={nav('deposit', 'medium')}
+        ariaLabel="Deposit — add chips"
+      >
+        <BlockRow
+          title="Deposit"
+          subtitle="Add chips — coming soon"
+          titleColor="var(--color-action-raise)"
+          left={
+            <div
+              aria-hidden
+              style={{
+                width: 40,
+                height: 40,
+                borderRadius: 12,
+                display: 'grid',
+                placeItems: 'center',
+                border: '1.5px solid color-mix(in srgb, var(--color-action-raise) 50%, transparent)',
+                background: 'color-mix(in srgb, var(--color-action-raise) 10%, transparent)',
+                color: 'var(--color-action-raise)',
+                fontSize: 22,
+                flexShrink: 0,
+                textShadow: '0 0 8px var(--glow-raise)',
+              }}
+            >
+              💰
             </div>
-            <DailyBonusButton 
+          }
+          right={<ChevronRight color="var(--color-action-raise)" />}
+        />
+      </BlockCard>
+
+      {/* ─── Block 2: Tables ─────────────────────────────────── */}
+      <BlockCard
+        variant="call"
+        onClick={nav('tables', 'medium')}
+        ariaLabel="Play Now — browse tables"
+      >
+        <BlockRow
+          title="Play Now"
+          subtitle="Browse tables and join a seat"
+          titleColor="var(--color-action-call)"
+          left={
+            <div
+              aria-hidden
+              style={{
+                width: 40,
+                height: 40,
+                borderRadius: 12,
+                display: 'grid',
+                placeItems: 'center',
+                border: '1.5px solid color-mix(in srgb, var(--color-action-call) 50%, transparent)',
+                background: 'color-mix(in srgb, var(--color-action-call) 10%, transparent)',
+                color: 'var(--color-action-call)',
+                fontSize: 22,
+                flexShrink: 0,
+                textShadow: '0 0 8px var(--glow-call)',
+              }}
+            >
+              🃏
+            </div>
+          }
+          right={<ChevronRight color="var(--color-action-call)" />}
+        />
+      </BlockCard>
+
+      {/* ─── Block 3: Daily Bonus ────────────────────────────── */}
+      <BlockCard variant="sit">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <BlockRow
+            title="Daily Bonus"
+            subtitle={
+              user && user.balance >= 1000
+                ? 'Available when balance drops below 1,000'
+                : 'Top up your stack every 24 hours'
+            }
+            titleColor="var(--color-action-sit)"
+            left={
+              <div
+                aria-hidden
+                style={{
+                  width: 40,
+                  height: 40,
+                  borderRadius: 12,
+                  display: 'grid',
+                  placeItems: 'center',
+                  border: '1.5px solid color-mix(in srgb, var(--color-action-sit) 50%, transparent)',
+                  background: 'color-mix(in srgb, var(--color-action-sit) 10%, transparent)',
+                  color: 'var(--color-action-sit)',
+                  fontSize: 22,
+                  flexShrink: 0,
+                  textShadow: '0 0 8px var(--glow-sit)',
+                }}
+              >
+                🎁
+              </div>
+            }
+          />
+          {user && (
+            <DailyBonusButton
               balance={user.balance}
               lastDailyRefill={user.lastDailyRefill}
               canClaimDaily={user.canClaimDaily}
               onClaim={onClaimBonus}
             />
-          </div>
-        )}
-
-        <div className="menu-card">
-          <h2>Добро пожаловать!</h2>
-          <p>Играйте в техасский холдем покер прямо в Telegram.</p>
-          
-          <div className="stats-preview">
-            <div className="stat-item">
-              <span className="stat-value">♠️</span>
-              <span className="stat-label">Классический покер</span>
-            </div>
-            <div className="stat-item">
-              <span className="stat-value">⚡</span>
-              <span className="stat-label">Быстрые раздачи</span>
-            </div>
-            <div className="stat-item">
-              <span className="stat-value">💎</span>
-              <span className="stat-label">Разные лимиты</span>
-            </div>
-          </div>
-        </div>
-
-        <div className="tables-section">
-          <h3 className="tables-section-title">Доступные столы</h3>
-          
-          {firstThreeTables.length === 0 ? (
-            <div className="empty-tables">Нет доступных столов</div>
-          ) : (
-            <div className="tables-list">
-              {firstThreeTables.map((table) => (
-                <button
-                  key={table.id}
-                  className={`table-item ${table.status}`}
-                  onClick={() => handleSelectTableClick(table.id)}
-                  disabled={table.status === 'full'}
-                >
-                  <div className="table-item-header">
-                    <span className="table-item-name">{table.name}</span>
-                    <span className={`table-item-status ${table.status}`}>
-                      {getStatusIcon(table.status)}
-                    </span>
-                  </div>
-                  <div className="table-item-details">
-                    <span className="table-item-blinds">
-                      💰 {table.config.smallBlind}/{table.config.bigBlind}
-                    </span>
-                    <span className="table-item-players">
-                      👥 {table.playerCount}/{table.maxPlayers}
-                    </span>
-                  </div>
-                </button>
-              ))}
-            </div>
           )}
-
-          <button className="view-all-button" onClick={handleShowAllTables}>
-            <span>📋 Посмотреть все столы</span>
-          </button>
         </div>
-      </div>
+      </BlockCard>
 
-      <style>{`
-        .main-menu {
-          min-height: 100vh;
-          background: var(--tg-theme-bg-color, #f1f1f1);
-          padding: 16px;
-        }
+      {/* ─── Block 4: Profile ────────────────────────────────── */}
+      <BlockCard
+        variant="active"
+        onClick={nav('profile', 'light')}
+        ariaLabel="Profile and settings"
+      >
+        {user ? (
+          <BlockRow
+            title={displayName}
+            subtitle={`${balanceFormatted} chips`}
+            titleColor="var(--color-active)"
+            left={<MenuAvatar user={user} />}
+            right={<ChevronRight color="var(--color-active)" />}
+          />
+        ) : (
+          <BlockRow
+            title="Profile"
+            subtitle="Settings and stats"
+            titleColor="var(--color-active)"
+            right={<ChevronRight color="var(--color-active)" />}
+          />
+        )}
+      </BlockCard>
 
-        .menu-header {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          margin-bottom: 24px;
-        }
+      {/* Spacer to push footer down when there's vertical room */}
+      <div style={{ flex: 1, minHeight: 8 }} />
 
-        .logo {
-          font-size: 24px;
-          font-weight: bold;
-        }
-
-        .user-greeting {
-          display: flex;
-          align-items: center;
-          gap: 10px;
-          background: var(--tg-theme-secondary-bg-color, #fff);
-          padding: 5px 10px;
-          border-radius: 20px;
-          box-shadow: 0 2px 5px rgba(0,0,0,0.1);
-        }
-
-        .user-info {
-          display: flex;
-          align-items: center;
-          gap: 8px;
-        }
-
-        .user-avatar-small {
-          width: 30px;
-          height: 30px;
-          border-radius: 50%;
-          object-fit: cover;
-        }
-
-        .settings-icon {
-          font-size: 18px;
-          opacity: 0.7;
-        }
-
-        .menu-content {
-          max-width: 400px;
-          margin: 0 auto;
-        }
-
-        .menu-card {
-          background: var(--tg-theme-secondary-bg-color, #fff);
-          border-radius: 12px;
-          padding: 20px;
-          margin-bottom: 16px;
-          text-align: center;
-        }
-
-        .menu-card h2 {
-          margin: 0 0 12px 0;
-          color: var(--tg-theme-text-color, #000);
-          font-size: 20px;
-        }
-
-        .menu-card p {
-          margin: 0 0 20px 0;
-          color: var(--tg-theme-hint-color, #999);
-          font-size: 14px;
-        }
-
-        .stats-preview {
-          display: flex;
-          justify-content: space-around;
-          padding-top: 16px;
-          border-top: 1px solid rgba(0,0,0,0.1);
-        }
-
-        .stat-item {
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          gap: 4px;
-        }
-
-        .stat-value {
-          font-size: 24px;
-        }
-
-        .stat-label {
-          font-size: 12px;
-          color: var(--tg-theme-hint-color, #999);
-        }
-
-        .tables-section {
-          display: flex;
-          flex-direction: column;
-          gap: 12px;
-          margin-bottom: 16px;
-        }
-
-        .tables-section-title {
-          margin: 0;
-          font-size: 16px;
-          color: var(--tg-theme-text-color, #000);
-          font-weight: 600;
-        }
-
-        .tables-list {
-          display: flex;
-          flex-direction: column;
-          gap: 8px;
-        }
-
-        .table-item {
-          display: flex;
-          flex-direction: column;
-          gap: 8px;
-          padding: 12px 16px;
-          border: none;
-          border-radius: 12px;
-          cursor: pointer;
-          transition: transform 0.2s, box-shadow 0.2s;
-          text-align: left;
-          background: var(--tg-theme-secondary-bg-color, #fff);
-          border: 1px solid rgba(0,0,0,0.1);
-        }
-
-        .table-item:active {
-          transform: scale(0.98);
-        }
-
-        .table-item:disabled {
-          opacity: 0.6;
-          cursor: not-allowed;
-        }
-
-        .table-item-header {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-        }
-
-        .table-item-name {
-          font-size: 14px;
-          font-weight: 600;
-          color: var(--tg-theme-text-color, #000);
-        }
-
-        .table-item-status {
-          font-size: 14px;
-        }
-
-        .table-item-details {
-          display: flex;
-          gap: 16px;
-          font-size: 12px;
-          color: var(--tg-theme-hint-color, #999);
-        }
-
-        .view-all-button {
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          gap: 8px;
-          padding: 14px 16px;
-          border: none;
-          border-radius: 12px;
-          cursor: pointer;
-          transition: transform 0.2s, box-shadow 0.2s;
-          background: var(--tg-theme-button-color, #0a0a0e);
-          color: var(--tg-theme-button-text-color, #fff);
-          font-size: 14px;
-          font-weight: 600;
-          margin-top: 8px;
-        }
-
-        .view-all-button:active {
-          transform: scale(0.98);
-        }
-
-        .empty-tables {
-          text-align: center;
-          padding: 24px;
-          color: var(--tg-theme-hint-color, #999);
-          font-size: 14px;
-          background: var(--tg-theme-secondary-bg-color, #fff);
-          border-radius: 12px;
-        }
-
-        .balance-card {
-          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-          border-radius: 12px;
-          padding: 16px;
-          margin-bottom: 16px;
-          color: white;
-        }
-
-        .balance-info {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          margin-bottom: 10px;
-        }
-
-        .balance-label {
-          font-size: 14px;
-          opacity: 0.9;
-        }
-
-        .balance-value {
-          font-size: 18px;
-          font-weight: 600;
-        }
-      `}</style>
+      {/* ─── Footer: legal links (handlers wired in Plan 02-08) ─ */}
+      <footer
+        style={{
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          gap: 12,
+          paddingTop: 12,
+          borderTop: '1px solid color-mix(in srgb, var(--color-neutral) 20%, transparent)',
+          fontSize: 11,
+          letterSpacing: '0.03em',
+          color: 'var(--color-neutral)',
+          opacity: 0.75,
+        }}
+      >
+        {/*
+          NOTE (Plan 02-04): Plan 02-08 owns the legal AppView variants
+          ('legal-tos' / 'legal-privacy' / 'legal-rg') and the ConsentBanner.
+          At this plan's TS surface those variants don't exist yet, so the
+          click handlers are no-op placeholders that 02-08 will replace with
+          `onNavigate('legal-tos' | …)` calls once it extends the AppView.
+        */}
+        <button
+          type="button"
+          onClick={() => {
+            /* Plan 02-08 wire-up */
+          }}
+          style={linkButtonStyle}
+        >
+          Terms
+        </button>
+        <span aria-hidden style={{ opacity: 0.4 }}>·</span>
+        <button
+          type="button"
+          onClick={() => {
+            /* Plan 02-08 wire-up */
+          }}
+          style={linkButtonStyle}
+        >
+          Privacy
+        </button>
+        <span aria-hidden style={{ opacity: 0.4 }}>·</span>
+        <button
+          type="button"
+          onClick={() => {
+            /* Plan 02-08 wire-up */
+          }}
+          style={linkButtonStyle}
+        >
+          Responsible Gaming
+        </button>
+      </footer>
     </div>
   );
+};
+
+const linkButtonStyle: React.CSSProperties = {
+  background: 'transparent',
+  border: 'none',
+  color: 'inherit',
+  fontSize: 'inherit',
+  letterSpacing: 'inherit',
+  padding: '6px 2px',
+  cursor: 'pointer',
+  WebkitTapHighlightColor: 'transparent',
+  textDecoration: 'underline',
+  textDecorationColor: 'color-mix(in srgb, var(--color-neutral) 40%, transparent)',
+  textUnderlineOffset: 3,
 };

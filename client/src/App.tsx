@@ -360,10 +360,24 @@ const App: React.FC = () => {
         {devToolbar}
         <MainMenu
           user={currentUser}
-          tables={tables}
-          onSelectTable={handleSelectTable}
-          onShowTables={handleShowTables}
-          onOpenProfile={handleOpenProfile}
+          onNavigate={(target) => {
+            // Plan 02-04: MainMenu uses a single onNavigate(view) prop.
+            // Only the AppView variants that exist in this milestone are
+            // dispatched — legal/consent targets (Plan 02-08) and unrecognized
+            // values are intentionally dropped (no-op click).
+            if (
+              target === 'menu' ||
+              target === 'tables' ||
+              target === 'game' ||
+              target === 'profile'
+            ) {
+              hapticFeedback?.impactOccurred(target === 'profile' ? 'light' : 'medium');
+              // 'tables' shortcut also triggers a fresh fetch to match the
+              // pre-redesign handleShowTables() behavior.
+              if (target === 'tables') socket.emit('getTables');
+              setView(target);
+            }
+          }}
           onClaimBonus={handleClaimBonus}
         />
       </>
