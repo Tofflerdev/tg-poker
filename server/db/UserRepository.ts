@@ -124,6 +124,34 @@ export class UserRepository {
     });
   }
 
+  /**
+   * Plan 02-08: record ToS acceptance for an authenticated user.
+   *
+   * Caller MUST have already validated the `version` string (T-02-08-02:
+   * non-empty, length ≤ 16). This method is a trusted write path — it
+   * stamps `tosAcceptedAt = now()` and `tosVersion = version` in a single
+   * UPDATE and returns the updated timestamp fields for the ack payload.
+   *
+   * Idempotent by design: a second call from the same telegramId simply
+   * re-stamps the timestamp (new `now()`), which is acceptable per D-27 —
+   * we record the most recent acceptance of the given version.
+   */
+  static async acceptTos(
+    telegramId: number,
+    version: string
+  ): Promise<{ tosAcceptedAt: Date; tosVersion: string }> {
+    const now = new Date();
+    const user = await prisma.user.update({
+      where: { telegramId: BigInt(telegramId) },
+      data: { tosAcceptedAt: now, tosVersion: version }
+    });
+    // Prisma returns Date | null — we just wrote both, so non-null is guaranteed.
+    return {
+      tosAcceptedAt: user.tosAcceptedAt!,
+      tosVersion: user.tosVersion!
+    };
+  }
+
   static async getProfile(telegramId: number): Promise<UserProfile | null> {
     const user = await prisma.user.findUnique({
       where: { telegramId: BigInt(telegramId) }

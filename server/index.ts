@@ -307,6 +307,55 @@ io.on("connection", (socket) => {
     }
   });
 
+  // Plan 02-08: persist ToS acceptance for the authenticated user.
+  // T-02-08-01: require populated socket.data.telegramId (auth gate).
+  // T-02-08-02: reject payloads where `version` is not a non-empty string
+  //             of length ≤ 16 (ASVS V5 input validation).
+  // D-27 / COMPLIANCE-02: writes tosAcceptedAt = now(), tosVersion = payload.version
+  //                       and emits tosAccepted ack so the client can close the gate.
+  socket.on("acceptTos", async (payload) => {
+    const telegramId = socket.data.telegramId;
+    if (!telegramId) {
+      // Un-authed socket — silent drop (matches updateAvatar pattern).
+      console.warn("[AcceptTos] rejected: unauthenticated socket.id=%s", socket.id);
+      return;
+    }
+
+    if (
+      !payload ||
+      typeof payload.version !== 'string' ||
+      payload.version.length === 0 ||
+      payload.version.length > 16
+    ) {
+      console.warn(
+        "[AcceptTos] rejected invalid payload from telegramId=%s payload=%o",
+        telegramId,
+        payload
+      );
+      return; // silent drop — do not echo tampered input back
+    }
+
+    const user = userStorage.getUser(telegramId);
+    if (!user) return;
+
+    try {
+      const result = await UserRepository.acceptTos(user.telegramId, payload.version);
+
+      // Mirror into in-memory session so subsequent reads (e.g. updateProfile
+      // echo) see the accepted state without a DB round-trip.
+      user.tosAcceptedAt = result.tosAcceptedAt.toISOString();
+
+      socket.emit("tosAccepted", {
+        tosAcceptedAt: result.tosAcceptedAt.toISOString(),
+        tosVersion: result.tosVersion
+      });
+      console.log("[AcceptTos] telegramId=%s accepted version=%s", telegramId, result.tosVersion);
+    } catch (error) {
+      console.error("[AcceptTos] Error:", error);
+      // No client-facing error event — consent flow retries by user tap.
+    }
+  });
+
   // Plan 02-02: persist an avatar slug chosen by the user.
   // T-02-02-01: require populated socket.data.telegramId.
   // T-02-02-02: reject slugs not in the AVATARS allowlist (ASVS V5).
