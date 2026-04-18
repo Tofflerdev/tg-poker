@@ -42,8 +42,8 @@ Declared values (must be multiples of 4):
 | 3xl | 64px | Not used in Phase 3 UI surfaces |
 
 Exceptions:
-- Action bubble pill padding: `4px 10px` (4px vertical / 10px horizontal — half-step to keep the pill compact over the seat card).
-- History row expand region internal gap: `12px` (between board cards and hole cards).
+- Action bubble pill padding: `4px 8px` (4px vertical / 8px horizontal — standard multiples of 4, keeps the pill compact over the seat card).
+- History row expand region internal gap: `12px` (between board cards and hole cards — not a standard token; used only in this one place).
 - ActionBubbleLayer z-index: `30` (above seat z-index of 20, below chat overlay).
 
 ---
@@ -54,14 +54,17 @@ Exceptions:
 |------|------|--------|-------------|
 | Body | 13px | 400 | 1.5 |
 | Label | 11px | 700 | 1.4 |
-| Heading | 14px | 600 | 1.3 |
-| Display | 16px | 800 | 1.2 |
+| Heading | 14px | 700 | 1.3 |
+| Display | 16px | 700 | 1.2 |
+
+**Two weights only:** 400 (regular) and 700 (bold). No other weights permitted in Phase 3 component code.
 
 Notes (source: existing SeatsDisplay.tsx, ProfileSettings.tsx):
-- Bubble action text: 12px, weight 700, uppercase, letter-spacing 0.05em — matches `Badge` primitive sizing.
-- Bubble amount suffix: 12px, weight 700, same line — space-separated after verb (e.g. `CALL 100`).
-- Hand history row: date/table label 11px weight 700 (Label role), net delta 13px weight 800 monospace (Display role condensed), board cards rendered via existing `Card` component at reduced scale.
-- History empty-state heading: 14px weight 600 (Heading role), already established by the Phase 2 stub at line 529.
+- Bubble action text: 11px, weight 700, uppercase, letter-spacing 0.05em — maps to Label role. Matches `Badge` primitive sizing.
+- Bubble amount suffix: 11px, weight 700, same line — space-separated after verb (e.g. `CALL 100`).
+- Hand history row: date/table label 11px weight 700 (Label role), net delta 13px weight 700 monospace (Body role with monospace + color + glow providing visual distinction without a unique weight), board cards rendered via existing `Card` component at reduced scale.
+- History empty-state heading: 14px weight 700 (Heading role).
+- Section labels inside expanded HandHistoryRow (`BOARD`, `YOUR CARDS`, `SHOWN AT SHOWDOWN`): 11px, weight 700 (Label role), uppercase, letter-spacing 0.08em — mapped from 9px to 11px to stay within the 4-size scale.
 - Stack/chip amounts always use `fontFamily: 'monospace'` and `fontVariantNumeric: 'tabular-nums'` — established project convention.
 
 ---
@@ -100,6 +103,8 @@ Glow: `box-shadow: 0 0 8px {glow-token}, inset 0 0 4px {glow-token}` on bubble p
 
 A single animated pill displayed over a seat.
 
+**Focal point:** The active ActionBubble (z-index 30, neon glow, above all seat elements) dominates the GameRoom during its display window. Viewer attention tracks the acting seat by color — fold is red, call/check is cyan, raise is amber, all-in is orange.
+
 **Structure:** Pill-shaped span with Neon Strip styling matching the `Badge` primitive recipe.
 
 **Visual anatomy:**
@@ -111,8 +116,8 @@ A single animated pill displayed over a seat.
   background: rgba(10,10,14,0.88) + backdrop-blur(12px)
   box-shadow: 0 0 8px <glow-token>, inset 0 0 4px <glow-token>
   border-radius: 999px (pill)
-  padding: 4px 10px
-  font: 12px / 700 / uppercase / letter-spacing 0.05em
+  padding: 4px 8px
+  font: 11px / 700 / uppercase / letter-spacing 0.05em
   color: <action-color CSS var>
   text-shadow: 0 0 6px <glow-token>
   white-space: nowrap
@@ -175,13 +180,15 @@ Rotation offset (viewer at bottom) is applied identically to `SeatsDisplay`'s `v
 
 Rendered inside the Profile → History tab, replacing the Phase 2 stub.
 
+**Focal point:** The net delta value (color + glow + monospace) anchors the eye on each HandHistoryRow. Green `+N` for wins, red `-N` for losses — legible at a glance in the collapsed list without expanding any row.
+
 **Container:** `display: flex; flex-direction: column; gap: 8px` — 8px between rows. No horizontal padding (Card primitive provides 16px padding on the outer wrapper).
 
 **Loading state:** While socket request is in-flight, render a neutral Card with centered `--color-neutral` text: `"Loading hand history..."` (13px, weight 400).
 
 **Empty state:** Neutral Card with vertical stack (gap 14px, center-aligned):
 - Icon area: 56px circle, `1.5px dashed` neutral border at 50% alpha, `♠` glyph at 28px in `--color-neutral` — replaces the Phase 2 timer emoji (same size/position contract from Phase 2 stub preserved).
-- Heading: `"No hands yet"` — 14px weight 600, white.
+- Heading: `"No hands yet"` — 14px weight 700, white.
 - Body: `"Your played hands will appear here."` — 13px weight 400, `--color-neutral`, `line-height: 1.5`, `max-width: 280px`.
 
 **Error state:** Fold-tier Card with centered text: `"Could not load hand history."` followed by `"Try closing and reopening your profile."` on a second line — 13px, `--color-action-fold`.
@@ -206,7 +213,7 @@ One Card primitive per hand, initially collapsed. Tap to expand.
 - Row layout: `display: flex; justify-content: space-between; align-items: center`.
 - Date: relative time string (e.g. `"3h ago"`, `"2m ago"`, `"yesterday"`) — 11px, weight 700, `--color-neutral`.
 - Table name: 11px, weight 700, `--color-neutral`. Truncated with `overflow: hidden; text-overflow: ellipsis; max-width: 100px`.
-- Net delta: 13px, weight 800, monospace, `fontVariantNumeric: 'tabular-nums'`. Positive → `--color-action-sit` with `text-shadow: 0 0 6px var(--glow-sit)`. Negative → `--color-action-fold` with `text-shadow: 0 0 6px var(--glow-fold)`. Prefix: `+` for wins (always explicit), `-` for losses.
+- Net delta: 13px, weight 700, monospace, `fontVariantNumeric: 'tabular-nums'`. Positive → `--color-action-sit` with `text-shadow: 0 0 6px var(--glow-sit)`. Negative → `--color-action-fold` with `text-shadow: 0 0 6px var(--glow-fold)`. Prefix: `+` for wins (always explicit), `-` for losses. Visual distinction from Label-role text is achieved via monospace + color + glow, not a unique weight.
 - Full tap target on the row card (`cursor: pointer`, `active:scale-[0.99]`).
 
 **Expanded state (tap to toggle):**
@@ -217,9 +224,9 @@ Reveals below the collapsed row content, separated by a `1px solid rgba(176,190,
   Opponents' cards: [shown only when showedDown=true — privacy rule D-18]
 ```
 - Board and hole cards use the existing `HandDisplay` component with `size` prop set so cards render at approximately 32px wide each.
-- Label above board: `"BOARD"` — 9px, weight 800, `--color-neutral`, uppercase, letter-spacing 0.08em.
-- Label above hole cards: `"YOUR CARDS"` — same style as BOARD label, `--color-action-call` color for own cards.
-- Opponents' cards section rendered only when `showedDown === true` for that row. Label: `"SHOWN AT SHOWDOWN"` — 9px, weight 800, `--color-neutral`.
+- Label above board: `"BOARD"` — 11px, weight 700, `--color-neutral`, uppercase, letter-spacing 0.08em (Label role).
+- Label above hole cards: `"YOUR CARDS"` — 11px, weight 700, `--color-action-call` color for own cards (Label role).
+- Opponents' cards section rendered only when `showedDown === true` for that row. Label: `"SHOWN AT SHOWDOWN"` — 11px, weight 700, `--color-neutral` (Label role).
 - Expand/collapse animation: `motion/react` height animation `initial={{ height: 0, opacity: 0 }}` → `animate={{ height: 'auto', opacity: 1 }}` — 180 ms, easeOut. Honors `prefers-reduced-motion` (instant if reduced).
 - Gap between board/cards sections: 12px.
 
@@ -338,3 +345,4 @@ Touch / reduced-motion:
 | client/src/pages/ProfileSettings.tsx | History tab stub layout (56px icon circle, 14px heading, 13px body, gap 14px) |
 | REQUIREMENTS.md | GAME-01/02/03, PROFILE-02/03/04, RESILIENCE-02 — requirement descriptions |
 | User input | none — all contract fields answered by upstream artifacts |
+| Checker revision 2026-04-18 | Typography: 4 weights → 2 (400+700); 6 sizes → 4 (11,13,14,16); 9px labels → 11px; 12px bubble → 11px. Spacing: bubble padding 4px 10px → 4px 8px. Focal points added for ActionBubble layer and HandHistoryList. |
