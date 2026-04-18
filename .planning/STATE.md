@@ -17,10 +17,10 @@ progress:
 
 ## Current Position
 
-Phase: 02 (design-system-rollout-avatars) — COMPLETE (with documented asset gap)
-Plan: 8 of 8
-Status: All 8 plans executed. VERIFICATION.md identified 1 critical routing gap, now fixed (commit 91dddb4). Asset gap remains: 20 WebP avatars + favicon.ico + logo-192.png require human-supplied binaries (no image-gen MCP available in session). Phase 3 unblocked.
-Last activity: 2026-04-16 -- Phase 02 execution complete; asset binaries deferred to human drop.
+Phase: 03 (gameplay-additions) — CONTEXT captured, ready for planning
+Plan: 0 of TBD
+Status: 03-CONTEXT.md written (2026-04-18). Decisions locked for action bubbles, hand-history async write pipeline, chip checkpoint, privacy/retention. Hand-history view UX defaults captured as Claude's discretion. Next: `/gsd-plan-phase 3`.
+Last activity: 2026-04-18 -- Phase 03 context gathered; ready for planning.
 
 ## Current Milestone
 
