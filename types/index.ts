@@ -238,6 +238,8 @@ export interface ExtendedServerEvents extends ServerEvents {
   // Plan 02-02: avatar + TOS substrate (picker UI lands in Plan 06; TOS gate in Plan 08)
   avatarUpdated: (payload: { avatarId: string }) => void;
   tosAccepted: (payload: { tosAcceptedAt: string; tosVersion: string }) => void;
+  // Phase 3 / Plan 03-01: per-action floating bubble broadcast (D-01).
+  actionBubble: (evt: ActionBubbleEvent) => void;
 }
 
 // ==========================================
@@ -299,6 +301,12 @@ export interface HandCompletePerPlayer {
   won: boolean;
   showedDown: boolean;
 }
+
+// Phase 3 / Plan 03-01: Server-broadcast event for floating action bubbles (D-01).
+// Payload is structurally identical to PlayerActionEvent — no additional fields.
+// SECURITY (T-3-SCHEMA): MUST NOT include opponent hole cards or any
+// per-player secret state. Bubbles render publicly visible action info only.
+export interface ActionBubbleEvent extends PlayerActionEvent {}
 
 export interface HandCompleteEvent {
   handId: string;
