@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-last_updated: "2026-04-20T16:32:43.585Z"
-last_activity: 2026-04-20 -- Phase 03 execution started
+last_updated: "2026-04-20T16:38:35.835Z"
+last_activity: 2026-04-20 -- 03-01 actionBubble server broadcast complete
 progress:
   total_phases: 6
   completed_phases: 2
   total_plans: 19
-  completed_plans: 13
-  percent: 68
+  completed_plans: 15
+  percent: 79
 ---
 
 # Project State
@@ -18,9 +18,9 @@ progress:
 ## Current Position
 
 Phase: 03 (gameplay-additions) — EXECUTING
-Plan: 1 of 6
-Status: Executing Phase 03
-Last activity: 2026-04-20 -- Phase 03 execution started
+Plan: 2 of 6
+Status: Ready to execute Plan 03-02
+Last activity: 2026-04-20 -- 03-01 actionBubble server broadcast complete
 
 ## Current Milestone
 
@@ -50,6 +50,8 @@ Last activity: 2026-04-20 -- Phase 03 execution started
 - Test track is a dedicated Phase 6 (coarse granularity favors a single verification gate)
 - D-09 species list LOCKED: fox, wolf, bear, tiger, panda, raccoon, lion, rabbit, owl, eagle, flamingo, penguin, crocodile, chameleon, cobra, shark, octopus, dolphin, frog, bat (slugs = DB values permanently; rename requires backfill)
 - D-09 AI prompt brief LOCKED: dark-background neon-rim portrait, 256×256 WebP, anthropomorphic, cyan/amber rim, ≤15 KB each
+- 03-01: ActionBubbleEvent extends PlayerActionEvent with no extra fields (T-3-SCHEMA / D-01) — no holeCards ever in broadcast payload
+- 03-01: setOnHandComplete no-op preserved — owned by Plan 03-02
 
 ### Blockers
 

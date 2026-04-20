@@ -45,7 +45,7 @@ Requirements are grouped by category. Each has a unique `CATEGORY-NN` ID used by
 
 ### GAME — Game Table Enhancements
 
-- [ ] **GAME-01** — Redundant labels on the game room (top-left table/phase, top-right pot) are removed.
+- [x] **GAME-01** — Redundant labels on the game room (top-left table/phase, top-right pot) are removed.
 - [ ] **GAME-02** — On every player action, a floating "action bubble" appears over that seat (Fold / Check / Call N / Bet N / Raise to N / All-in) using `motion/react`, with FIFO queueing so bubbles never stack or overlap.
 - [ ] **GAME-03** — Bubble duration honors per-action minimum display (~800-1000 ms) and respects `prefers-reduced-motion`.
 - [ ] **GAME-04** — `Game.ts` exposes `onPlayerAction` and `onHandComplete` callbacks consumed by `server/index.ts` for broadcasting bubbles, writing history, and checkpointing chips.
@@ -159,7 +159,7 @@ All requirements above are:
 | PROFILE-04 | Phase 3 | Pending |
 | DEPOSIT-01 | Phase 2 | Pending |
 | DEPOSIT-02 | Phase 2 | Pending |
-| GAME-01 | Phase 3 | Pending |
+| GAME-01 | Phase 3 | Complete |
 | GAME-02 | Phase 3 | Pending |
 | GAME-03 | Phase 3 | Pending |
 | GAME-04 | Phase 1 | Pending |
