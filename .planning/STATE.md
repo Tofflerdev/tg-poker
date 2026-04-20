@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-last_updated: "2026-04-20T23:39:56.569Z"
-last_activity: 2026-04-20 -- Phase 03 execution started
+last_updated: "2026-04-20T23:53:47.087Z"
+last_activity: 2026-04-20
 progress:
   total_phases: 6
   completed_phases: 2
   total_plans: 19
-  completed_plans: 16
-  percent: 84
+  completed_plans: 17
+  percent: 89
 ---
 
 # Project State
@@ -18,9 +18,10 @@ progress:
 ## Current Position
 
 Phase: 03 (gameplay-additions) — EXECUTING
-Plan: 1 of 6
-Status: Executing Phase 03
-Last activity: 2026-04-20 -- Phase 03 execution started
+Plan: 5 of 6 (next: 03-04 hand-history read API)
+Status: Ready to execute
+Last activity: 2026-04-20
+Stopped at: Completed 03-03-PLAN.md (client action-bubble layer)
 
 ## Current Milestone
 
@@ -52,6 +53,8 @@ Last activity: 2026-04-20 -- Phase 03 execution started
 - D-09 AI prompt brief LOCKED: dark-background neon-rim portrait, 256×256 WebP, anthropomorphic, cyan/amber rim, ≤15 KB each
 - 03-01: ActionBubbleEvent extends PlayerActionEvent with no extra fields (T-3-SCHEMA / D-01) — no holeCards ever in broadcast payload
 - 03-01: setOnHandComplete no-op preserved — owned by Plan 03-02
+- 03-03: motion@^12.38.0 added as client dep; ActionBubble + ActionBubbleLayer render per-seat FIFO pills with 900 ms hold and useReducedMotion fallback
+- 03-03: vi.mock('motion/react', ...) passthrough in tests (Fragment AnimatePresence + plain-tag motion proxy) — deterministic FIFO assertions under vi.useFakeTimers(); production keeps real enter/exit animations
 
 ### Blockers
 
