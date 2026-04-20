@@ -4,7 +4,8 @@ import Table from "../components/Table";
 import GameControls from "../components/GameControls";
 import Chat from "../components/Chat";
 import { Button } from "../components/ui";
-import type { GameState, ShowdownResult, TelegramUser, ExtendedServerEvents, ExtendedClientEvents } from "../../../types/index";
+import { ActionBubbleLayer } from "../components/ActionBubbleLayer";
+import type { GameState, ShowdownResult, TelegramUser, ExtendedServerEvents, ExtendedClientEvents, ActionBubbleEvent } from "../../../types/index";
 import { useTelegram } from "../hooks/useTelegram";
 import { useIsMobile } from "../hooks/useIsMobile";
 
@@ -33,6 +34,10 @@ export const GameRoom: React.FC<GameRoomProps> = ({
   const [isMyTurn, setIsMyTurn] = useState(false);
   const [lastStage, setLastStage] = useState(gameState.stage);
   const [isChatOpen, setIsChatOpen] = useState(false);
+  // Phase 3 / Plan 03-03: imperative handle wired into ActionBubbleLayer so
+  // the socket 'actionBubble' listener can push events without re-subscribing
+  // on every re-render. See useEffect below for subscription lifecycle.
+  const bubblePushRef = React.useRef<((evt: ActionBubbleEvent) => void) | null>(null);
 
   // Handle back button and header
   useEffect(() => {
@@ -88,6 +93,19 @@ export const GameRoom: React.FC<GameRoomProps> = ({
       }
     }
   }, [showdown, mySeat, currentUser, hapticFeedback]);
+
+  // Phase 3 / Plan 03-03 (D-01, GAME-02): subscribe to server-broadcast actionBubble.
+  // ActionBubbleLayer exposes a push handle via registerPushHandle; we forward
+  // each event to it. Subscribe once per socket; cleanup on unmount.
+  useEffect(() => {
+    const onActionBubble: ExtendedServerEvents['actionBubble'] = (evt) => {
+      bubblePushRef.current?.(evt);
+    };
+    socket.on('actionBubble', onActionBubble);
+    return () => {
+      socket.off('actionBubble', onActionBubble);
+    };
+  }, [socket]);
 
   const handleSeatClick = (seat: number) => {
     if (mySeat === null && !selectedSeat) {
@@ -173,22 +191,31 @@ export const GameRoom: React.FC<GameRoomProps> = ({
       <div className="flex-1 flex flex-col relative min-h-0">
         {/* Table */}
         <div className={`flex-1 flex items-center justify-center overflow-hidden min-h-0 ${isMobile ? 'px-2 py-1' : 'p-4'}`}>
-          <Table
-            seats={gameState.seats}
-            spectators={gameState.spectators}
-            mySeat={mySeat}
-            communityCards={gameState.communityCards}
-            currentPlayer={gameState.currentPlayer}
-            turnExpiresAt={gameState.turnExpiresAt || undefined}
-            pots={gameState.pots}
-            totalPot={gameState.totalPot}
-            dealerPosition={gameState.dealerPosition}
-            stage={gameState.stage}
-            lastRoundBets={gameState.lastRoundBets}
-            blinds={{ small: gameState.smallBlind, big: gameState.bigBlind }}
-            showdown={showdown}
-            onSit={handleSeatClick}
-          />
+          {/* Relative container so ActionBubbleLayer's absolute inset:0 resolves to the table area. */}
+          <div style={{ position: 'relative', width: '100%', height: '100%' }}>
+            <Table
+              seats={gameState.seats}
+              spectators={gameState.spectators}
+              mySeat={mySeat}
+              communityCards={gameState.communityCards}
+              currentPlayer={gameState.currentPlayer}
+              turnExpiresAt={gameState.turnExpiresAt || undefined}
+              pots={gameState.pots}
+              totalPot={gameState.totalPot}
+              dealerPosition={gameState.dealerPosition}
+              stage={gameState.stage}
+              lastRoundBets={gameState.lastRoundBets}
+              blinds={{ small: gameState.smallBlind, big: gameState.bigBlind }}
+              showdown={showdown}
+              onSit={handleSeatClick}
+            />
+            {/* Phase 3 / Plan 03-03 (GAME-02, GAME-03): per-seat action-bubble layer. */}
+            <ActionBubbleLayer
+              mySeat={mySeat}
+              isMobile={isMobile}
+              registerPushHandle={(push) => { bubblePushRef.current = push; }}
+            />
+          </div>
         </div>
 
         {/* Seat Confirmation Modal */}
