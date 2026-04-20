@@ -27,10 +27,11 @@ const DevToolbar = import.meta.env.DEV
   ? lazy(() => import("./components/DevToolbar"))
   : () => null;
 
-// Socket connection — in production, connect to same origin (nginx proxies /socket.io/)
-// In development, connect to localhost:3000
-const SOCKET_URL = import.meta.env.DEV ? "http://localhost:3000" : window.location.origin;
-const socket: Socket<ExtendedServerEvents, ExtendedClientEvents> = io(SOCKET_URL);
+// Socket connection — always connect to same origin.
+// In production nginx proxies /socket.io/ to the server.
+// In development Vite proxies /socket.io/ to http://localhost:3000 (see vite.config.ts),
+// which lets ngrok tunnel both HTTP and websocket traffic through one URL.
+const socket: Socket<ExtendedServerEvents, ExtendedClientEvents> = io(window.location.origin);
 
 // AppView union — Plan 02-04 added 'deposit' (D-17, DEPOSIT-02).
 // Plan 02-08 extends with:

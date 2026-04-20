@@ -207,6 +207,11 @@ io.on("connection", (socket) => {
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : String(error);
       console.error("[Auth] Error for socket:", socket.id, "| Error:", errorMsg);
+      // Dump the full error object so Prisma details (code, meta, cause) are visible.
+      console.error("[Auth] Full error:", error);
+      if (error instanceof Error && error.stack) {
+        console.error("[Auth] Stack:", error.stack);
+      }
 
       if (process.env.NODE_ENV === 'development') {
         socket.emit("authError", `Authentication failed: ${errorMsg}`);

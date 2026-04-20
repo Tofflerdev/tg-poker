@@ -82,7 +82,11 @@ export function validateInitData(initData: string): WebAppInitData | null {
 
     // Length check before timingSafeEqual to guard against RangeError
     if (calculatedBuf.length !== providedBuf.length) {
-      console.warn('[Auth] HMAC validation failed: hash length mismatch');
+      console.warn(
+        `[Auth] HMAC validation failed: hash length mismatch ` +
+        `(calculated=${calculatedBuf.length}, provided=${providedBuf.length}, ` +
+        `providedHash="${providedHashHex}", botTokenLen=${BOT_TOKEN.length})`
+      );
       return null;
     }
 

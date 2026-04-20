@@ -107,17 +107,16 @@ export function useTelegram(): UseTelegramReturn {
 
   useEffect(() => {
     try {
-      // In DEV mode, skip Telegram WebApp entirely to avoid interference
-      if (import.meta.env.DEV) {
-        console.log('🔧 DEV mode: Skipping Telegram WebApp initialization');
-        setIsReady(true);
-        return;
-      }
-
       const webApp = window.Telegram?.WebApp;
-      
-      if (!webApp) {
-        console.log('Telegram WebApp not detected - running in standalone mode');
+
+      // If Telegram WebApp isn't present (plain browser on localhost), stay
+      // in standalone/dev-mock mode. App.tsx handles the fallback auth path.
+      if (!webApp || !webApp.initData) {
+        if (import.meta.env.DEV) {
+          console.log('🔧 DEV mode: Telegram WebApp not detected — using dev-mock auth');
+        } else {
+          console.log('Telegram WebApp not detected - running in standalone mode');
+        }
         setIsReady(true);
         return;
       }
