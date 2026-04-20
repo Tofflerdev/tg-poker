@@ -9,6 +9,9 @@ import { userStorage } from "./models/User.js";
 import { tableManager } from "./TableManager.js";
 import { UserRepository } from "./db/UserRepository.js";
 import { isValidAvatarId } from "../types/avatars.js";
+import * as HandHistoryQueue from "./HandHistoryQueue.js";
+import { HandHistoryRepository } from "./db/HandHistoryRepository.js";
+import { checkpointSeatedPlayers } from "./checkpointSeatedPlayers.js";
 import type {
   TelegramUser,
   AuthPayload,
@@ -154,16 +157,47 @@ const setupTableEvents = (tableId: string) => {
     }
   });
 
-  table.setOnHandComplete((_evt) => {
-    // Phase 1: no-op. Phase 3 queues HandHistory writes; Phase 3 checkpoints chips.
+  table.setOnHandComplete((evt) => {
+    // Phase 3 / Plan 03-02 (D-09 sync, D-14 separate paths, RESEARCH gotcha #6):
+    // Game.ts ignores the listener's return value, so we wrap async work in
+    // a fire-and-forget IIFE with try/catch so an unhandled rejection never
+    // escapes back into the game loop.
+    void (async () => {
+      try {
+        // (1) Best-effort hand history — fan-in to the async batched queue.
+        evt.perPlayer.forEach((p) => {
+          HandHistoryQueue.enqueue(HandHistoryRepository.toWriteRow(evt, p));
+        });
+        // (2) Authoritative chip/seat checkpoint — separate awaited path (D-14).
+        await checkpointSeatedPlayers(evt);
+      } catch (err) {
+        console.error('[onHandComplete] checkpoint or enqueue error:', err);
+      }
+    })();
   });
 };
 
-// Initialize table events for all predefined tables
+// Initialize table events for all predefined tables, then start the
+// HandHistoryQueue flush timer and the 90-day retention sweep.
 setTimeout(() => {
   const tables = tableManager.getAllTablesInfo();
   tables.forEach((t) => setupTableEvents(t.id));
+  HandHistoryQueue.startFlushTimer();
+  HandHistoryQueue.startRetentionJob();
+  console.log('[Boot] HandHistoryQueue + retention job started');
 }, 1000);
+
+// Graceful shutdown: drain the HandHistoryQueue before exit so in-flight
+// best-effort history rows are not lost. RESEARCH §"SIGTERM wiring".
+process.on('SIGTERM', async () => {
+  console.log('[Server] SIGTERM received — draining HandHistoryQueue...');
+  try {
+    await HandHistoryQueue.shutdown();
+  } catch (err) {
+    console.error('[Server] queue drain failed:', err);
+  }
+  process.exit(0);
+});
 
 io.on("connection", (socket) => {
   console.log("[Socket] Player connected:", socket.id);
