@@ -125,6 +125,33 @@ export class UserRepository {
   }
 
   /**
+   * Plan 03-02 / RESILIENCE-02 (D-14, D-15, D-17): hand-boundary chip checkpoint.
+   *
+   * Writes the trio (currentChips, currentTableId, currentSeat) for one seated
+   * player. Called per `onHandComplete` perPlayer entry by
+   * checkpointSeatedPlayers(). NEVER writes mid-hand ephemeral state
+   * (holeCards, street bets, turn timer) per D-17.
+   *
+   * NOTE: BigInt conversion mirrors `updateBalance` — telegramId param is a
+   * string here (HandCompletePerPlayer.telegramId), converted via
+   * BigInt(Number(tid)). Telegram IDs are 10-digit, safely within Number's
+   * safe-integer range.
+   */
+  static async checkpointSeat(
+    telegramId: string,
+    data: { currentChips: number; currentTableId: string; currentSeat: number }
+  ): Promise<void> {
+    await prisma.user.update({
+      where: { telegramId: BigInt(Number(telegramId)) },
+      data: {
+        currentChips: data.currentChips,
+        currentTableId: data.currentTableId,
+        currentSeat: data.currentSeat,
+      },
+    });
+  }
+
+  /**
    * Plan 02-08: record ToS acceptance for an authenticated user.
    *
    * Caller MUST have already validated the `version` string (T-02-08-02:
