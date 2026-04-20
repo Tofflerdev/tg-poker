@@ -16,6 +16,7 @@
   "ui_test_framework": "vitest+rtl",
   "project_codename": "NightRiver",
   "workflow": {
-    "_auto_chain_active": false
+    "_auto_chain_active": false,
+    "use_worktrees": false
   }
 }
