@@ -14,5 +14,8 @@
     "executor": "sonnet"
   },
   "ui_test_framework": "vitest+rtl",
-  "project_codename": "NightRiver"
+  "project_codename": "NightRiver",
+  "workflow": {
+    "_auto_chain_active": false
+  }
 }
