@@ -136,9 +136,22 @@ const setupTableEvents = (tableId: string) => {
     updateTableState(tableId);
   });
 
-  table.setOnPlayerAction((_evt) => {
-    // Phase 1: no-op. Phase 3 broadcasts actionBubble. Phase 3 writes HandHistory.
-    // Keep block empty to preserve Phase 1 success criterion "no behavior change".
+  table.setOnPlayerAction((evt) => {
+    // Phase 3 / Plan 03-01 (D-01, D-09): synchronous fan-out of actionBubble to
+    // every authenticated socket at this table. Mirrors updateTableState's
+    // telegramId → socketId resolution. Wrapped in try/catch so a transport
+    // hiccup never propagates back into Game.ts (T-3-SCHEMA / Risk #6).
+    try {
+      const playerIds = table.getAllPlayerIds(); // telegramIds
+      playerIds.forEach((telegramId) => {
+        const sid = getSocketId(telegramId);
+        if (sid) {
+          io.to(sid).emit('actionBubble', evt);
+        }
+      });
+    } catch (err) {
+      console.error('[ActionBubble] broadcast error:', err);
+    }
   });
 
   table.setOnHandComplete((_evt) => {
