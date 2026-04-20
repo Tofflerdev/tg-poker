@@ -1,0 +1,53 @@
+{
+  "version": "1.0",
+  "timestamp": "2026-04-20T04:57:11.987Z",
+  "phase": "03",
+  "phase_name": "gameplay-additions",
+  "phase_dir": ".planning/phases/03-gameplay-additions",
+  "plan": 0,
+  "task": 0,
+  "total_tasks": 0,
+  "status": "ready_to_execute",
+  "completed_tasks": [
+    {"id": "03-CONTEXT", "name": "Phase 3 context captured", "status": "done"},
+    {"id": "03-RESEARCH", "name": "Phase 3 research", "status": "done"},
+    {"id": "03-UI-SPEC", "name": "Phase 3 UI design contract", "status": "done"},
+    {"id": "03-VALIDATION", "name": "Validation strategy draft", "status": "done"},
+    {"id": "03-00-PLAN", "name": "Plan 00: Vitest test infra", "status": "planned"},
+    {"id": "03-01-PLAN", "name": "Plan 01: actionBubble server broadcast", "status": "planned"},
+    {"id": "03-02-PLAN", "name": "Plan 02: hand-history pipeline + checkpoint + retention", "status": "planned"},
+    {"id": "03-03-PLAN", "name": "Plan 03: client bubble renderer", "status": "planned"},
+    {"id": "03-04-PLAN", "name": "Plan 04: hand-history reader (server)", "status": "planned"},
+    {"id": "03-05-PLAN", "name": "Plan 05: profile history UI (client)", "status": "planned"}
+  ],
+  "remaining_tasks": [
+    {"id": "execute-03-00", "name": "Execute Plan 03-00 (wave 0)", "status": "not_started"},
+    {"id": "execute-03-01", "name": "Execute Plan 03-01 (wave 1, deps: 00)", "status": "not_started"},
+    {"id": "execute-03-02", "name": "Execute Plan 03-02 (wave 1, deps: 00)", "status": "not_started"},
+    {"id": "execute-03-03", "name": "Execute Plan 03-03 (wave 2, deps: 00, 01)", "status": "not_started"},
+    {"id": "execute-03-04", "name": "Execute Plan 03-04 (wave 2, deps: 00, 02)", "status": "not_started"},
+    {"id": "execute-03-05", "name": "Execute Plan 03-05 (wave 3, deps: 00, 04)", "status": "not_started"}
+  ],
+  "blockers": [
+    {"description": "20 WebP avatar binaries missing from client/src/assets/avatars/ (Phase 2 carryover)", "type": "human_action", "workaround": "Runtime 404s on avatar images until files shipped; does not block Phase 3 execution"},
+    {"description": "Uncommitted changes on main: client/src/App.tsx, client/src/hooks/useTelegram.ts, client/vite.config.ts, server/index.ts, server/middleware/auth.ts + untracked .planning/phases/02-design-system-rollout-avatars/02-VERIFICATION.md", "type": "technical", "workaround": "Inspect diffs before executing Plan 03-01/03-02 since they edit server/index.ts; may need to resolve or stash"}
+  ],
+  "human_actions_pending": [
+    {"action": "Supply 20 WebP avatar binaries per locked species list + prompt brief", "context": "Phase 2 asset drop; client build warns, runtime 404s", "blocking": false},
+    {"action": "Inspect/resolve uncommitted changes to server/index.ts before Plan 03-01/02 execution", "context": "Plan 03-01 edits lines 139-142 and Plan 03-02 edits lines 144-146 and boot block at 150-153; local mods may conflict", "blocking": true}
+  ],
+  "decisions": [
+    {"decision": "Phase 3 plans verified as execution-ready", "rationale": "Plans 00-05 have self-consistent dependency graph (00 → {01,02} → {03,04} → 05), integration points confirmed at server/index.ts:139 and :144, ~70 unit tests planned, threat models per plan, grep-verifiable invariants", "phase": "03"},
+    {"decision": "STATE.md is stale - says 'ready for planning' but all 6 plans are committed", "rationale": "Git log shows plans 03-03..03-05 committed 2026-04-19; STATE.md needs refresh to 'planned, ready to execute'", "phase": "03"}
+  ],
+  "uncommitted_files": [
+    "client/src/App.tsx",
+    "client/src/hooks/useTelegram.ts",
+    "client/vite.config.ts",
+    "server/index.ts",
+    "server/middleware/auth.ts",
+    ".planning/phases/02-design-system-rollout-avatars/02-VERIFICATION.md (untracked)"
+  ],
+  "next_action": "Inspect uncommitted diffs to server/index.ts (may conflict with Plan 03-01/02 edits at lines 139-146). Then /clear and run /gsd-execute-phase 3.",
+  "context_notes": "Verified all 6 Phase 3 plans. Key findings: (1) Plans 00-05 are rigorous with grep-enforced invariants, per-plan threat models, explicit DO-NOT-MODIFY guardrails between plans. (2) Dependency graph: 00 (test infra) → {01 actionBubble server, 02 hand-history pipeline} → {03 client bubble renderer, 04 hand-history reader} → 05 profile history UI. (3) Privacy contract consistent: server strips opponent holeCards at read (03-04) with 'r.showedDown ? r.holeCards : []'; client defense-in-depth at render (03-05) with same predicate. (4) No hex literals, no dangerouslySetInnerHTML enforced across all client plans. (5) ~70 unit tests total. (6) Minor concerns flagged but non-blocking: motion/react shared transition prop (03-03 allows implementer refactor), useHandHistory unmount test brittleness (03-05 test #9). (7) Integration points verified: server/index.ts:139 and :144 no-ops exist exactly as 03-01/02 describe. User asked to verify plans; verdict was execution-ready. Context hit 95% — pausing before /gsd-execute-phase 3."
+}
