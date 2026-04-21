@@ -116,13 +116,19 @@ describe('HandHistoryRepository.findForUser — privacy + grouping', () => {
   });
 
   it('orders results by playedAt DESC and limits to default 50', async () => {
-    // Construct 60 own rows; cap should reduce to 50.
-    const ownRows = Array.from({ length: 60 }, (_, i) =>
-      userRow({ id: `cuid-${i}`, handId: `h${i}`, playedAt: playedAt(`2026-04-${String(i + 1).padStart(2, '0')}T00:00:00Z`) })
+    // Construct 50 own rows with valid sequential timestamps; the repo trusts
+    // Prisma's `take:50` ordering and does not re-sort. Use millisecond stride
+    // so all 50 dates are valid (Date(0)..Date(49000)).
+    const ownRows = Array.from({ length: 50 }, (_, i) =>
+      userRow({
+        id: `cuid-${i}`,
+        handId: `h${i}`,
+        playedAt: new Date(Date.UTC(2026, 3, 1, 0, 0, i)), // 2026-04-01T00:00:00Z + i seconds
+      })
     );
     findManyMock
-      .mockResolvedValueOnce(ownRows.slice(0, 50)) // Prisma honored take:50
-      .mockResolvedValueOnce(ownRows.slice(0, 50)); // step 2: same hands, no opponents
+      .mockResolvedValueOnce(ownRows) // Prisma honored take:50
+      .mockResolvedValueOnce(ownRows); // step 2: same hands, no opponents
 
     const result = await HandHistoryRepository.findForUser('1001'); // default limit 50
     expect(result).toHaveLength(50);

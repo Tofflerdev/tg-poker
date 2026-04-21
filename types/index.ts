@@ -240,6 +240,9 @@ export interface ExtendedServerEvents extends ServerEvents {
   tosAccepted: (payload: { tosAcceptedAt: string; tosVersion: string }) => void;
   // Phase 3 / Plan 03-01: per-action floating bubble broadcast (D-01).
   actionBubble: (evt: ActionBubbleEvent) => void;
+  // Plan 03-04 (PROFILE-03, PROFILE-04): hand-history reader response.
+  handHistoryData: (rows: HandHistoryDTO[]) => void;
+  handHistoryError: (msg: string) => void;
 }
 
 // ==========================================
@@ -270,6 +273,9 @@ export interface ExtendedClientEvents extends ClientEvents {
   // Plan 02-02: avatar + TOS substrate (picker UI lands in Plan 06; TOS gate in Plan 08)
   updateAvatar: (payload: { avatarId: string }) => void;
   acceptTos: (payload: { version: string }) => void;
+  // Plan 03-04 (PROFILE-03): request the requesting user's last 50 hands.
+  // Server uses socket.data.telegramId — NO payload accepted.
+  getHandHistory: () => void;
 }
 
 // --- Socket.io socket.data extension (RESILIENCE-03) ---
@@ -314,4 +320,45 @@ export interface HandCompleteEvent {
   completedAt: Date;
   board: string[];              // game.communityCards snapshot
   perPlayer: HandCompletePerPlayer[];
+}
+
+// --- Phase 3 / Plan 03-04 (PROFILE-03, PROFILE-04): hand-history reader DTO ---
+
+/**
+ * Single opponent row inside a HandHistoryDTO.
+ * `holeCards` is `[]` when `showedDown === false` (privacy filter D-18 / PROFILE-04
+ * / T-3-PRIVACY) and the opponent verbatim cards otherwise.
+ */
+export interface HandHistoryOpponentDTO {
+  telegramId: string;
+  seat: number;
+  holeCards: string[];
+  finalChips: number;
+  netDelta: number;
+  won: boolean;
+  showedDown: boolean;
+}
+
+/**
+ * One hand from the requesting user's perspective.
+ * - `holeCards` here are the requesting user's own cards — always returned verbatim.
+ * - `tableName` is resolved server-side from PREDEFINED_TABLES (RESEARCH.md Open Q1 Option A).
+ * - `opponents` includes every other seat that participated in the same handId,
+ *   with each opponent's `holeCards` stripped per D-18.
+ */
+export interface HandHistoryDTO {
+  handId: string;
+  tableId: string;
+  tableName: string;
+  playedAt: string;          // ISO 8601 string (Date is non-portable across socket.io serialization)
+  board: string[];
+  // Requesting user's own row:
+  seat: number;
+  holeCards: string[];
+  netDelta: number;
+  finalChips: number;
+  showedDown: boolean;
+  won: boolean;
+  // Other seats that participated in this hand:
+  opponents: HandHistoryOpponentDTO[];
 }
