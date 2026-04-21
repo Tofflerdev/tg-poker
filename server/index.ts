@@ -326,6 +326,30 @@ io.on("connection", (socket) => {
     }
   });
 
+  // Phase 3 / Plan 03-04 (PROFILE-03, PROFILE-04): hand-history reader.
+  // SECURITY (T-3-AUTHZ): the requesting user is identified ONLY from
+  // socket.data.telegramId (set during Phase 1 auth). NO client payload is
+  // accepted — even if the client emits with arguments, they are ignored.
+  // SECURITY (T-3-DOS): the row cap is enforced server-side inside
+  // HandHistoryRepository.findForUser (default 50; clamps any larger value).
+  // SECURITY (T-3-INFO-LEAK): on Prisma error, the raw error is logged to
+  // stderr but NEVER returned to the client; the client receives only a
+  // generic 'Server error' string.
+  socket.on("getHandHistory", async () => {
+    const telegramId = socket.data.telegramId;
+    if (!telegramId) {
+      socket.emit("authError", { message: 'Not authenticated' } as any);
+      return;
+    }
+    try {
+      const rows = await HandHistoryRepository.findForUser(telegramId);
+      socket.emit("handHistoryData", rows);
+    } catch (error) {
+      console.error("[HandHistory] Error:", error);
+      socket.emit("handHistoryError", "Server error");
+    }
+  });
+
   socket.on("updateProfile", async (data) => {
     const telegramId = socket.data.telegramId;
     if (!telegramId) {
