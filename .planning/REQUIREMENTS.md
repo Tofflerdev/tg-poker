@@ -35,8 +35,8 @@ Requirements are grouped by category. Each has a unique `CATEGORY-NN` ID used by
 
 - [ ] **PROFILE-01** — Profile page shows existing stats (balance, handsPlayed, handsWon, totalWinnings, biggestPot) plus display name, avatar, and daily-bonus eligibility state.
 - [ ] **PROFILE-02** — Hand history is persisted on hand completion without blocking the game loop (async/batched write queue).
-- [ ] **PROFILE-03** — Profile shows the user's **last 50 hands** (date, table, hole cards at showdown only, board, result, net delta).
-- [ ] **PROFILE-04** — Hand history older than **90 days** is removed by a retention job; profile view never exposes other players' hole cards at non-showdown.
+- [x] **PROFILE-03** — Profile shows the user's **last 50 hands** (date, table, hole cards at showdown only, board, result, net delta).
+- [x] **PROFILE-04** — Hand history older than **90 days** is removed by a retention job; profile view never exposes other players' hole cards at non-showdown.
 
 ### DEPOSIT — Deposit Stub
 
@@ -155,8 +155,8 @@ All requirements above are:
 | AVATAR-04 | Phase 2 | Complete |
 | PROFILE-01 | Phase 2 | Pending |
 | PROFILE-02 | Phase 3 | Pending |
-| PROFILE-03 | Phase 3 | Pending |
-| PROFILE-04 | Phase 3 | Pending |
+| PROFILE-03 | Phase 3 | Complete |
+| PROFILE-04 | Phase 3 | Complete |
 | DEPOSIT-01 | Phase 2 | Pending |
 | DEPOSIT-02 | Phase 2 | Pending |
 | GAME-01 | Phase 3 | Complete |

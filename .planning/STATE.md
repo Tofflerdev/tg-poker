@@ -3,14 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-last_updated: "2026-04-20T23:53:47.087Z"
-last_activity: 2026-04-20
+stopped_at: Completed 03-04-PLAN.md (server hand-history reader)
+last_updated: "2026-04-21T07:18:00.000Z"
+last_activity: 2026-04-21 -- Completed Plan 03-04 hand-history reader (server)
 progress:
   total_phases: 6
   completed_phases: 2
   total_plans: 19
-  completed_plans: 17
-  percent: 89
+  completed_plans: 18
+  percent: 95
 ---
 
 # Project State
@@ -18,10 +19,10 @@ progress:
 ## Current Position
 
 Phase: 03 (gameplay-additions) — EXECUTING
-Plan: 5 of 6 (next: 03-04 hand-history read API)
-Status: Ready to execute
-Last activity: 2026-04-20
-Stopped at: Completed 03-03-PLAN.md (client action-bubble layer)
+Plan: 5 of 6 (03-04 complete; 03-05 remaining)
+Status: Ready to execute Plan 03-05 (client hand-history UI)
+Last activity: 2026-04-21 -- Completed Plan 03-04 hand-history reader (server)
+Stopped at: Completed 03-04-PLAN.md (server hand-history reader)
 
 ## Current Milestone
 
@@ -55,6 +56,9 @@ Stopped at: Completed 03-03-PLAN.md (client action-bubble layer)
 - 03-01: setOnHandComplete no-op preserved — owned by Plan 03-02
 - 03-03: motion@^12.38.0 added as client dep; ActionBubble + ActionBubbleLayer render per-seat FIFO pills with 900 ms hold and useReducedMotion fallback
 - 03-03: vi.mock('motion/react', ...) passthrough in tests (Fragment AnimatePresence + plain-tag motion proxy) — deterministic FIFO assertions under vi.useFakeTimers(); production keeps real enter/exit animations
+- 03-04: HandHistoryRepository.findForUser uses two-step Prisma query (own rows then opponent rows by handId) with read-time privacy filter `r.showedDown ? r.holeCards : []` — single source of truth at HandHistoryRepository.ts:140 (D-18 / T-3-PRIVACY)
+- 03-04: getHandHistory socket handler is zero-arg — identity comes ONLY from socket.data.telegramId; payload ignored entirely (T-3-AUTHZ); 50-row server cap (T-3-DOS); generic 'Server error' string with raw error logged to stderr (T-3-INFO-LEAK)
+- 03-04: tableName resolved at read time via PREDEFINED_TABLES Map lookup with raw-tableId fallback for unknown ids — zero schema impact (RESEARCH Open Q1 Option A; D-19)
 
 ### Blockers
 
