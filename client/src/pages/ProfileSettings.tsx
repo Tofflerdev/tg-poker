@@ -4,6 +4,7 @@ import type { UserProfile, TelegramUser } from '../../../types/index';
 import { Socket } from 'socket.io-client';
 import { Button, Card, TabBar } from '../components/ui';
 import { AVATARS, avatarUrl, type AvatarId } from '../assets/avatars/manifest';
+import { HandHistoryList } from '../components/HandHistoryList';
 
 /**
  * Phase 2 / Plan 02-06: Redesigned Profile/Settings page.
@@ -499,55 +500,7 @@ export const ProfileSettings: React.FC<ProfileSettingsProps> = ({ socket, onBack
   );
 
   const renderHistoryTab = () => (
-    <Card variant="neutral" padding={28} glow>
-      <div
-        style={{
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          gap: 14,
-          textAlign: 'center',
-        }}
-      >
-        <div
-          style={{
-            width: 56,
-            height: 56,
-            borderRadius: '50%',
-            border: '1.5px dashed color-mix(in srgb, var(--color-neutral) 50%, transparent)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            fontSize: 28,
-            color: 'var(--color-neutral)',
-            textShadow: '0 0 8px var(--glow-neutral)',
-          }}
-          aria-hidden
-        >
-          ⏱
-        </div>
-        <div
-          style={{
-            color: '#fff',
-            fontSize: 14,
-            fontWeight: 600,
-            letterSpacing: '0.02em',
-          }}
-        >
-          Hand History
-        </div>
-        <div
-          style={{
-            color: 'var(--color-neutral)',
-            fontSize: 13,
-            lineHeight: 1.5,
-            maxWidth: 280,
-          }}
-        >
-          Your last 50 hands will appear here after the next release.
-        </div>
-      </div>
-    </Card>
+    <HandHistoryList socket={socket} active={activeTab === 'history'} />
   );
 
   return (
