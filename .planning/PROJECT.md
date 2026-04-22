@@ -39,12 +39,23 @@ A polished, fast, mobile-first **Texas Hold'em poker Mini App for Telegram** —
 ## Current State (brownfield)
 
 - **Core game engine complete** — betting rounds, side pots, showdown, turn timers, auto-start loop, multi-table (6 predefined tables).
-- **Persistence complete** — PostgreSQL + Prisma; User model with balance, stats, daily bonus.
-- **Transport complete** — Socket.io-only communication; Telegram `initData` HMAC auth (dev-mode bypass still enabled).
-- **Design language emerging** — "Neon Strip" applied to `GameControls` and `SeatsDisplay`; rest of the UI is inconsistent.
-- **Gaps** — no deploy infra, no reconnect logic, no crash-safety persistence, no admin panel, no tests, no production hardening, no branding/logo, no responsible-gaming UX.
+- **Persistence complete** — PostgreSQL + Prisma; User model with balance, stats, daily bonus; `HandHistory` table with 90-day retention.
+- **Transport complete** — Socket.io-only communication; Telegram `initData` HMAC auth hardened fail-closed in Phase 1.
+- **Design language shipped** — "Neon Strip" applied across Main Menu, Table List, Profile/Settings, Game Room chrome, GameControls, SeatsDisplay, ActionBubble, and HandHistory UI.
+- **Gameplay additions shipped (Phase 3)** — action bubbles broadcast off `onPlayerAction`, async `HandHistoryQueue` off the hot path, zero-arg `getHandHistory` socket handler with read-time opponent-hole-card strip, hand-boundary `checkpointSeat`.
+- **Test stack in place** — Vitest + RTL scaffolded in Phase 3; 84 tests passing (38 server + 46 client). Dedicated Phase 6 extends coverage to per-element granularity.
+- **Gaps** — no deploy infra (explicitly out of scope), no reconnect logic (Phase 4), no crash-safety recovery on boot (Phase 4), no admin panel (Phase 5), no observability (Phase 5).
 
 See `.planning/codebase/` for the full codebase map (7 docs).
+
+## Phase Status
+
+- [x] Phase 1: Foundations & Design System — 2026-04-15
+- [x] Phase 2: Design System Rollout & Avatars — (complete; 20 WebP binaries pending)
+- [x] Phase 3: Gameplay Additions — 2026-04-22 (automated verification passed; 3 human UAT items tracked in `03-HUMAN-UAT.md`)
+- [ ] Phase 4: Resilience
+- [ ] Phase 5: Admin, Ops & Observability
+- [ ] Phase 6: Test Hardening
 
 ## MVP Scope (this initialization)
 
@@ -119,4 +130,4 @@ This document evolves at phase transitions and milestone boundaries.
 3. Audit Out of Scope — reasons still valid?
 4. Update Context with current state
 
-_Last updated: 2026-04-14 — Milestone v1.0 MVP Launch started_
+_Last updated: 2026-04-22 — Phase 3 complete (action bubbles, hand history pipeline, profile history UI, hand-boundary checkpointing)_
