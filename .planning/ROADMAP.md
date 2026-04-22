@@ -12,7 +12,7 @@
 
 - [x] **Phase 1: Foundations & Design System** — Shared contracts, Prisma migration, telegramId refactor, Game callbacks, auth hardening, Neon Strip tokens ✓ 2026-04-15
 - [ ] **Phase 2: Design System Rollout & Avatars** — Full UI redesign, 20-animal avatar system, deposit stub, compliance/consent pages
-- [ ] **Phase 3: Gameplay Additions** — Action bubbles, hand history, async write queue, chip checkpointing
+- [x] **Phase 3: Gameplay Additions** — Action bubbles, hand history, async write queue, chip checkpointing ✓ 2026-04-22
 - [ ] **Phase 4: Resilience** — Reconnect with full-snapshot resume, crash-safe recovery, atomic buy-in
 - [ ] **Phase 5: Admin, Ops & Observability** — Hidden admin panel, Sentry + PostHog, server-side ToS gate
 - [ ] **Phase 6: Test Hardening** — Vitest + RTL suite, per-element coverage, scenario tests, CI gate
@@ -109,11 +109,11 @@ Plans:
 |-------|----------------|--------|-----------|
 | 1. Foundations & Design System | 5/5 | Complete | 2026-04-15 |
 | 2. Design System Rollout & Avatars | 0/0 | Not started | — |
-| 3. Gameplay Additions | 0/0 | Not started | — |
+| 3. Gameplay Additions | 6/6 | Complete | 2026-04-22 |
 | 4. Resilience | 0/0 | Not started | — |
 | 5. Admin, Ops & Observability | 0/0 | Not started | — |
 | 6. Test Hardening | 0/0 | Not started | — |
 
 ---
 
-*Last updated: 2026-04-14 — Roadmap created*
+*Last updated: 2026-04-22 — Phase 3 complete (automated verification passed; human UAT tracked in 03-HUMAN-UAT.md)*
