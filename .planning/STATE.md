@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 04-00-PLAN.md (Wave-0 RED test scaffolds)
-last_updated: "2026-04-29T19:27:59.734Z"
+stopped_at: Completed 04-01-PLAN.md (UserRepository atomic helpers — 6 RED tests now GREEN)
+last_updated: "2026-04-29T19:32:39.196Z"
 last_activity: 2026-04-29
 progress:
   total_phases: 6
   completed_phases: 3
   total_plans: 26
-  completed_plans: 20
-  percent: 77
+  completed_plans: 21
+  percent: 81
 ---
 
 # Project State
@@ -19,15 +19,15 @@ progress:
 ## Current Position
 
 Phase: 04 (resilience) — EXECUTING
-Plan: 2 of 7
-Status: Executing Phase 04 (04-00 complete; 04-01 next)
-Last activity: 2026-04-29 -- Completed 04-00 (Wave-0 RED test scaffolds)
-Stopped at: Completed 04-00-PLAN.md (Wave-0 RED test scaffolds)
+Plan: 3 of 7
+Status: Executing Phase 04 (04-00, 04-01 complete; 04-02 next)
+Last activity: 2026-04-29 -- Completed 04-01 (UserRepository atomic helpers — 6 RED tests now GREEN)
+Stopped at: Completed 04-01-PLAN.md (UserRepository atomic helpers — 6 RED tests now GREEN)
 
 ## Session Continuity
 
-Last session: 2026-04-29T19:27:59.731Z
-Stopped at: Completed 04-00-PLAN.md (Wave-0 RED test scaffolds)
+Last session: 2026-04-29T19:32:39.192Z
+Stopped at: Completed 04-01-PLAN.md (UserRepository atomic helpers — 6 RED tests now GREEN)
 Resume file: None
 
 ## Current Milestone
@@ -68,6 +68,8 @@ Resume file: None
 - 04-00: Wave-0 RED test scaffolds written FIRST — 5 Vitest files (4 server + 1 client) establish behavior contracts for Plans 04-01..04-06 before any implementation lands; honors Nyquist rule (every <verify> has automated target)
 - 04-00: reconnectHandshake.test.ts uses inline auth-handler harness — passes today as contract specimen; Plan 04-06 must mirror handler shape verbatim (seat: state.seats.findIndex(p => p?.id === telegramId), replacedBySession bare event, GraceRegistry.clear on reconnect) or 5 tests fail
 - 04-00: ReconnectOverlay constants (RECONNECT_OVERLAY_DEBOUNCE_MS=1500, GRACE_MID_HAND_MS=30000, GRACE_BETWEEN_HANDS_MS=120000) exported as named consts — tests assert literal values not timing-fragile observed values; Plan 04-05 must export these or suite fails on import
+- 04-01: tryDecrementBalance + refundCurrentChips atomic helpers added to UserRepository — single-statement updateMany with `gte` / `IS NOT NULL` guards close Concern #5 (buy-in double-spend) and provide race-safe refund for grace expiry / boot recovery / leaveTable; 6 RED tests in UserRepository.atomic.test.ts → GREEN; updateBalance preserved unchanged for daily-bonus / winnings paths (D-D2)
+- 04-01: refundCurrentChips uses two-step pattern (findUnique → updateMany WHERE currentChips IS NOT NULL) NOT a single $transaction — D-D2 idempotency guard makes concurrent boot-recovery + client-driven refund safe to race; loser sees count===0 and returns null without double-credit
 
 ### Blockers
 
