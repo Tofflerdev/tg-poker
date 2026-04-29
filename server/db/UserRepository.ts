@@ -84,6 +84,56 @@ export class UserRepository {
     return result.count === 1;
   }
 
+  /**
+   * Plan 04-01 / RESILIENCE-02 / RESILIENCE-07 / D-D2:
+   * Atomic refund of `currentChips` back to `balance`, with idempotent column-clear.
+   *
+   * Two-step:
+   *   1. Read `currentChips` to capture the amount to refund.
+   *   2. Single UPDATE with `WHERE currentChips IS NOT NULL` guard:
+   *      - increments balance by chipsToRefund
+   *      - sets currentChips, currentTableId, currentSeat, disconnectedAt, lastSeenAt to null
+   *
+   * The IS-NOT-NULL guard makes the write idempotent: a concurrent boot-recovery
+   * sweep racing with a client-driven refund cannot double-credit. The second
+   * caller sees `count === 0` and returns null — no double write.
+   *
+   * Returns:
+   *   - { refunded: N } on the first successful refund
+   *   - null when never seated (currentChips IS NULL) OR already refunded by another caller (count === 0) OR user not found
+   *
+   * Used by:
+   *   - GraceRegistry.onExpire (between-hands branch) — Plan 04-02
+   *   - SessionRecovery boot sweep — Plan 04-04
+   *   - leaveTable cashout handler — Plan 04-06
+   *
+   * Telegram IDs are ≤10 digits in 2026; BigInt(Number(telegramId)) round-trip is safe (Pitfall 7).
+   */
+  static async refundCurrentChips(telegramId: string): Promise<{ refunded: number } | null> {
+    const user = await prisma.user.findUnique({
+      where: { telegramId: BigInt(Number(telegramId)) },
+      select: { currentChips: true }
+    });
+    if (!user || user.currentChips === null) return null;
+
+    const chipsToRefund = user.currentChips;
+
+    const result = await prisma.user.updateMany({
+      where: { telegramId: BigInt(Number(telegramId)), currentChips: { not: null } },
+      data:  {
+        balance: { increment: chipsToRefund },
+        currentChips: null,
+        currentTableId: null,
+        currentSeat: null,
+        disconnectedAt: null,
+        lastSeenAt: null
+      }
+    });
+
+    if (result.count === 0) return null;
+    return { refunded: chipsToRefund };
+  }
+
   static async claimDailyBonus(telegramId: number): Promise<{ success: boolean; balance: number; nextClaimAt?: Date; message?: string }> {
     const user = await prisma.user.findUnique({
       where: { telegramId: BigInt(telegramId) }
