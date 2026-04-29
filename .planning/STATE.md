@@ -3,32 +3,32 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Phase 4 plans ready — execute next
-last_updated: "2026-04-29T19:19:50.043Z"
-last_activity: 2026-04-29 -- Phase 04 planning complete
+stopped_at: Completed 04-00-PLAN.md (Wave-0 RED test scaffolds)
+last_updated: "2026-04-29T19:27:59.734Z"
+last_activity: 2026-04-29
 progress:
   total_phases: 6
   completed_phases: 3
   total_plans: 26
-  completed_plans: 19
-  percent: 73
+  completed_plans: 20
+  percent: 77
 ---
 
 # Project State
 
 ## Current Position
 
-Phase: 4
-Plan: Not started
-Status: Ready to execute
-Last activity: 2026-04-29 -- Phase 04 planning complete
-Stopped at: Phase 4 plans ready — execute next
+Phase: 04 (resilience) — EXECUTING
+Plan: 2 of 7
+Status: Executing Phase 04 (04-00 complete; 04-01 next)
+Last activity: 2026-04-29 -- Completed 04-00 (Wave-0 RED test scaffolds)
+Stopped at: Completed 04-00-PLAN.md (Wave-0 RED test scaffolds)
 
 ## Session Continuity
 
-Last session: 2026-04-29
-Stopped at: Phase 4 planning complete (7 plans, 1 checker iteration + 1 revision; iteration-2 checker skipped due to org usage limit — reviser self-verified all fixes)
-Resume file: none — proceed directly to /gsd-execute-phase 4
+Last session: 2026-04-29T19:27:59.731Z
+Stopped at: Completed 04-00-PLAN.md (Wave-0 RED test scaffolds)
+Resume file: None
 
 ## Current Milestone
 
@@ -65,6 +65,9 @@ Resume file: none — proceed directly to /gsd-execute-phase 4
 - 03-04: HandHistoryRepository.findForUser uses two-step Prisma query (own rows then opponent rows by handId) with read-time privacy filter `r.showedDown ? r.holeCards : []` — single source of truth at HandHistoryRepository.ts:140 (D-18 / T-3-PRIVACY)
 - 03-04: getHandHistory socket handler is zero-arg — identity comes ONLY from socket.data.telegramId; payload ignored entirely (T-3-AUTHZ); 50-row server cap (T-3-DOS); generic 'Server error' string with raw error logged to stderr (T-3-INFO-LEAK)
 - 03-04: tableName resolved at read time via PREDEFINED_TABLES Map lookup with raw-tableId fallback for unknown ids — zero schema impact (RESEARCH Open Q1 Option A; D-19)
+- 04-00: Wave-0 RED test scaffolds written FIRST — 5 Vitest files (4 server + 1 client) establish behavior contracts for Plans 04-01..04-06 before any implementation lands; honors Nyquist rule (every <verify> has automated target)
+- 04-00: reconnectHandshake.test.ts uses inline auth-handler harness — passes today as contract specimen; Plan 04-06 must mirror handler shape verbatim (seat: state.seats.findIndex(p => p?.id === telegramId), replacedBySession bare event, GraceRegistry.clear on reconnect) or 5 tests fail
+- 04-00: ReconnectOverlay constants (RECONNECT_OVERLAY_DEBOUNCE_MS=1500, GRACE_MID_HAND_MS=30000, GRACE_BETWEEN_HANDS_MS=120000) exported as named consts — tests assert literal values not timing-fragile observed values; Plan 04-05 must export these or suite fails on import
 
 ### Blockers
 

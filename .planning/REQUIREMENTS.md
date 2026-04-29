@@ -53,12 +53,12 @@ Requirements are grouped by category. Each has a unique `CATEGORY-NN` ID used by
 ### RESILIENCE — Reconnect & Crash Safety
 
 - [ ] **RESILIENCE-01** — `User` persistence is extended with `currentTableId`, `currentSeat`, `currentChips`, `sessionToken`, `disconnectedAt`, `lastSeenAt` (additive Prisma migration `v1_mvp_launch`).
-- [ ] **RESILIENCE-02** — Economic state (`currentChips`, `currentTableId`, `currentSeat`) is written at hand boundaries via `onHandComplete`; mid-hand ephemeral state (hole cards, bets, timers) is never persisted.
+- [x] **RESILIENCE-02** — Economic state (`currentChips`, `currentTableId`, `currentSeat`) is written at hand boundaries via `onHandComplete`; mid-hand ephemeral state (hole cards, bets, timers) is never persisted.
 - [ ] **RESILIENCE-03** — Telegram identity is the durable key: `TableManager`, `userStorage`, and socket mappings are refactored to key by `telegramId`, not `socketId`.
-- [ ] **RESILIENCE-04** — On socket reconnect, the server re-verifies `initData` HMAC every time (session token disambiguates connections, it never authenticates), emits `replacedBySession` to any prior socket, evicts it, and sends a full `GameState` snapshot including the player's own hole cards.
-- [ ] **RESILIENCE-05** — Client shows a "Reconnecting…" overlay during disconnect with a grace window of 30 s mid-hand / 120 s between hands before the server treats the player as sat-out / vacated.
-- [ ] **RESILIENCE-06** — On server boot, a recovery module reads persisted session rows and either reseats the player sitting-out at their table, or refunds `currentChips` to `balance` and clears the session columns. Never restores in-flight hand state.
-- [ ] **RESILIENCE-07** — Buy-in / cashout balance transitions use atomic SQL (`UPDATE ... WHERE balance >= :n`) and refuse on insufficient funds (no double-spend on concurrent reconnects).
+- [x] **RESILIENCE-04** — On socket reconnect, the server re-verifies `initData` HMAC every time (session token disambiguates connections, it never authenticates), emits `replacedBySession` to any prior socket, evicts it, and sends a full `GameState` snapshot including the player's own hole cards.
+- [x] **RESILIENCE-05** — Client shows a "Reconnecting…" overlay during disconnect with a grace window of 30 s mid-hand / 120 s between hands before the server treats the player as sat-out / vacated.
+- [x] **RESILIENCE-06** — On server boot, a recovery module reads persisted session rows and either reseats the player sitting-out at their table, or refunds `currentChips` to `balance` and clears the session columns. Never restores in-flight hand state.
+- [x] **RESILIENCE-07** — Buy-in / cashout balance transitions use atomic SQL (`UPDATE ... WHERE balance >= :n`) and refuse on insufficient funds (no double-spend on concurrent reconnects).
 
 ### SECURITY — Production Auth Hardening
 
@@ -164,12 +164,12 @@ All requirements above are:
 | GAME-03 | Phase 3 | Complete |
 | GAME-04 | Phase 1 | Pending |
 | RESILIENCE-01 | Phase 1 | Pending |
-| RESILIENCE-02 | Phase 3 | Pending |
+| RESILIENCE-02 | Phase 3 | Complete |
 | RESILIENCE-03 | Phase 1 | Pending |
-| RESILIENCE-04 | Phase 4 | Pending |
-| RESILIENCE-05 | Phase 4 | Pending |
-| RESILIENCE-06 | Phase 4 | Pending |
-| RESILIENCE-07 | Phase 4 | Pending |
+| RESILIENCE-04 | Phase 4 | Complete |
+| RESILIENCE-05 | Phase 4 | Complete |
+| RESILIENCE-06 | Phase 4 | Complete |
+| RESILIENCE-07 | Phase 4 | Complete |
 | SECURITY-01 | Phase 1 | Pending |
 | SECURITY-02 | Phase 1 | Pending |
 | SECURITY-03 | Phase 1 | Pending |
