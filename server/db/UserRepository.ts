@@ -66,6 +66,24 @@ export class UserRepository {
     return user.balance;
   }
 
+  /**
+   * Plan 04-01 / RESILIENCE-07 / D-D1 / D-D2:
+   * Atomic balance deduction with insufficient-funds guard.
+   *
+   * Single SQL round-trip: `UPDATE users SET balance = balance - n WHERE telegram_id = ? AND balance >= n`.
+   * Returns true iff exactly one row was updated (caller had sufficient balance).
+   *
+   * Closes Concern #5 (buy-in double-spend race) — no read-then-write window.
+   * Verified safe on Prisma 7.4.2 (post issue #8612 fix in 4.4.0).
+   */
+  static async tryDecrementBalance(telegramId: number, amount: number): Promise<boolean> {
+    const result = await prisma.user.updateMany({
+      where: { telegramId: BigInt(telegramId), balance: { gte: amount } },
+      data:  { balance: { decrement: amount } }
+    });
+    return result.count === 1;
+  }
+
   static async claimDailyBonus(telegramId: number): Promise<{ success: boolean; balance: number; nextClaimAt?: Date; message?: string }> {
     const user = await prisma.user.findUnique({
       where: { telegramId: BigInt(telegramId) }
