@@ -11,7 +11,7 @@ Land the reconnect-resume + boot-time crash-recovery + atomic-balance loop on to
 **In scope:**
 1. **Reconnect handshake (RESILIENCE-04):** Auth handler detects an existing seated session for the authenticated `telegramId`, emits the (renamed) `replacedBySession` event to any prior socket, evicts it, and pushes a personalized `tableJoined` + `state` snapshot (with own hole cards) to the new socket.
 2. **Grace window state machine (RESILIENCE-05):** On `disconnect`, mark `disconnectedAt = now()` and arm a stage-aware grace timer. 30 s mid-hand / 120 s between hands. Mid-hand expiry → `sittingOut`; between-hands expiry → vacate seat + refund chips. Existing turn timer continues to run independently.
-3. **Boot recovery (RESILIENCE-06):** On startup, every persisted session row (`currentTableId IS NOT NULL`) is refunded — `currentChips → balance`, all session columns cleared. Per-row Prisma `$transaction`. No reseat-as-sit-out path.
+3. **Boot recovery (RESILIENCE-06):** On startup, every persisted session row (`currentTableId IS NOT NULL`) is refunded — `currentChips → balance`, all session columns cleared. Per-row try/catch loop calling the atomic D-D2 helper (no outer `$transaction` — the helper's conditional `updateMany` already provides per-row atomicity and idempotence). No reseat-as-sit-out path.
 4. **Atomic balance SQL (RESILIENCE-07):** Buy-in deduction uses `updateMany WHERE balance >= n`; cashout / refund paths use `updateMany WHERE currentChips IS NOT NULL` for idempotency. `count === 0` ⇒ refuse with `tableError`.
 5. **Client "Reconnecting…" overlay:** Delayed ~1.5 s after socket disconnect, full-screen Neon Strip with countdown, dismissed on next `tableJoined`. On grace expiry → non-blocking "sat out / removed" message with back-to-Table-List button.
 
@@ -64,7 +64,7 @@ Land the reconnect-resume + boot-time crash-recovery + atomic-balance loop on to
 
 - **D-C3:** **Stale `currentTableId` (no match in `PREDEFINED_TABLES`) → refund + warn.** Uses the same code path as the default. `console.warn('[BootRecovery] stale tableId %s for telegramId=%s — refunded', tableId, telegramId)`. Robust to renamed/removed tables.
 
-- **D-C4:** **Per-row Prisma `$transaction`.** `prisma.user.findMany({ where: { currentTableId: { not: null } } })` → for each row run `prisma.$transaction([...])` doing the refund + column clear via the same atomic helper from D-D2. Per-row transactions make audit-logging trivial in Phase 5 (one `AdminAuditLog` row per recovered session) and bound blast radius if one row fails.
+- **D-C4:** **Per-row try/catch loop calling the D-D2 atomic helper — no outer `$transaction`.** `prisma.user.findMany({ where: { currentTableId: { not: null } } })` → for each row, call `UserRepository.refundCurrentChips(telegramId)` inside `try { ... } catch { /* log + continue */ }`. The helper's conditional `updateMany` (D-D2: `WHERE currentChips IS NOT NULL`) is itself atomic and idempotent in a single SQL round-trip, so wrapping it in an outer `prisma.$transaction([...])` would only add overhead without strengthening atomicity. The try/catch already bounds blast-radius (one bad row does not poison the sweep), and Phase 5 audit-logging can be added inside the loop body without needing a transaction. **Amendment 2026-04-29:** revised from "per-row Prisma `$transaction`" after plan-checker flagged the redundancy; the original intent (per-row atomicity + bounded blast-radius) is preserved by the try/catch + helper composition.
 
 ### D. Atomic Balance SQL (RESILIENCE-07)
 
