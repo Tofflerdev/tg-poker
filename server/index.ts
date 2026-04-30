@@ -12,6 +12,9 @@ import { isValidAvatarId } from "../types/avatars.js";
 import * as HandHistoryQueue from "./HandHistoryQueue.js";
 import { HandHistoryRepository } from "./db/HandHistoryRepository.js";
 import { checkpointSeatedPlayers } from "./checkpointSeatedPlayers.js";
+import * as GraceRegistry from "./GraceRegistry.js";
+import * as SessionRecovery from "./SessionRecovery.js";
+import prisma from "./db/prisma.js";
 import type {
   TelegramUser,
   AuthPayload,
@@ -227,25 +230,34 @@ io.on("connection", (socket) => {
       // Store user in session cache — keyed by telegramId
       userStorage.addUser(telegramId, user);
 
-      // Wire eviction: if a prior socket is mapped for this telegramId, disconnect it (D-07 scaffold)
+      // Wire eviction: if a prior socket is mapped for this telegramId, disconnect it.
+      // Phase 4 / Plan 04-06 / D-A3: typed bare event (no payload), then disconnect.
       tableManager.setSocketForTelegram(
         telegramId,
         socket.id,
         (priorSocketId) => {
           const prior = io.sockets.sockets.get(priorSocketId);
           if (prior) {
-            // Phase 1 scaffold only — Phase 4 will emit replacedBySession + snapshot.
-            // For now: disconnect the prior socket cleanly so no split-brain state.
-            prior.emit('sessionReplaced' as any); // placeholder event; Phase 4 expands payload
+            prior.emit('replacedBySession');
             prior.disconnect(true);
           }
         }
       );
 
-      // If the player is already seated at a table, refresh the transport handle
+      // Phase 4 / Plan 04-06 / D-A2: if the player was already seated (reconnect),
+      // push a personalized tableJoined + state snapshot to the new socket and
+      // refresh other seats. Reuses existing events — no new event type.
+      // getStateForPlayer(telegramId) is used here (NOT getState()) so the snapshot
+      // contains only this player's own hole cards — same privacy path as regular state push.
       const seatedTable = tableManager.getPlayerTable(telegramId);
       if (seatedTable) {
         seatedTable.updatePlayerSocketId(telegramId, socket.id);
+        const state = seatedTable.getStateForPlayer(telegramId);
+        const seatIdx = state.seats.findIndex(p => p?.id === telegramId);
+        socket.emit("tableJoined", { tableId: seatedTable.id, seat: seatIdx, state });
+        updateTableState(seatedTable.id);
+        // D-B clear: a successful auth means the player is back; cancel any in-flight grace timer.
+        GraceRegistry.clear(telegramId);
       }
 
       socket.emit("authSuccess", user);
@@ -521,14 +533,21 @@ io.on("connection", (socket) => {
       return;
     }
 
-    // Deduct buy-in from DB
-    try {
-      const newBalance = await UserRepository.updateBalance(user.telegramId, -tableInfo!.config.buyIn);
-      user.balance = newBalance;
-      socket.emit("balanceUpdate", newBalance);
-    } catch (error) {
-      console.error("Failed to deduct buy-in:", error);
-      // Rollback join? For now just log error, but ideally we should remove player
+    // Phase 4 / Plan 04-06 / D-D1, D-D2: atomic buy-in with insufficient-funds guard.
+    // Closes Concern #5 (buy-in double-spend race) and #11 (rollback TODO).
+    const ok = await UserRepository.tryDecrementBalance(user.telegramId, tableInfo!.config.buyIn);
+    if (!ok) {
+      // Roll back the in-memory join (player was added by tableManager.joinTable above).
+      socket.leave(tableId);
+      tableManager.leaveTable(telegramId);
+      socket.emit("tableError", `Insufficient balance. Buy-in is ${tableInfo!.config.buyIn}`);
+      return;
+    }
+    // Reflect new balance to the client (updateMany doesn't return the row).
+    const refreshed = await UserRepository.findByTelegramId(user.telegramId);
+    if (refreshed) {
+      user.balance = refreshed.balance;
+      socket.emit("balanceUpdate", refreshed.balance);
     }
 
     // Join socket room for this table
@@ -553,27 +572,31 @@ io.on("connection", (socket) => {
 
     const tableId = tableManager.getPlayerTableId(telegramId);
     if (tableId) {
-      // Get chips before leaving
-      const table = tableManager.getTable(tableId);
-      const player = table?.getPlayer(telegramId);
-      const chipsToReturn = player ? player.chips : 0;
-
       socket.leave(tableId);
       tableManager.leaveTable(telegramId);
       socket.emit("tableLeft");
       updateTableState(tableId);
       console.log(`[Table] telegramId=${telegramId} (socket ${socket.id}) left ${tableId}`);
 
-      // Return chips to DB
-      const user = userStorage.getUser(telegramId);
-      if (user && chipsToReturn > 0) {
-        try {
-          const newBalance = await UserRepository.updateBalance(user.telegramId, chipsToReturn);
-          user.balance = newBalance;
-          socket.emit("balanceUpdate", newBalance);
-        } catch (error) {
-          console.error("Failed to return chips:", error);
+      // Phase 4 / Plan 04-06 / D-D2: atomic + idempotent refund. Reads currentChips
+      // from the User row (NOT in-memory player state — the row was checkpointed at
+      // the last hand boundary by Phase 3's onHandComplete). Clears all session columns.
+      // Cancel any in-flight grace timer (the player chose to leave, not got disconnected).
+      GraceRegistry.clear(telegramId);
+      try {
+        const result = await UserRepository.refundCurrentChips(telegramId);
+        if (result) {
+          const user = userStorage.getUser(telegramId);
+          if (user) {
+            const refreshed = await UserRepository.findByTelegramId(user.telegramId);
+            if (refreshed) {
+              user.balance = refreshed.balance;
+              socket.emit("balanceUpdate", refreshed.balance);
+            }
+          }
         }
+      } catch (error) {
+        console.error("Failed to refund chips:", error);
       }
     }
   });
@@ -734,13 +757,18 @@ io.on("connection", (socket) => {
       return;
     }
 
-    // Deduct buy-in
-    try {
-      const newBalance = await UserRepository.updateBalance(user.telegramId, -availableTable.config.buyIn);
-      user.balance = newBalance;
-      socket.emit("balanceUpdate", newBalance);
-    } catch (error) {
-      console.error("Failed to deduct buy-in", error);
+    // Phase 4 / Plan 04-06 / D-D2: same atomic buy-in pattern as joinTable.
+    const ok2 = await UserRepository.tryDecrementBalance(user.telegramId, availableTable.config.buyIn);
+    if (!ok2) {
+      socket.leave(availableTable.id);
+      tableManager.leaveTable(telegramId);
+      socket.emit("errorMessage", "Insufficient balance");
+      return;
+    }
+    const refreshed2 = await UserRepository.findByTelegramId(user.telegramId);
+    if (refreshed2) {
+      user.balance = refreshed2.balance;
+      socket.emit("balanceUpdate", refreshed2.balance);
     }
 
     socket.join(availableTable.id);
