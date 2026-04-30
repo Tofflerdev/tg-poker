@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 04-05-PLAN.md (ReconnectOverlay component)
-last_updated: "2026-04-30T07:03:29.289Z"
+stopped_at: Completed 04-04-PLAN.md (SessionRecovery boot sweep)
+last_updated: "2026-04-30T07:09:50.084Z"
 last_activity: 2026-04-30
 progress:
   total_phases: 6
   completed_phases: 3
   total_plans: 26
-  completed_plans: 24
-  percent: 92
+  completed_plans: 25
+  percent: 96
 ---
 
 # Project State
@@ -19,14 +19,14 @@ progress:
 ## Current Position
 
 Phase: 04 (resilience) — EXECUTING
-Plan: 5 of 7
+Plan: 6 of 7
 Status: Ready to execute
 Last activity: 2026-04-30
-Stopped at: Completed 04-05-PLAN.md (ReconnectOverlay component)
+Stopped at: Completed 04-04-PLAN.md (SessionRecovery boot sweep)
 
 ## Session Continuity
 
-Last session: 2026-04-30T07:03:29.285Z
+Last session: 2026-04-30T07:09:50.080Z
 Stopped at: Completed 04-03-PLAN.md (typed replacedBySession event)
 Resume file: None
 
@@ -73,6 +73,7 @@ Resume file: None
 - 04-02: GraceRegistry shipped as singleton-as-module (timer state machine for disconnect grace windows) — RED test scaffold from Plan 04-00 → GREEN; surface used by Plan 04-04 (boot recovery) and Plan 04-06 (auth handler reconnect path)
 - 04-03: replacedBySession typed as bare event `() => void` in ExtendedServerEvents — pure-additive type change (Phase 1 placeholder was `'sessionReplaced' as any`, never declared in interface); Plan 04-06 owns runtime cast removal at server/index.ts:239 to keep review-boundary discipline (RESILIENCE-04 / D-A3 / T-04-A3-1)
 - 04-05: ReconnectOverlay component shipped — 5-state OverlayState union (hidden / reconnecting / sat-out / vacated / replaced), triple useRef timer storage (debounce / grace / tick), 1500 ms debounce closes Pitfall 5 rapid-cycle flicker, replacedBySession bypasses debounce per D-A3; tickNow synced at overlay-open inside debounce callback (Rule 1 deviation from plan-supplied code) — without sync, stale mount-time tickNow renders countdown as 32/122 not 30/120; 11 RED → GREEN, full client suite 57 / 57
+- 04-04: SessionRecovery boot sweep shipped — recoverPersistedSessions() enumerates User rows with currentTableId IS NOT NULL via @@index, refunds each through Plan 04-01's UserRepository.refundCurrentChips inside a per-row try/catch (D-C4 amended 2026-04-29 — no outer $transaction; the helper is self-contained atomic per row), warns on stale tableIds (D-C3) but refunds anyway, returns { recovered: N }; always-refund policy (D-C1) — no reseat-as-sit-out branch; 4 RED → GREEN, full server suite 59 → 63
 
 ### Blockers
 
