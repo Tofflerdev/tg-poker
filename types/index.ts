@@ -243,6 +243,15 @@ export interface ExtendedServerEvents extends ServerEvents {
   // Plan 03-04 (PROFILE-03, PROFILE-04): hand-history reader response.
   handHistoryData: (rows: HandHistoryDTO[]) => void;
   handHistoryError: (msg: string) => void;
+  // Phase 4 / Plan 04-03 (RESILIENCE-04 / D-A3): bare event with NO payload.
+  // Sent by the server to a prior socket when a new connection authenticates
+  // with the same telegramId. The server then calls `socket.disconnect(true)`
+  // on the prior socket. The evicted client renders a "logged in elsewhere"
+  // notice (per Plan 04-05 ReconnectOverlay sub-view).
+  //
+  // RENAMES Phase 1 D-07 placeholder `'sessionReplaced' as any` cast at
+  // server/index.ts:239 — Plan 04-06 removes the cast and uses this typed name.
+  replacedBySession: () => void;
 }
 
 // ==========================================
