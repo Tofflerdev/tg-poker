@@ -173,6 +173,13 @@ const setupTableEvents = (tableId: string) => {
         });
         // (2) Authoritative chip/seat checkpoint — separate awaited path (D-14).
         await checkpointSeatedPlayers(evt);
+        // Phase 4 / Plan 04-06 / Pitfall 1: every per-player entry that is still in
+        // mid-hand grace must be promoted to between-hands grace, so the 30 s
+        // mid-hand timer doesn't spuriously fire AFTER the hand they disconnected
+        // from has ended. reArmIfMidHand is a no-op when no entry exists.
+        evt.perPlayer.forEach((p) => {
+          GraceRegistry.reArmIfMidHand(p.telegramId);
+        });
       } catch (err) {
         console.error('[onHandComplete] checkpoint or enqueue error:', err);
       }
@@ -182,9 +189,21 @@ const setupTableEvents = (tableId: string) => {
 
 // Initialize table events for all predefined tables, then start the
 // HandHistoryQueue flush timer and the 90-day retention sweep.
-setTimeout(() => {
+setTimeout(async () => {
   const tables = tableManager.getAllTablesInfo();
   tables.forEach((t) => setupTableEvents(t.id));
+
+  // Phase 4 / Plan 04-06 / D-C2: boot-time session recovery sweep.
+  // Refunds every persisted session row (currentTableId IS NOT NULL) and
+  // clears the session columns. Always-refund (D-C1) — no reseat path in v1.
+  try {
+    const result = await SessionRecovery.recoverPersistedSessions();
+    console.log('[Boot] SessionRecovery refunded %d session(s)', result.recovered);
+  } catch (err) {
+    console.error('[Boot] SessionRecovery failed:', err);
+    // Non-fatal — server continues to listen.
+  }
+
   HandHistoryQueue.startFlushTimer();
   HandHistoryQueue.startRetentionJob();
   console.log('[Boot] HandHistoryQueue + retention job started');
@@ -821,50 +840,50 @@ io.on("connection", (socket) => {
   });
 
   // ==========================================
-  // Disconnect
+  // Disconnect (Phase 4 / Plan 04-06 / D-B1, D-B2)
   // ==========================================
   socket.on("disconnect", async () => {
     console.log("[Socket] Player disconnected:", socket.id);
 
     const telegramId = socket.data.telegramId;
     if (!telegramId) {
-      // Socket never authenticated — nothing to clean up
+      // Socket never authenticated — nothing to clean up.
       return;
     }
 
-    // Clear transport handle on the seated player (Phase 4 adds grace window / sit-out)
+    // Clear transport handle on the seated player (seat is HELD per D-B1).
     const seatedTable = tableManager.getPlayerTable(telegramId);
     if (seatedTable) {
       seatedTable.updatePlayerSocketId(telegramId, undefined);
-    }
 
-    const tableId = tableManager.getPlayerTableId(telegramId);
-    if (tableId) {
-      // Get chips before leaving
-      const table = tableManager.getTable(tableId);
-      const player = table?.getPlayer(telegramId);
-      const chipsToReturn = player ? player.chips : 0;
+      // D-B1, D-B2: stage-aware grace arming. NO immediate leave, NO immediate refund.
+      // The existing Game.TURN_TIME_LIMIT auto-fold continues independently.
+      // Table.getState() returns the full unpersonalized GameState — stage field
+      // is identical to getStateForPlayer().stage and does not leak hole cards.
+      const stage = seatedTable.getState().stage;
+      const graceStage: 'mid-hand' | 'between-hands' =
+        (stage === 'waiting' || stage === 'showdown') ? 'between-hands' : 'mid-hand';
 
-      updateTableState(tableId);
-      tableManager.handleDisconnect(telegramId);
-
-      // Return chips to DB
-      const user = userStorage.getUser(telegramId);
-      if (user && chipsToReturn > 0) {
-        try {
-          await UserRepository.updateBalance(user.telegramId, chipsToReturn);
-        } catch (error) {
-          console.error("Failed to return chips on disconnect:", error);
-        }
+      // Mark disconnectedAt + lastSeenAt for ops/debug visibility.
+      try {
+        await prisma.user.update({
+          where: { telegramId: BigInt(Number(telegramId)) },
+          data: { disconnectedAt: new Date(), lastSeenAt: new Date() }
+        });
+      } catch (err) {
+        console.error('[Disconnect] failed to mark disconnectedAt:', err);
       }
+
+      GraceRegistry.arm(telegramId, graceStage, seatedTable.id);
+      updateTableState(seatedTable.id);
     }
 
-    // Only clear socketByTelegram if this socket is still the current mapping
-    // (guards against out-of-order events during eviction — T-01-04-04)
+    // Identity guard preserved (T-01-04-04 / Pitfall 4): only clear socket mapping
+    // if THIS socket is still the current one for this telegramId. An evicted
+    // (prior) socket's disconnect must NOT wipe the new socket's mapping.
     if (tableManager.getSocketIdForTelegram(telegramId) === socket.id) {
       tableManager.clearSocketForTelegram(telegramId);
     }
-
     userStorage.removeUser(telegramId);
   });
 });
