@@ -110,7 +110,7 @@ Plans:
 | 1. Foundations & Design System | 5/5 | Complete | 2026-04-15 |
 | 2. Design System Rollout & Avatars | 0/0 | Not started | — |
 | 3. Gameplay Additions | 6/6 | Complete | 2026-04-22 |
-| 4. Resilience | 0/0 | Not started | — |
+| 4. Resilience | 5/7 | In progress | — |
 | 5. Admin, Ops & Observability | 0/0 | Not started | — |
 | 6. Test Hardening | 0/0 | Not started | — |
 
