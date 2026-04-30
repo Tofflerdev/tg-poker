@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 04-04-PLAN.md (SessionRecovery boot sweep)
-last_updated: "2026-04-30T07:09:50.084Z"
+stopped_at: Completed 04-06-PLAN.md (Phase 4 integration — all primitives now live)
+last_updated: "2026-04-30T12:44:01.608Z"
 last_activity: 2026-04-30
 progress:
   total_phases: 6
-  completed_phases: 3
+  completed_phases: 4
   total_plans: 26
-  completed_plans: 25
-  percent: 96
+  completed_plans: 26
+  percent: 100
 ---
 
 # Project State
@@ -19,14 +19,14 @@ progress:
 ## Current Position
 
 Phase: 04 (resilience) — EXECUTING
-Plan: 6 of 7
+Plan: 2 of 7
 Status: Ready to execute
 Last activity: 2026-04-30
-Stopped at: Completed 04-04-PLAN.md (SessionRecovery boot sweep)
+Stopped at: Completed 04-06-PLAN.md (Phase 4 integration — all primitives now live)
 
 ## Session Continuity
 
-Last session: 2026-04-30T07:09:50.080Z
+Last session: 2026-04-30T12:44:01.604Z
 Stopped at: Completed 04-03-PLAN.md (typed replacedBySession event)
 Resume file: None
 
@@ -39,7 +39,7 @@ Resume file: None
 - [x] Phase 1: Foundations & Design System  ✓ complete
 - [x] Phase 2: Design System Rollout & Avatars  ✓ complete (asset drop pending)
 - [x] Phase 3: Gameplay Additions  ✓ complete (human UAT tracked in 03-HUMAN-UAT.md)
-- [ ] Phase 4: Resilience
+- [x] Phase 4: Resilience  ✓ complete (manual UAT tracked in 04-HUMAN-UAT.md)
 - [ ] Phase 5: Admin, Ops & Observability
 - [ ] Phase 6: Test Hardening
 
@@ -74,6 +74,7 @@ Resume file: None
 - 04-03: replacedBySession typed as bare event `() => void` in ExtendedServerEvents — pure-additive type change (Phase 1 placeholder was `'sessionReplaced' as any`, never declared in interface); Plan 04-06 owns runtime cast removal at server/index.ts:239 to keep review-boundary discipline (RESILIENCE-04 / D-A3 / T-04-A3-1)
 - 04-05: ReconnectOverlay component shipped — 5-state OverlayState union (hidden / reconnecting / sat-out / vacated / replaced), triple useRef timer storage (debounce / grace / tick), 1500 ms debounce closes Pitfall 5 rapid-cycle flicker, replacedBySession bypasses debounce per D-A3; tickNow synced at overlay-open inside debounce callback (Rule 1 deviation from plan-supplied code) — without sync, stale mount-time tickNow renders countdown as 32/122 not 30/120; 11 RED → GREEN, full client suite 57 / 57
 - 04-04: SessionRecovery boot sweep shipped — recoverPersistedSessions() enumerates User rows with currentTableId IS NOT NULL via @@index, refunds each through Plan 04-01's UserRepository.refundCurrentChips inside a per-row try/catch (D-C4 amended 2026-04-29 — no outer $transaction; the helper is self-contained atomic per row), warns on stale tableIds (D-C3) but refunds anyway, returns { recovered: N }; always-refund policy (D-C1) — no reseat-as-sit-out branch; 4 RED → GREEN, full server suite 59 → 63
+- 04-06: Phase 4 integration complete — 8 production-code edits across server/index.ts (auth handler, joinTable, legacy join, leaveTable, disconnect, setOnHandComplete, boot block) + client/src/App.tsx (ReconnectOverlay mount). Auth handler emits typed `replacedBySession` (no `as any`, no payload) + tableJoined snapshot via getStateForPlayer (T-04-Info-Leak mitigated); disconnect handler arms stage-aware GraceRegistry timer (no immediate leave/refund — RESILIENCE-02 preserved); joinTable + legacy join + leaveTable atomic via tryDecrementBalance/refundCurrentChips (Concerns #5/#11 closed); boot block awaits SessionRecovery.recoverPersistedSessions; setOnHandComplete listener calls reArmIfMidHand (Pitfall 1 closed); ReconnectOverlay mounted via const-once + 11 inline mounts; 63/63 server + 57/57 client tests still GREEN; tableManager.handleDisconnect retained for Phase 5 ADMIN-05 kick
 
 ### Blockers
 
