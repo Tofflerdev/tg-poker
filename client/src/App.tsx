@@ -10,6 +10,7 @@ import { Consent } from "./pages/Consent";
 import { ToS } from "./pages/legal/ToS";
 import { Privacy } from "./pages/legal/Privacy";
 import { ResponsibleGaming } from "./pages/legal/ResponsibleGaming";
+import { ReconnectOverlay } from "./components/ReconnectOverlay";
 import "./styles/telegram.css";
 import "./styles/neon.css";
 import type {
@@ -365,11 +366,28 @@ const App: React.FC = () => {
     </Suspense>
   ) : null;
 
+  // Phase 4 / Plan 04-06 / RESILIENCE-05: full-screen reconnect overlay.
+  // Subscribes to socket lifecycle events. Hidden when connected. Mounted at
+  // every view so it overlays whatever the user is looking at when the
+  // socket drops.
+  const overlay = (
+    <ReconnectOverlay
+      socket={socket}
+      lastStage={gameState.stage}
+      onDismissExpired={() => {
+        setView('menu');
+        setCurrentTableId(null);
+        setMySeat(null);
+      }}
+    />
+  );
+
   // Auth error view
   if (view === 'auth') {
     return (
       <>
         {devToolbar}
+        {overlay}
         <div className="tg-p-lg tg-flex tg-flex-col tg-items-center tg-justify-center" style={{ minHeight: '100vh' }}>
           <div className="tg-card tg-text-center" style={{ maxWidth: '320px', width: '100%' }}>
             <div className="tg-card__title tg-mb-sm">Ошибка авторизации</div>
@@ -391,6 +409,7 @@ const App: React.FC = () => {
     return (
       <>
         {devToolbar}
+        {overlay}
         <MainMenu
           user={currentUser}
           socket={socket}
@@ -425,6 +444,7 @@ const App: React.FC = () => {
     return (
       <>
         {devToolbar}
+        {overlay}
         <TableList
           tables={tables}
           onSelectTable={handleSelectTable}
@@ -439,6 +459,7 @@ const App: React.FC = () => {
     return (
       <>
         {devToolbar}
+        {overlay}
         <ProfileSettings
           socket={socket}
           onBack={handleBackFromProfile}
@@ -453,6 +474,7 @@ const App: React.FC = () => {
     return (
       <>
         {devToolbar}
+        {overlay}
         <Deposit onBack={() => setView('menu')} />
       </>
     );
@@ -472,6 +494,7 @@ const App: React.FC = () => {
     return (
       <>
         {devToolbar}
+        {overlay}
         <Consent
           socket={socket}
           onAccept={() => setView('menu')}
@@ -485,6 +508,7 @@ const App: React.FC = () => {
     return (
       <>
         {devToolbar}
+        {overlay}
         <Consent
           socket={socket}
           onAccept={() => setView('menu')}
@@ -498,6 +522,7 @@ const App: React.FC = () => {
     return (
       <>
         {devToolbar}
+        {overlay}
         <ToS onBack={() => setView(currentUser?.tosAcceptedAt ? 'menu' : 'consent')} />
       </>
     );
@@ -507,6 +532,7 @@ const App: React.FC = () => {
     return (
       <>
         {devToolbar}
+        {overlay}
         <Privacy onBack={() => setView(currentUser?.tosAcceptedAt ? 'menu' : 'consent')} />
       </>
     );
@@ -516,6 +542,7 @@ const App: React.FC = () => {
     return (
       <>
         {devToolbar}
+        {overlay}
         <ResponsibleGaming onBack={() => setView(currentUser?.tosAcceptedAt ? 'menu' : 'consent')} />
       </>
     );
@@ -526,6 +553,7 @@ const App: React.FC = () => {
     return (
       <>
         {devToolbar}
+        {overlay}
         <GameRoom
           socket={socket}
           tableId={currentTableId}
