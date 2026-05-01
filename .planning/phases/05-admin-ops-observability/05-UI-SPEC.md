@@ -1,7 +1,8 @@
 ---
 phase: 5
 slug: admin-ops-observability
-status: draft
+status: approved
+reviewed_at: 2026-05-01
 shadcn_initialized: false
 preset: none
 created: 2026-05-01
@@ -335,11 +336,11 @@ These are excluded from the design contract. The executor should not introduce a
 
 ## Checker Sign-Off
 
-- [ ] Dimension 1 Copywriting: PASS
-- [ ] Dimension 2 Visuals: PASS
-- [ ] Dimension 3 Color: PASS
-- [ ] Dimension 4 Typography: PASS
-- [ ] Dimension 5 Spacing: PASS
-- [ ] Dimension 6 Registry Safety: PASS
+- [x] Dimension 1 Copywriting: FLAG (non-blocking — "Discard" is contextually clear)
+- [x] Dimension 2 Visuals: FLAG (non-blocking — login focal point implicit from cyan submit)
+- [x] Dimension 3 Color: PASS
+- [x] Dimension 4 Typography: FLAG (non-blocking — 13px/14px distinction by role)
+- [x] Dimension 5 Spacing: FLAG (non-blocking — 12px/36px in-component, both multiples of 4)
+- [x] Dimension 6 Registry Safety: PASS
 
-**Approval:** pending
+**Approval:** approved 2026-05-01
