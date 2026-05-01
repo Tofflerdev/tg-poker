@@ -66,7 +66,9 @@ Exceptions:
 - Tab labels: 13px, weight 700, uppercase, 0.05em letter-spacing (mirrors Tab.tsx).
 - Input labels: 13px, weight 700, color `var(--color-neutral)`.
 - Error messages: 13px, weight 400, color `var(--color-action-fold)`.
-- Audit log timestamps: 12px, weight 400, monospace, color `var(--color-neutral)` at 70% opacity.
+- Audit log timestamps: 13px, weight 400, monospace font-family, color `var(--color-neutral)` at 60% opacity. Differentiated from action labels via opacity and monospace — NOT via a distinct size.
+- Audit log before/after values: 13px, weight 400, monospace font-family, color `var(--color-neutral)` at 70% opacity.
+- recharts bar labels: 13px, `var(--color-neutral)`, rendered above bars.
 - ADMIN MODE banner text: 13px, weight 700, uppercase, 0.08em letter-spacing, color `#0a0a0e` (dark on amber background — see Color section).
 
 ---
@@ -102,7 +104,7 @@ Accent (`#ffab00` amber) reserved for:
 All admin screens reuse the existing `client/src/components/ui/` primitives. New admin-specific compositions are built from these.
 
 ### Reused unchanged
-- `Button` — variant prop from ActionTier union. Login uses `variant="active" emphasis`. Destructive actions use `variant="fold" emphasis`. Neutral/cancel uses `variant="neutral"`.
+- `Button` — variant prop from ActionTier union. Login uses `variant="active" emphasis`. Destructive actions use `variant="fold" emphasis`. Neutral/dismiss uses `variant="neutral"`.
 - `Card` — dark translucent panel. Dashboard sections use `variant="neutral"`. Active-table cards use `variant="active" glow`.
 - `TabBar` + `Tab` — admin navigation (Tables | Users | Economy | Audit Log). Active tab = cyan underline GlowBar. Inactive = `var(--color-neutral)`.
 - `Badge` — status pills. Table enabled = `variant="active"`. Table disabled = `variant="neutral"`. User banned = `variant="fold"`. Drain in progress = `variant="raise"`.
@@ -136,8 +138,10 @@ All admin screens reuse the existing `client/src/components/ui/` primitives. New
 **TableRow** — live table list entry:
 - Height: 52px, flex row, gap 8px, padding 8px 12px
 - Columns: table name (14px, white, truncated) | player count (13px, cyan) | blinds (13px, amber) | status Badge | action buttons
-- Enable/Disable: Button `variant="active"` (enabled state) / `variant="neutral"` (disabled state), text "Enable" / "Disable"
-- Drain: Button `variant="fold"`, text "Drain" — triggers confirmation inline
+- Enable Table: Button `variant="active"`, text "Enable Table"
+- Disable Table: Button `variant="neutral"`, text "Disable Table"
+- Drain Table: Button `variant="fold"`, text "Drain Table" — triggers inline confirmation
+- Edit Table: Button `variant="neutral"`, text "Edit Table" — triggers inline edit form
 - Separator: 1px `color-mix(in srgb, var(--color-neutral) 15%, transparent)` border-bottom
 
 **UserRow** — active user list entry:
@@ -146,7 +150,7 @@ All admin screens reuse the existing `client/src/components/ui/` primitives. New
 - Kick: Button `variant="fold"`, size compact (padding 4px 12px)
 - Ban: Button `variant="fold" emphasis`, size compact — more prominent than Kick to distinguish severity
 - Balance delta input: compact inline input (44px height, 80px width), accepts negative values; prefix display: green for positive, red for negative
-- Grant button: Button `variant="active"`, text "Apply"
+- Grant button: Button `variant="active"`, text "Apply Delta"
 
 **BalanceDeltaInput** — inline signed integer input inside UserRow:
 - Width: 80px, height: 36px (compact, not a primary CTA, 36px acceptable within a row of 52px)
@@ -157,8 +161,8 @@ All admin screens reuse the existing `client/src/components/ui/` primitives. New
 **AuditLogRow** — last-10 entries in Audit Log tab:
 - 3-row micro layout: [action label] | [target + before→after] | [admin + timestamp]
 - Action: 13px, weight 700, color determined by action type (kick/ban = fold-red; grant = sit-green; enable/disable/drain = raise-amber; edit = active-cyan)
-- Before/after: 12px, monospace, `var(--color-neutral)` at 70% opacity
-- Timestamp: 12px, monospace, `var(--color-neutral)` at 60% opacity
+- Before/after values: 13px, monospace font-family, `var(--color-neutral)` at 70% opacity — monospace distinguishes these from prose text without introducing a fifth font size
+- Timestamp: 13px, monospace font-family, `var(--color-neutral)` at 60% opacity — further distinguished from before/after via lower opacity
 - Separator: 1px `color-mix(in srgb, var(--color-neutral) 12%, transparent)` border-bottom
 
 **recharts usage** — Economy dashboard only:
@@ -166,7 +170,7 @@ All admin screens reuse the existing `client/src/components/ui/` primitives. New
 - Grid lines: `color-mix(in srgb, var(--color-neutral) 15%, transparent)`
 - Bar fill: `var(--color-chip)` (#ffab00) with 80% opacity
 - Tooltip: dark surface `rgba(10,10,14,0.95)`, 1.5px border `var(--color-active)`, 13px font, white text
-- No legends (labels rendered above bars at 12px neutral)
+- No legends (labels rendered above bars at 13px neutral)
 
 ---
 
@@ -189,26 +193,30 @@ All admin screens reuse the existing `client/src/components/ui/` primitives. New
 - No link back to player UI — admin intentionally isolated
 
 ### /admin/tables (Tables tab)
+- **Focal point:** The TableRow list is the primary surface — active tables draw the eye via alternating cyan glow border states on enabled rows; disabled rows render at reduced opacity.
 - On connect: receive full `adminState` snapshot — renders immediately
 - Live updates: `tableStateChanged` events update individual rows without full re-render
 - Empty state (0 tables — not possible with 6 predefined tables; guard anyway): "No tables configured."
-- Edit blinds/buy-in: inline form appears in-row on "Edit" click. Fields: "Small blind", "Big blind", "Buy-in". Submit = Button `variant="active"` "Apply (next hand)". Cancel = Button `variant="neutral"` "Cancel". Validated with zod: positive integers only, big blind = 2× small blind enforced with `.refine()`.
-- Drain confirmation: inline row expands to show "Drain this table? Current hand will finish. No new seats after." — Button `variant="fold" emphasis` "Confirm Drain" + Button `variant="neutral"` "Cancel". No separate modal.
+- Edit blinds/buy-in: inline form appears in-row on "Edit Table" click. Fields: "Small blind", "Big blind", "Buy-in". Submit = Button `variant="active"` "Apply Next Hand". Dismiss = Button `variant="neutral"` "Discard". Validated with zod: positive integers only, big blind = 2× small blind enforced with `.refine()`.
+- Drain confirmation: inline row expands to show "Drain this table? Current hand will finish. No new seats after." — Button `variant="fold" emphasis` "Confirm Drain" + Button `variant="neutral"` "Keep Table". No separate modal.
 
 ### /admin/users (Users tab)
+- **Focal point:** The UserRow list is the primary surface — seated users draw the eye via the cyan "Seated" badge; the Kick and Ban buttons are the most saturated red elements in each row.
 - Lists all users with active socket connections (seated + standing)
-- Kick confirmation: inline row expands — "Kick [display name]? Their session will end immediately." — Button `variant="fold" emphasis` "Confirm Kick" + Button `variant="neutral"` "Cancel"
-- Ban confirmation: inline row expands — "Ban [display name]? They will be unable to join tables." — Button `variant="fold" emphasis` "Confirm Ban" + Button `variant="neutral"` "Cancel"
-- Balance grant: BalanceDeltaInput + "Apply" — no confirmation dialog (reversible action; audit log provides traceability)
+- Kick confirmation: inline row expands — "Kick [display name]? Their session will end immediately." — Button `variant="fold" emphasis` "Confirm Kick" + Button `variant="neutral"` "Keep User"
+- Ban confirmation: inline row expands — "Ban [display name]? They will be unable to join tables." — Button `variant="fold" emphasis` "Confirm Ban" + Button `variant="neutral"` "Keep User"
+- Balance grant: BalanceDeltaInput + "Apply Delta" — no confirmation dialog (reversible action; audit log provides traceability)
 - Post-action: row updates via delta socket event; no page reload
 
 ### /admin/economy (Economy tab)
+- **Focal point:** The recharts BarChart showing chips-by-table occupies the upper-center card; the amber bar fills are the highest-saturation element in the view and direct the eye immediately.
 - StatCard: "Total Chips in Play" (sum of all seated players' chips)
 - StatCard: "Active Players" (count of connected users)
 - recharts BarChart: chips by table (6 bars), x-axis = table name, y-axis = chips
 - No controls on this tab — read-only
 
 ### /admin/audit (Audit Log tab)
+- **Focal point:** The AuditLogRow list fills the view; the color-coded action labels (red for kick/ban, green for grant, amber for drain/toggle, cyan for edit) are the primary visual anchors — the eye travels the left-aligned action column top-to-bottom.
 - Header: "Last 10 Actions"
 - Empty state: "No admin actions recorded yet."
 - AuditLogRow list, newest first
@@ -238,15 +246,19 @@ All admin screens reuse the existing `client/src/components/ui/` primitives. New
 | Drain confirmation | "Drain this table? Current hand will finish. No new seats after." |
 | Edit blinds notice | "Applied at next hand." |
 | Balance delta placeholder | "±0" |
-| Balance delta apply CTA | "Apply" |
-| Edit table CTA | "Edit" |
-| Cancel (all inline forms) | "Cancel" |
+| Balance delta apply CTA | "Apply Delta" |
+| Edit table CTA | "Edit Table" |
+| Dismiss inline edit form | "Discard" |
 | Confirm drain CTA | "Confirm Drain" |
+| Dismiss drain confirmation | "Keep Table" |
 | Confirm kick CTA | "Confirm Kick" |
+| Dismiss kick confirmation | "Keep User" |
 | Confirm ban CTA | "Confirm Ban" |
-| Enable table CTA | "Enable" |
-| Disable table CTA | "Disable" |
-| Drain button label | "Drain" |
+| Dismiss ban confirmation | "Keep User" |
+| Enable table CTA | "Enable Table" |
+| Disable table CTA | "Disable Table" |
+| Drain button label | "Drain Table" |
+| Apply next hand CTA | "Apply Next Hand" |
 | Table status — enabled | "Enabled" (Badge variant="active") |
 | Table status — disabled | "Disabled" (Badge variant="neutral") |
 | Table status — draining | "Draining" (Badge variant="raise") |
@@ -268,10 +280,10 @@ All admin screens reuse the existing `client/src/components/ui/` primitives. New
 ### Inline Confirmation Pattern (no modals)
 All destructive actions (Kick, Ban, Drain) use in-row expansion instead of a modal overlay. This preserves the admin's spatial context in the list.
 
-1. Admin clicks destructive button (Kick / Ban / Drain)
-2. Row smoothly expands downward (CSS max-height transition 200ms ease) to reveal confirmation copy + Confirm + Cancel
+1. Admin clicks destructive button (Kick / Ban / Drain Table)
+2. Row smoothly expands downward (CSS max-height transition 200ms ease) to reveal confirmation copy + Confirm + context-specific dismiss
 3. Confirm triggers socket event + collapses row (or updates row state on response)
-4. Cancel collapses row immediately
+4. Dismiss collapses row immediately
 
 ### Socket-Driven Live State
 - No polling. All live data flows via `/admin` namespace push events.
