@@ -3,31 +3,31 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 05-04-PLAN.md (/admin namespace, runWithAudit, 7 mutation handlers)
-last_updated: "2026-05-02T13:47:00.000Z"
+stopped_at: Completed 05-05-PLAN.md (lazy admin subtree, AdminApp, 4 tabs, IS_ADMIN_PATH gate)
+last_updated: "2026-05-02T19:15:00.000Z"
 last_activity: 2026-05-02
 progress:
   total_phases: 6
-  completed_phases: 4
+  completed_phases: 5
   total_plans: 32
-  completed_plans: 31
-  percent: 97
+  completed_plans: 32
+  percent: 100
 ---
 
 # Project State
 
 ## Current Position
 
-Phase: 05 (admin-ops-observability) — EXECUTING
-Plan: 6 of 6
-Status: Ready to execute
+Phase: 05 (admin-ops-observability) — COMPLETE (all 6 plans done)
+Plan: 6 of 6 complete
+Status: Phase 05 complete; ready for Phase 06
 Last activity: 2026-05-02
-Stopped at: Completed 05-04-PLAN.md (/admin namespace, runWithAudit, 7 mutation handlers)
+Stopped at: Completed 05-05-PLAN.md (lazy admin subtree, AdminApp, 4 tabs, IS_ADMIN_PATH gate)
 
 ## Session Continuity
 
-Last session: 2026-05-02T13:47:00.000Z
-Stopped at: Completed 05-04-PLAN.md (/admin namespace, runWithAudit, 7 mutation handlers)
+Last session: 2026-05-02T19:15:00.000Z
+Stopped at: Completed 05-05-PLAN.md (lazy admin subtree, AdminApp, 4 tabs, IS_ADMIN_PATH gate)
 Resume file: None
 
 ## Current Milestone
@@ -40,7 +40,7 @@ Resume file: None
 - [x] Phase 2: Design System Rollout & Avatars  ✓ complete (asset drop pending)
 - [x] Phase 3: Gameplay Additions  ✓ complete (human UAT tracked in 03-HUMAN-UAT.md)
 - [x] Phase 4: Resilience  ✓ complete (manual UAT tracked in 04-HUMAN-UAT.md)
-- [ ] Phase 5: Admin, Ops & Observability
+- [x] Phase 5: Admin, Ops & Observability  ✓ complete (ADMIN-03 closed; manual smoke in 05-05-SUMMARY.md)
 - [ ] Phase 6: Test Hardening
 
 ## Accumulated Context
@@ -85,6 +85,9 @@ Resume file: None
 - 05-04: io.of() cast to any to avoid TS2558 — Socket.io v4 of() TypeScript overloads accept 0 type args; admin namespace typed via ReturnType<typeof io.of> cast; runtime behavior identical
 - 05-04: tableAdminState Map owned by adminMutations.ts module — Table model not extended; admin overlay (enabled/disabled/draining) is admin-only concern; buildAdminState reads via getTableAdminStatus()
 - 05-04: runWithAudit is the single chokepoint for ADMIN-06 — prisma.adminAuditLog.create() BEFORE mutationFn(); throw in create() aborts mutation; audit row persists even if mutation throws after
+- 05-05: AdminApp lazy-loaded via React.lazy() — separate Vite chunk AdminApp-C3D6-bPz.js; zero admin code in player main bundle (T-5-05-1 mitigated); ADMIN-03 closed
+- 05-05: IS_ADMIN_PATH = window.location.pathname.startsWith('/admin') computed once at module load; player socket null-cast when on admin path; short-circuit at top of App component before useTelegram or any player state
+- 05-05: TabBar API uses tabs/activeId/onChange props (not children JSX) — adjusted from plan template to match actual Tab.tsx component contract (Rule 1 auto-fix)
 
 ### Blockers
 

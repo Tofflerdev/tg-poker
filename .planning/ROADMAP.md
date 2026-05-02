@@ -14,7 +14,7 @@
 - [ ] **Phase 2: Design System Rollout & Avatars** — Full UI redesign, 20-animal avatar system, deposit stub, compliance/consent pages
 - [x] **Phase 3: Gameplay Additions** — Action bubbles, hand history, async write queue, chip checkpointing ✓ 2026-04-22
 - [ ] **Phase 4: Resilience** — Reconnect with full-snapshot resume, crash-safe recovery, atomic buy-in
-- [ ] **Phase 5: Admin, Ops & Observability** — Hidden admin panel, Sentry + PostHog, server-side ToS gate
+- [x] **Phase 5: Admin, Ops & Observability** — Hidden admin panel, Sentry + PostHog, server-side ToS gate (completed 2026-05-02)
 - [ ] **Phase 6: Test Hardening** — Vitest + RTL suite, per-element coverage, scenario tests, CI gate
 
 ---
@@ -87,7 +87,7 @@ Plans:
   3. Sentry (react + node) initializes with a shared DSN, environment + release tags, Replay with privacy masking, and a `beforeSend` scrubber that strips `initData`, `sessionToken`, and raw `telegramId` from events, logs, and analytics.
   4. PostHog (client + server) emits the fixed event taxonomy (`user_signed_up`, `daily_bonus_claimed`, `table_joined`, `table_left`, `hand_completed`, `reconnect_succeeded`, `reconnect_failed`, `admin_action`, `error_shown`) using `sha256(telegramId)` — raw telegramId never leaves the server.
   5. A new user with `tosAcceptedAt IS NULL` receives a typed error from the server-side `joinTable` handler that routes them to the consent screen; grandfathered users pass through.
-**Plans:** 5/6 plans executed
+**Plans:** 6/6 plans complete
 **UI hint**: yes
 
 ### Phase 6: Test Hardening
@@ -111,7 +111,7 @@ Plans:
 | 2. Design System Rollout & Avatars | 0/0 | Not started | — |
 | 3. Gameplay Additions | 6/6 | Complete | 2026-04-22 |
 | 4. Resilience | 5/7 | In progress | — |
-| 5. Admin, Ops & Observability | 5/6 | In Progress|  |
+| 5. Admin, Ops & Observability | 6/6 | Complete   | 2026-05-02 |
 | 6. Test Hardening | 0/0 | Not started | — |
 
 ---
