@@ -8,7 +8,9 @@
   },
   "type": "module",
   "dependencies": {
+    "@sentry/react": "^10.51.0",
     "motion": "^12.38.0",
+    "posthog-js": "^1.372.6",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "socket.io-client": "^4.7.5",

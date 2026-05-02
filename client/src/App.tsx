@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useCallback, lazy, Suspense } from "react";
 import { io, Socket } from "socket.io-client";
+import { identifyAnalytics } from "./utils/analytics";
 import { useTelegram } from "./hooks/useTelegram";
 import { MainMenu } from "./pages/MainMenu";
 import { TableList } from "./pages/TableList";
@@ -175,6 +176,7 @@ const App: React.FC = () => {
       setCurrentUser(userData);
       setView('menu');
       hapticFeedback?.notificationOccurred('success');
+      if (userData.analyticsId) identifyAnalytics(userData.analyticsId);
     });
 
     socket.on("authError", (msg) => {
