@@ -28,6 +28,16 @@ export function assertSafeBootOrExit(): void {
     process.stderr.write('FATAL: refusing to start — ALLOW_DEV_AUTH=true is set in production\n');
     process.exit(1);
   }
+
+  // Phase 5 / Plan 05-03 / ADMIN-01 / Discretionary fail-closed JWT_SECRET guard.
+  // Required for admin login (POST /api/admin/login) and the /admin Socket.io
+  // namespace middleware (Plan 05-04). Dev mode falls back to an ephemeral
+  // secret in adminAuth.ts; prod must have a stable secret.
+  const JWT_SECRET = (process.env.JWT_SECRET ?? '').trim();
+  if (JWT_SECRET === '') {
+    process.stderr.write('FATAL: refusing to start — JWT_SECRET is empty in production\n');
+    process.exit(1);
+  }
 }
 
 /**
