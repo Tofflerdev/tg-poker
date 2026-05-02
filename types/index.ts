@@ -252,6 +252,10 @@ export interface ExtendedServerEvents extends ServerEvents {
   // RENAMES Phase 1 D-07 placeholder `'sessionReplaced' as any` cast at
   // server/index.ts:239 — Plan 04-06 removes the cast and uses this typed name.
   replacedBySession: () => void;
+  // Phase 5 / Plan 05-01 / COMPLIANCE-04 / D-13: typed server error envelope.
+  // Currently used for TOS_REQUIRED (joinTable ToS gate) and BANNED (joinTable
+  // ban check). Client App.tsx routes on payload.type — see 05-01 task 2.
+  serverError: (payload: { type: ServerErrorType }) => void;
 }
 
 // ==========================================
@@ -370,4 +374,86 @@ export interface HandHistoryDTO {
   won: boolean;
   // Other seats that participated in this hand:
   opponents: HandHistoryOpponentDTO[];
+}
+
+// ============= Phase 5 — Admin / Observability / Compliance =============
+
+// OBS-04 / D-11: closed event taxonomy. Both server-side (server/utils/analytics.ts)
+// and client-side (client/src/utils/analytics.ts) track() abstractions accept ONLY
+// these event names — TypeScript blocks any string outside the union.
+export type TrackableEvent =
+  | 'user_signed_up'
+  | 'daily_bonus_claimed'
+  | 'table_joined'
+  | 'table_left'
+  | 'hand_completed'
+  | 'reconnect_succeeded'
+  | 'reconnect_failed'
+  | 'admin_action'
+  | 'error_shown';
+
+// COMPLIANCE-04 / D-13: typed server error payload routed via the `serverError`
+// event below. Add new TYPES of server errors as additional members of this union.
+export type ServerErrorType = 'TOS_REQUIRED' | 'BANNED';
+
+// ADMIN-04 / Pattern 9: live admin dashboard data shape. Server-push only (D-06)
+// — the /admin namespace emits a full snapshot on connect and targeted deltas
+// thereafter.
+export interface AdminTableInfo {
+  id: string;
+  name: string;
+  config: TableConfig;
+  status: 'enabled' | 'disabled' | 'draining';
+  playerCount: number;
+  handInProgress: boolean;
+}
+
+export interface AdminUserInfo {
+  telegramId: string;
+  displayName: string;
+  chips: number;          // current chips if seated, 0 if standing
+  tableId: string | null;
+  seat: number | null;
+  bannedAt: string | null;
+}
+
+export interface AdminAuditLogEntry {
+  id: string;
+  adminTelegramId: string; // stores ADMIN_USER string per D-04 (NOT a Telegram numeric id)
+  action: string;
+  targetType: string;
+  targetId: string;
+  beforeJson: unknown;
+  afterJson: unknown;
+  createdAt: string;       // ISO timestamp
+}
+
+export interface AdminState {
+  tables: AdminTableInfo[];
+  users: AdminUserInfo[];          // only users with active socket connections
+  totalChipsInPlay: number;        // sum of every seated Player.chips across all tables
+  recentAuditLogs: AdminAuditLogEntry[]; // last 10
+}
+
+// ADMIN-02 / Pitfall 5: dedicated typed events for the /admin namespace.
+// `io.of<AdminClientEvents, AdminServerEvents>('/admin')` so namespace emits/ons
+// type-check independently of the player namespace's ExtendedServerEvents.
+export interface AdminServerEvents {
+  adminState: (state: AdminState) => void;
+  tableStateChanged: (table: AdminTableInfo) => void;
+  userBanned: (payload: { telegramId: string; bannedAt: string }) => void;
+  userKicked: (payload: { telegramId: string }) => void;
+  balanceGranted: (payload: { telegramId: string; delta: number; newBalance: number }) => void;
+  auditLogAppended: (entry: AdminAuditLogEntry) => void;
+  adminError: (payload: { code: string; message: string }) => void;
+}
+
+export interface AdminClientEvents {
+  enableTable: (payload: { tableId: string }) => void;
+  disableTable: (payload: { tableId: string }) => void;
+  drainTable: (payload: { tableId: string }) => void;
+  editTableParams: (payload: { tableId: string; smallBlind: number; bigBlind: number; buyIn: number }) => void;
+  kickUser: (payload: { telegramId: string }) => void;
+  banUser: (payload: { telegramId: string }) => void;
+  grantBalance: (payload: { telegramId: string; delta: number }) => void;
 }
