@@ -104,7 +104,17 @@ class UserStorage {
   getAllProfiles(): UserProfile[] {
     return Array.from(this.profiles.values());
   }
+
+  /**
+   * Phase 5 / Plan 05-04 / ADMIN-04:
+   * Get all authenticated users (for buildAdminState snapshot).
+   * Returns all TelegramUser objects currently in the in-memory store.
+   */
+  getAllUsers(): TelegramUser[] {
+    return Array.from(this.users.values());
+  }
 }
+
 
 export const userStorage = new UserStorage();
 export default userStorage;
