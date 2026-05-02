@@ -218,6 +218,24 @@ const App: React.FC = () => {
       hapticFeedback?.notificationOccurred('error');
     });
 
+    // Phase 5 / Plan 05-01 / COMPLIANCE-04 + RESEARCH Open Q3:
+    // Typed server-side error envelope. Currently routes:
+    //   - TOS_REQUIRED → force the existing Consent gate (view='consent')
+    //   - BANNED → generic alert; reset to auth view (banned users cannot play)
+    // Defense-in-depth: server is the authoritative gate; this client routing
+    // just gives the user a sensible error UI when the server says no.
+    socket.on("serverError", (payload) => {
+      if (payload.type === 'TOS_REQUIRED') {
+        setView('consent');
+        hapticFeedback?.notificationOccurred('warning');
+      } else if (payload.type === 'BANNED') {
+        alert('Your account has been banned and cannot join tables.');
+        hapticFeedback?.notificationOccurred('error');
+        setCurrentTableId(null);
+        setMySeat(null);
+      }
+    });
+
     // Game state updates
     socket.on("state", (newState) => {
       setGameState(newState);
@@ -283,6 +301,7 @@ const App: React.FC = () => {
       socket.off("tableJoined");
       socket.off("tableLeft");
       socket.off("tableError");
+      socket.off("serverError");
       socket.off("state");
       socket.off("showdown");
       socket.off("errorMessage");
