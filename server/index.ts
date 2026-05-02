@@ -5,6 +5,7 @@ import path from "path";
 import { fileURLToPath } from "url";
 import { Server, type DefaultEventsMap } from "socket.io";
 import { assertSafeBootOrExit, validateInitData, createUserFromInitData } from "./middleware/auth.js";
+import { gateUserOrEmit } from "./middleware/joinGate.js";
 import { userStorage } from "./models/User.js";
 import { tableManager } from "./TableManager.js";
 import { UserRepository } from "./db/UserRepository.js";
@@ -527,6 +528,12 @@ io.on("connection", (socket) => {
 
     if (!user) {
       socket.emit("errorMessage", "Authentication required");
+      return;
+    }
+
+    // Phase 5 / Plan 05-01 / COMPLIANCE-04 / D-13 / D-14 + Open Q3 ban check.
+    // gateUserOrEmit emits the typed `serverError` payload itself; we just bail out.
+    if (!gateUserOrEmit(user, socket)) {
       return;
     }
 

@@ -123,6 +123,7 @@ export interface TelegramUser {
   avatarUrl?: string;    // DEPRECATED — legacy Telegram photo_url; not rendered (D-15). Kept during transition.
   avatarId?: string;     // Plan 02-02: slug in AVATARS; rendered via avatarUrl(id) manifest resolver
   tosAcceptedAt?: string; // Plan 02-08: ISO timestamp of TOS acceptance (substrate added here for build hygiene)
+  bannedAt?: string;       // Plan 05-01 (COMPLIANCE-04 + RESEARCH Open Q3): ISO timestamp; truthy = banned
   balance: number;
   lastDailyRefill?: string; // NEW: ISO timestamp
   canClaimDaily?: boolean;  // NEW: computed field

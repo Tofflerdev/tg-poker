@@ -302,6 +302,7 @@ export class UserRepository {
       avatarUrl: user.avatarUrl || undefined,
       avatarId: user.avatarId || undefined,
       tosAcceptedAt: user.tosAcceptedAt?.toISOString(),
+      bannedAt: user.bannedAt ? user.bannedAt.toISOString() : undefined,
       balance: user.balance,
       lastDailyRefill: user.lastDailyRefill?.toISOString(),
       canClaimDaily
