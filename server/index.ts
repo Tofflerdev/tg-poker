@@ -6,6 +6,7 @@ import { fileURLToPath } from "url";
 import { Server, type DefaultEventsMap } from "socket.io";
 import cors from 'cors';
 import { validateCredentials, signAdminToken } from './admin/adminAuth.js';
+import { setupAdminNamespace } from './admin/adminNamespace.js';
 import { assertSafeBootOrExit, validateInitData, createUserFromInitData } from "./middleware/auth.js";
 import { gateUserOrEmit } from "./middleware/joinGate.js";
 import { userStorage } from "./models/User.js";
@@ -97,6 +98,11 @@ const io = new Server<ExtendedClientEvents, ExtendedServerEvents, DefaultEventsM
     credentials: true
   },
 });
+
+// Phase 5 / Plan 05-04 / ADMIN-02 / D-06: mount the /admin namespace.
+// JWT-authenticated; emits full adminState snapshot on connect; targeted delta
+// events on subsequent admin actions. Player namespace at '/' is unaffected.
+setupAdminNamespace(io);
 
 const PORT = parseInt(process.env.PORT || "3000", 10);
 
