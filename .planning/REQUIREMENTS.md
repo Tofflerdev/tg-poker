@@ -72,8 +72,8 @@ Requirements are grouped by category. Each has a unique `CATEGORY-NN` ID used by
 - [x] **ADMIN-01** — Admins are identified by an `ADMIN_TELEGRAM_IDS` env allowlist; no `isAdmin` database flag. Admin access is denied by default.
 - [x] **ADMIN-02** — Admin lives on a separate `io.of('/admin')` Socket.io namespace with namespace-level middleware that re-runs `initData` HMAC and checks allowlist membership.
 - [x] **ADMIN-03** — Admin UI is a lazy-loaded client subtree (recharts + react-hook-form + zod) with a distinct "ADMIN MODE" banner; it is not linked from the player UI and has no server-side affordance to regular users.
-- [ ] **ADMIN-04** — Admin can view live dashboards: active tables (player count, stakes, hand-in-progress), active users, economy (total chips in play), and recent errors.
-- [ ] **ADMIN-05** — Admin can: enable/disable a table, drain a table (block new seats, finish current hand), edit table parameters (blinds/buy-in — applied at next hand), kick a user (disconnect + clear session), ban a user (sets `bannedAt`), and grant balance (positive or negative delta).
+- [x] **ADMIN-04** — Admin can view live dashboards: active tables (player count, stakes, hand-in-progress), active users, economy (total chips in play), and recent errors.
+- [x] **ADMIN-05** — Admin can: enable/disable a table, drain a table (block new seats, finish current hand), edit table parameters (blinds/buy-in — applied at next hand), kick a user (disconnect + clear session), ban a user (sets `bannedAt`), and grant balance (positive or negative delta).
 - [x] **ADMIN-06** — Every admin mutation writes an `AdminAuditLog` row (admin telegramId, action, target, before/after, timestamp) BEFORE the mutation commits; failed audit write aborts the mutation.
 
 ### TEST — UI Test Suite
@@ -177,8 +177,8 @@ All requirements above are:
 | ADMIN-01 | Phase 5 | Complete |
 | ADMIN-02 | Phase 5 | Complete |
 | ADMIN-03 | Phase 5 | Complete |
-| ADMIN-04 | Phase 5 | Pending |
-| ADMIN-05 | Phase 5 | Pending |
+| ADMIN-04 | Phase 5 | Complete |
+| ADMIN-05 | Phase 5 | Complete |
 | ADMIN-06 | Phase 5 | Complete |
 | TEST-01 | Phase 6 | Pending |
 | TEST-02 | Phase 6 | Pending |

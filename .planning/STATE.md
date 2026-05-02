@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 05-03-PLAN.md (admin JWT auth, login endpoint, boot guard)
-last_updated: "2026-05-02T13:38:37.738Z"
+stopped_at: Completed 05-04-PLAN.md (/admin namespace, runWithAudit, 7 mutation handlers)
+last_updated: "2026-05-02T13:47:00.000Z"
 last_activity: 2026-05-02
 progress:
   total_phases: 6
   completed_phases: 4
   total_plans: 32
-  completed_plans: 30
-  percent: 94
+  completed_plans: 31
+  percent: 97
 ---
 
 # Project State
@@ -19,15 +19,15 @@ progress:
 ## Current Position
 
 Phase: 05 (admin-ops-observability) — EXECUTING
-Plan: 5 of 6
+Plan: 6 of 6
 Status: Ready to execute
 Last activity: 2026-05-02
-Stopped at: Completed 05-03-PLAN.md (admin JWT auth, login endpoint, boot guard)
+Stopped at: Completed 05-04-PLAN.md (/admin namespace, runWithAudit, 7 mutation handlers)
 
 ## Session Continuity
 
-Last session: 2026-05-02T13:38:37.735Z
-Stopped at: Completed 05-00-PLAN.md (Phase 5 Wave-0 RED scaffolds + type contracts)
+Last session: 2026-05-02T13:47:00.000Z
+Stopped at: Completed 05-04-PLAN.md (/admin namespace, runWithAudit, 7 mutation handlers)
 Resume file: None
 
 ## Current Milestone
@@ -82,6 +82,9 @@ Resume file: None
 - 05-02: client entry point is index.tsx not main.tsx — Sentry/PostHog boot init applied to index.tsx; posthog-node engine warning for node 22.19.0 vs required 22.22.0 is non-blocking; OBS-01/02/03/04 + SECURITY-04 closed
 - 05-02: analyticsId = sha256(telegramId) injected into authSuccess payload; client calls identifyAnalytics(analyticsId) once on auth; raw telegramId never reaches PostHog (D-12); scrubSentryEvent wired as beforeSend on both server and client Sentry init
 - 05-03: POST /api/admin/login issues HS256 JWT (8h) via signAdminToken; validateCredentials uses crypto.timingSafeEqual; assertSafeBootOrExit exits 1 in prod if JWT_SECRET missing; generic 401 for all login failures (no username-vs-password oracle); express.json+cors registered before Socket.io setup (T-5-03-1..5, T-5-03-7, T-5-03-9)
+- 05-04: io.of() cast to any to avoid TS2558 — Socket.io v4 of() TypeScript overloads accept 0 type args; admin namespace typed via ReturnType<typeof io.of> cast; runtime behavior identical
+- 05-04: tableAdminState Map owned by adminMutations.ts module — Table model not extended; admin overlay (enabled/disabled/draining) is admin-only concern; buildAdminState reads via getTableAdminStatus()
+- 05-04: runWithAudit is the single chokepoint for ADMIN-06 — prisma.adminAuditLog.create() BEFORE mutationFn(); throw in create() aborts mutation; audit row persists even if mutation throws after
 
 ### Blockers
 
