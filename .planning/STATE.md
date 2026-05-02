@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 05-00-PLAN.md (Phase 5 Wave-0 RED scaffolds + type contracts)
-last_updated: "2026-05-02T16:35:00.000Z"
+stopped_at: Completed 05-01-PLAN.md (ToS gate + ban check on joinTable)
+last_updated: "2026-05-02T13:26:22.491Z"
 last_activity: 2026-05-02
 progress:
   total_phases: 6
   completed_phases: 4
   total_plans: 32
-  completed_plans: 27
-  percent: 84
+  completed_plans: 28
+  percent: 88
 ---
 
 # Project State
@@ -19,16 +19,16 @@ progress:
 ## Current Position
 
 Phase: 05 (admin-ops-observability) — EXECUTING
-Plan: 2 of 6
-Status: Executing Phase 05
-Last activity: 2026-05-02 -- Completed 05-00 Wave-0 RED scaffolds + type contracts
-Stopped at: Completed 05-00-PLAN.md (Phase 5 Wave-0 RED scaffolds + type contracts)
+Plan: 3 of 6
+Status: Ready to execute
+Last activity: 2026-05-02
+Stopped at: Completed 05-01-PLAN.md (ToS gate + ban check on joinTable)
 
 ## Session Continuity
 
-Last session: 2026-05-02T16:35:00.000Z
+Last session: 2026-05-02T13:26:22.487Z
 Stopped at: Completed 05-00-PLAN.md (Phase 5 Wave-0 RED scaffolds + type contracts)
-Resume file: .planning/phases/05-admin-ops-observability/05-01-PLAN.md
+Resume file: None
 
 ## Current Milestone
 
@@ -78,6 +78,7 @@ Resume file: .planning/phases/05-admin-ops-observability/05-01-PLAN.md
 - 05-00: Wave-0 RED scaffold pattern used for Phase 5 — 7 test files written before any implementation; each downstream plan (05-01..05-05) has a pre-written automated verification target; honors Nyquist rule (every <verify> has automated target)
 - 05-00: server/__tests__ excluded from tsconfig.json include scope — test files run by vitest only, not tsc; avoids tsc errors from RED imports referencing not-yet-created modules (Rule 3 auto-fix)
 - 05-00: Implementation seam ownership locked: scrubber.ts → 05-02; analytics.ts → 05-02; adminAuth.ts → 05-03; adminNamespace.ts → 05-04; adminMutations.ts → 05-04; joinGate.ts → 05-01; AdminLogin.tsx → 05-05
+- 05-01: gateUserOrEmit checks ban-first (banned users get BANNED error even without tosAcceptedAt); auth handler unchanged (banned users can authenticate per RESEARCH Open Q3); JoinGateUser interface accepts string|Date|null for Prisma and in-memory TelegramUser compatibility; COMPLIANCE-04 closed
 
 ### Blockers
 
