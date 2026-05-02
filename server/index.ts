@@ -4,6 +4,8 @@ import http from "http";
 import path from "path";
 import { fileURLToPath } from "url";
 import { Server, type DefaultEventsMap } from "socket.io";
+import cors from 'cors';
+import { validateCredentials, signAdminToken } from './admin/adminAuth.js';
 import { assertSafeBootOrExit, validateInitData, createUserFromInitData } from "./middleware/auth.js";
 import { gateUserOrEmit } from "./middleware/joinGate.js";
 import { userStorage } from "./models/User.js";
@@ -61,6 +63,33 @@ const server = http.createServer(app);
 const CORS_ORIGIN = process.env.NODE_ENV === 'production'
   ? ["https://tgp.isgood.host"]
   : ["http://localhost:5173", "http://127.0.0.1:5173", "http://localhost:3000"];
+
+// Phase 5 / Plan 05-03 / ADMIN-01 / Pitfall 1: register JSON body parser BEFORE
+// any POST handlers. (Existing GET handlers don't need a body parser.)
+app.use(express.json({ limit: '10kb' })); // small limit — login payload is tiny
+
+// Phase 5 / Plan 05-03 / Pitfall 2: Express CORS for /api/admin/* routes.
+// Mirrors the Socket.io CORS_ORIGIN list so the admin SPA's POST /api/admin/login
+// preflight succeeds in dev (Vite on :5173) and prod (same origin).
+app.use(cors({ origin: CORS_ORIGIN, credentials: true }));
+
+// Phase 5 / Plan 05-03 / ADMIN-01 / D-02: admin login REST endpoint. Issues an
+// 8-hour JWT to a successful credential pair. Failure responses use a generic
+// message — no oracle distinction between "wrong username" and "wrong password".
+app.post('/api/admin/login', (req, res) => {
+  const { username, password } = (req.body ?? {}) as { username?: unknown; password?: unknown };
+  if (!validateCredentials(username, password)) {
+    res.status(401).json({ error: 'Invalid credentials' });
+    return;
+  }
+  try {
+    const token = signAdminToken(username as string);
+    res.json({ token });
+  } catch (err) {
+    console.error('[adminLogin] signAdminToken failed:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
 
 const io = new Server<ExtendedClientEvents, ExtendedServerEvents, DefaultEventsMap, SocketData>(server, {
   cors: {
