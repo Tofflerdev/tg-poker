@@ -29,11 +29,23 @@ const DevToolbar = import.meta.env.DEV
   ? lazy(() => import("./components/DevToolbar"))
   : () => null;
 
+// Phase 5 / Plan 05-05 / ADMIN-03 / D-01 / RESEARCH Pattern 8.
+// Lazy-loaded admin subtree — separate Vite chunk, NEVER bundled into the
+// player main entry. Loaded only when window.location.pathname starts with /admin.
+const AdminApp = lazy(() => import("./pages/admin/AdminApp"));
+
+// Compute once at module load — admin path stays constant for the lifetime of the SPA load.
+const IS_ADMIN_PATH = window.location.pathname.startsWith('/admin');
+
 // Socket connection — always connect to same origin.
 // In production nginx proxies /socket.io/ to the server.
 // In development Vite proxies /socket.io/ to http://localhost:3000 (see vite.config.ts),
 // which lets ngrok tunnel both HTTP and websocket traffic through one URL.
-const socket: Socket<ExtendedServerEvents, ExtendedClientEvents> = io(window.location.origin);
+// Phase 5 / Plan 05-05 / D-01: when on /admin/* path, skip the player socket
+// entirely. AdminApp owns its own /admin namespace socket (useAdminSocket).
+const socket: Socket<ExtendedServerEvents, ExtendedClientEvents> = IS_ADMIN_PATH
+  ? (null as unknown as Socket<ExtendedServerEvents, ExtendedClientEvents>) // never accessed when IS_ADMIN_PATH is true
+  : io(window.location.origin);
 
 // AppView union — Plan 02-04 added 'deposit' (D-17, DEPOSIT-02).
 // Plan 02-08 extends with:
@@ -89,6 +101,17 @@ function getDevPlayerId(): number {
 }
 
 const App: React.FC = () => {
+  // Phase 5 / Plan 05-05 / ADMIN-03: lazy-loaded admin subtree. Render this
+  // BEFORE useTelegram or any player-namespace socket logic. AdminApp manages
+  // its own auth (JWT in localStorage) and its own /admin Socket.io namespace.
+  if (IS_ADMIN_PATH) {
+    return (
+      <Suspense fallback={<div style={{ padding: 24, color: '#b0bec5' }}>Loading admin…</div>}>
+        <AdminApp />
+      </Suspense>
+    );
+  }
+
   const {
     user,
     initData,
