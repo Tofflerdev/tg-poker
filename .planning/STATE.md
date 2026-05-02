@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 05-01-PLAN.md (ToS gate + ban check on joinTable)
-last_updated: "2026-05-02T13:26:22.491Z"
+stopped_at: Completed 05-02-PLAN.md (Sentry+PostHog init, PII scrubber, analyticsId injection)
+last_updated: "2026-05-02T13:32:37.872Z"
 last_activity: 2026-05-02
 progress:
   total_phases: 6
   completed_phases: 4
   total_plans: 32
-  completed_plans: 28
-  percent: 88
+  completed_plans: 29
+  percent: 91
 ---
 
 # Project State
@@ -19,14 +19,14 @@ progress:
 ## Current Position
 
 Phase: 05 (admin-ops-observability) — EXECUTING
-Plan: 3 of 6
+Plan: 4 of 6
 Status: Ready to execute
 Last activity: 2026-05-02
-Stopped at: Completed 05-01-PLAN.md (ToS gate + ban check on joinTable)
+Stopped at: Completed 05-02-PLAN.md (Sentry+PostHog init, PII scrubber, analyticsId injection)
 
 ## Session Continuity
 
-Last session: 2026-05-02T13:26:22.487Z
+Last session: 2026-05-02T13:32:37.868Z
 Stopped at: Completed 05-00-PLAN.md (Phase 5 Wave-0 RED scaffolds + type contracts)
 Resume file: None
 
@@ -79,6 +79,8 @@ Resume file: None
 - 05-00: server/__tests__ excluded from tsconfig.json include scope — test files run by vitest only, not tsc; avoids tsc errors from RED imports referencing not-yet-created modules (Rule 3 auto-fix)
 - 05-00: Implementation seam ownership locked: scrubber.ts → 05-02; analytics.ts → 05-02; adminAuth.ts → 05-03; adminNamespace.ts → 05-04; adminMutations.ts → 05-04; joinGate.ts → 05-01; AdminLogin.tsx → 05-05
 - 05-01: gateUserOrEmit checks ban-first (banned users get BANNED error even without tosAcceptedAt); auth handler unchanged (banned users can authenticate per RESEARCH Open Q3); JoinGateUser interface accepts string|Date|null for Prisma and in-memory TelegramUser compatibility; COMPLIANCE-04 closed
+- 05-02: client entry point is index.tsx not main.tsx — Sentry/PostHog boot init applied to index.tsx; posthog-node engine warning for node 22.19.0 vs required 22.22.0 is non-blocking; OBS-01/02/03/04 + SECURITY-04 closed
+- 05-02: analyticsId = sha256(telegramId) injected into authSuccess payload; client calls identifyAnalytics(analyticsId) once on auth; raw telegramId never reaches PostHog (D-12); scrubSentryEvent wired as beforeSend on both server and client Sentry init
 
 ### Blockers
 

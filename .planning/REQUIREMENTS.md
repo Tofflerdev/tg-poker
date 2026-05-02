@@ -86,7 +86,7 @@ Requirements are grouped by category. Each has a unique `CATEGORY-NN` ID used by
 ### OBS — Observability
 
 - [x] **OBS-01** — `@sentry/react` + `@sentry/node` are initialized with a shared DSN, environment tag (`development` / `production`), release tag, and the PII scrubber from SECURITY-04.
-- [ ] **OBS-02** — Sentry Replay is enabled (errors sampled, privacy-masked) to aid reconnect-bug reproduction.
+- [x] **OBS-02** — Sentry Replay is enabled (errors sampled, privacy-masked) to aid reconnect-bug reproduction.
 - [x] **OBS-03** — PostHog Cloud is initialized on both server (`posthog-node`) and client (`posthog-js`) with anonymous product analytics. User identity is `sha256(telegramId)`; raw telegramId never leaves the server.
 - [x] **OBS-04** — A `track()` abstraction emits a fixed event taxonomy: `user_signed_up`, `daily_bonus_claimed`, `table_joined`, `table_left`, `hand_completed`, `reconnect_succeeded`, `reconnect_failed`, `admin_action`, `error_shown`.
 
@@ -185,7 +185,7 @@ All requirements above are:
 | TEST-03 | Phase 6 | Pending |
 | TEST-04 | Phase 6 | Pending |
 | OBS-01 | Phase 5 | Complete |
-| OBS-02 | Phase 5 | Pending |
+| OBS-02 | Phase 5 | Complete |
 | OBS-03 | Phase 5 | Complete |
 | OBS-04 | Phase 5 | Complete |
 | COMPLIANCE-01 | Phase 2 | Pending |
