@@ -16,5 +16,6 @@
   },
   "include": ["server", "types"],
   /* ИЗМЕНЕНИЕ ЗДЕСЬ: Явно исключаем клиент, чтобы не было конфликтов */
-  "exclude": ["node_modules", "dist", "client"]
+  /* Phase 5 (05-00): Exclude __tests__ dirs — test files are run by vitest, not tsc */
+  "exclude": ["node_modules", "dist", "client", "server/__tests__", "tests"]
 }
