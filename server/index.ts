@@ -16,6 +16,10 @@ import { checkpointSeatedPlayers } from "./checkpointSeatedPlayers.js";
 import * as GraceRegistry from "./GraceRegistry.js";
 import * as SessionRecovery from "./SessionRecovery.js";
 import prisma from "./db/prisma.js";
+import * as Sentry from '@sentry/node';
+import { PostHog } from 'posthog-node';
+import { scrubSentryEvent } from './utils/scrubber.js';
+import { initAnalytics, toAnalyticsId, shutdownAnalytics } from './utils/analytics.js';
 import type {
   TelegramUser,
   AuthPayload,
@@ -26,6 +30,26 @@ import type {
 
 // Boot guard — exits with code 1 if the env is unsafe for production
 assertSafeBootOrExit();
+
+// Phase 5 / Plan 05-02 / OBS-01 / D-09: Sentry init guarded by SENTRY_DSN.
+if (process.env.SENTRY_DSN) {
+  Sentry.init({
+    dsn: process.env.SENTRY_DSN,
+    environment: process.env.NODE_ENV ?? 'development',
+    release: process.env.npm_package_version,
+    beforeSend: (event) => scrubSentryEvent(event as unknown as Record<string, unknown>) as any,
+  });
+  console.log('[Boot] Sentry initialized');
+}
+
+// Phase 5 / Plan 05-02 / OBS-03 / D-09: PostHog init guarded by POSTHOG_API_KEY.
+if (process.env.POSTHOG_API_KEY) {
+  const posthogClient = new PostHog(process.env.POSTHOG_API_KEY, {
+    host: process.env.POSTHOG_HOST ?? 'https://app.posthog.com',
+  });
+  initAnalytics(posthogClient);
+  console.log('[Boot] PostHog initialized');
+}
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -210,15 +234,19 @@ setTimeout(async () => {
   console.log('[Boot] HandHistoryQueue + retention job started');
 }, 1000);
 
-// Graceful shutdown: drain the HandHistoryQueue before exit so in-flight
-// best-effort history rows are not lost. RESEARCH §"SIGTERM wiring".
+// Graceful shutdown: drain the HandHistoryQueue + analytics before exit so in-flight
+// best-effort history rows and PostHog batches are not lost. RESEARCH §"SIGTERM wiring".
 process.on('SIGTERM', async () => {
-  console.log('[Server] SIGTERM received — draining HandHistoryQueue...');
-  try {
-    await HandHistoryQueue.shutdown();
-  } catch (err) {
-    console.error('[Server] queue drain failed:', err);
-  }
+  console.log('[Server] SIGTERM received — draining HandHistoryQueue + analytics...');
+  try { await HandHistoryQueue.shutdown(); } catch (err) { console.error('[Server] queue drain failed:', err); }
+  try { await shutdownAnalytics(); } catch (err) { console.error('[Server] analytics drain failed:', err); }
+  process.exit(0);
+});
+
+process.on('SIGINT', async () => {
+  console.log('[Server] SIGINT received — draining HandHistoryQueue + analytics...');
+  try { await HandHistoryQueue.shutdown(); } catch (err) { console.error('[Server] queue drain failed:', err); }
+  try { await shutdownAnalytics(); } catch (err) { console.error('[Server] analytics drain failed:', err); }
   process.exit(0);
 });
 
@@ -280,7 +308,11 @@ io.on("connection", (socket) => {
         GraceRegistry.clear(telegramId);
       }
 
-      socket.emit("authSuccess", user);
+      // Phase 5 / Plan 05-02 / OBS-03 / D-12: analyticsId = sha256(telegramId). Server
+      // computes and ships it once; client uses it for PostHog identify. Raw telegramId
+      // is never sent to PostHog. The field is additive; existing client logic ignores it.
+      const userWithAnalytics = { ...user, analyticsId: toAnalyticsId(user.telegramId) };
+      socket.emit("authSuccess", userWithAnalytics);
       console.log("[Auth] Success for:", user.username || user.displayName || user.telegramId,
         payload.devId ? `(dev mode, devId=${payload.devId})` : '');
     } catch (error) {

@@ -124,6 +124,7 @@ export interface TelegramUser {
   avatarId?: string;     // Plan 02-02: slug in AVATARS; rendered via avatarUrl(id) manifest resolver
   tosAcceptedAt?: string; // Plan 02-08: ISO timestamp of TOS acceptance (substrate added here for build hygiene)
   bannedAt?: string;       // Plan 05-01 (COMPLIANCE-04 + RESEARCH Open Q3): ISO timestamp; truthy = banned
+  analyticsId?: string;     // Plan 05-02 / OBS-03 / D-12: sha256(telegramId) — only identity sent to PostHog
   balance: number;
   lastDailyRefill?: string; // NEW: ISO timestamp
   canClaimDaily?: boolean;  // NEW: computed field
