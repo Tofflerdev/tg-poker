@@ -87,7 +87,7 @@ Plans:
   3. Sentry (react + node) initializes with a shared DSN, environment + release tags, Replay with privacy masking, and a `beforeSend` scrubber that strips `initData`, `sessionToken`, and raw `telegramId` from events, logs, and analytics.
   4. PostHog (client + server) emits the fixed event taxonomy (`user_signed_up`, `daily_bonus_claimed`, `table_joined`, `table_left`, `hand_completed`, `reconnect_succeeded`, `reconnect_failed`, `admin_action`, `error_shown`) using `sha256(telegramId)` — raw telegramId never leaves the server.
   5. A new user with `tosAcceptedAt IS NULL` receives a typed error from the server-side `joinTable` handler that routes them to the consent screen; grandfathered users pass through.
-**Plans:** 3/6 plans executed
+**Plans:** 4/6 plans executed
 **UI hint**: yes
 
 ### Phase 6: Test Hardening
@@ -111,7 +111,7 @@ Plans:
 | 2. Design System Rollout & Avatars | 0/0 | Not started | — |
 | 3. Gameplay Additions | 6/6 | Complete | 2026-04-22 |
 | 4. Resilience | 5/7 | In progress | — |
-| 5. Admin, Ops & Observability | 3/6 | In Progress|  |
+| 5. Admin, Ops & Observability | 4/6 | In Progress|  |
 | 6. Test Hardening | 0/0 | Not started | — |
 
 ---

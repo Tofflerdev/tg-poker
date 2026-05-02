@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 05-02-PLAN.md (Sentry+PostHog init, PII scrubber, analyticsId injection)
-last_updated: "2026-05-02T13:32:37.872Z"
+stopped_at: Completed 05-03-PLAN.md (admin JWT auth, login endpoint, boot guard)
+last_updated: "2026-05-02T13:38:37.738Z"
 last_activity: 2026-05-02
 progress:
   total_phases: 6
   completed_phases: 4
   total_plans: 32
-  completed_plans: 29
-  percent: 91
+  completed_plans: 30
+  percent: 94
 ---
 
 # Project State
@@ -19,14 +19,14 @@ progress:
 ## Current Position
 
 Phase: 05 (admin-ops-observability) — EXECUTING
-Plan: 4 of 6
+Plan: 5 of 6
 Status: Ready to execute
 Last activity: 2026-05-02
-Stopped at: Completed 05-02-PLAN.md (Sentry+PostHog init, PII scrubber, analyticsId injection)
+Stopped at: Completed 05-03-PLAN.md (admin JWT auth, login endpoint, boot guard)
 
 ## Session Continuity
 
-Last session: 2026-05-02T13:32:37.868Z
+Last session: 2026-05-02T13:38:37.735Z
 Stopped at: Completed 05-00-PLAN.md (Phase 5 Wave-0 RED scaffolds + type contracts)
 Resume file: None
 
@@ -81,6 +81,7 @@ Resume file: None
 - 05-01: gateUserOrEmit checks ban-first (banned users get BANNED error even without tosAcceptedAt); auth handler unchanged (banned users can authenticate per RESEARCH Open Q3); JoinGateUser interface accepts string|Date|null for Prisma and in-memory TelegramUser compatibility; COMPLIANCE-04 closed
 - 05-02: client entry point is index.tsx not main.tsx — Sentry/PostHog boot init applied to index.tsx; posthog-node engine warning for node 22.19.0 vs required 22.22.0 is non-blocking; OBS-01/02/03/04 + SECURITY-04 closed
 - 05-02: analyticsId = sha256(telegramId) injected into authSuccess payload; client calls identifyAnalytics(analyticsId) once on auth; raw telegramId never reaches PostHog (D-12); scrubSentryEvent wired as beforeSend on both server and client Sentry init
+- 05-03: POST /api/admin/login issues HS256 JWT (8h) via signAdminToken; validateCredentials uses crypto.timingSafeEqual; assertSafeBootOrExit exits 1 in prod if JWT_SECRET missing; generic 401 for all login failures (no username-vs-password oracle); express.json+cors registered before Socket.io setup (T-5-03-1..5, T-5-03-7, T-5-03-9)
 
 ### Blockers
 
