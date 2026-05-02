@@ -3,32 +3,32 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Phase 5 context gathered
-last_updated: "2026-05-01T09:07:30.882Z"
-last_activity: 2026-04-30
+stopped_at: Completed 05-00-PLAN.md (Phase 5 Wave-0 RED scaffolds + type contracts)
+last_updated: "2026-05-02T16:35:00.000Z"
+last_activity: 2026-05-02
 progress:
   total_phases: 6
   completed_phases: 4
-  total_plans: 26
-  completed_plans: 26
-  percent: 100
+  total_plans: 32
+  completed_plans: 27
+  percent: 84
 ---
 
 # Project State
 
 ## Current Position
 
-Phase: 04 (resilience) — EXECUTING
-Plan: 2 of 7
-Status: Ready to execute
-Last activity: 2026-04-30
-Stopped at: Phase 5 context gathered
+Phase: 05 (admin-ops-observability) — EXECUTING
+Plan: 2 of 6
+Status: Executing Phase 05
+Last activity: 2026-05-02 -- Completed 05-00 Wave-0 RED scaffolds + type contracts
+Stopped at: Completed 05-00-PLAN.md (Phase 5 Wave-0 RED scaffolds + type contracts)
 
 ## Session Continuity
 
-Last session: 2026-05-01T09:07:30.879Z
-Stopped at: Completed 04-03-PLAN.md (typed replacedBySession event)
-Resume file: .planning/phases/05-admin-ops-observability/05-CONTEXT.md
+Last session: 2026-05-02T16:35:00.000Z
+Stopped at: Completed 05-00-PLAN.md (Phase 5 Wave-0 RED scaffolds + type contracts)
+Resume file: .planning/phases/05-admin-ops-observability/05-01-PLAN.md
 
 ## Current Milestone
 
@@ -75,6 +75,9 @@ Resume file: .planning/phases/05-admin-ops-observability/05-CONTEXT.md
 - 04-05: ReconnectOverlay component shipped — 5-state OverlayState union (hidden / reconnecting / sat-out / vacated / replaced), triple useRef timer storage (debounce / grace / tick), 1500 ms debounce closes Pitfall 5 rapid-cycle flicker, replacedBySession bypasses debounce per D-A3; tickNow synced at overlay-open inside debounce callback (Rule 1 deviation from plan-supplied code) — without sync, stale mount-time tickNow renders countdown as 32/122 not 30/120; 11 RED → GREEN, full client suite 57 / 57
 - 04-04: SessionRecovery boot sweep shipped — recoverPersistedSessions() enumerates User rows with currentTableId IS NOT NULL via @@index, refunds each through Plan 04-01's UserRepository.refundCurrentChips inside a per-row try/catch (D-C4 amended 2026-04-29 — no outer $transaction; the helper is self-contained atomic per row), warns on stale tableIds (D-C3) but refunds anyway, returns { recovered: N }; always-refund policy (D-C1) — no reseat-as-sit-out branch; 4 RED → GREEN, full server suite 59 → 63
 - 04-06: Phase 4 integration complete — 8 production-code edits across server/index.ts (auth handler, joinTable, legacy join, leaveTable, disconnect, setOnHandComplete, boot block) + client/src/App.tsx (ReconnectOverlay mount). Auth handler emits typed `replacedBySession` (no `as any`, no payload) + tableJoined snapshot via getStateForPlayer (T-04-Info-Leak mitigated); disconnect handler arms stage-aware GraceRegistry timer (no immediate leave/refund — RESILIENCE-02 preserved); joinTable + legacy join + leaveTable atomic via tryDecrementBalance/refundCurrentChips (Concerns #5/#11 closed); boot block awaits SessionRecovery.recoverPersistedSessions; setOnHandComplete listener calls reArmIfMidHand (Pitfall 1 closed); ReconnectOverlay mounted via const-once + 11 inline mounts; 63/63 server + 57/57 client tests still GREEN; tableManager.handleDisconnect retained for Phase 5 ADMIN-05 kick
+- 05-00: Wave-0 RED scaffold pattern used for Phase 5 — 7 test files written before any implementation; each downstream plan (05-01..05-05) has a pre-written automated verification target; honors Nyquist rule (every <verify> has automated target)
+- 05-00: server/__tests__ excluded from tsconfig.json include scope — test files run by vitest only, not tsc; avoids tsc errors from RED imports referencing not-yet-created modules (Rule 3 auto-fix)
+- 05-00: Implementation seam ownership locked: scrubber.ts → 05-02; analytics.ts → 05-02; adminAuth.ts → 05-03; adminNamespace.ts → 05-04; adminMutations.ts → 05-04; joinGate.ts → 05-01; AdminLogin.tsx → 05-05
 
 ### Blockers
 

@@ -65,16 +65,16 @@ Requirements are grouped by category. Each has a unique `CATEGORY-NN` ID used by
 - [ ] **SECURITY-01** — Dev-mode `initData` bypass is gated on BOTH `ALLOW_DEV_AUTH=true` AND `NODE_ENV !== 'production'`; either condition absent means no bypass.
 - [ ] **SECURITY-02** — On server start, if `NODE_ENV=production` AND (`ALLOW_DEV_AUTH=true` OR `BOT_TOKEN` is empty), the process logs a fatal error and exits with code 1.
 - [ ] **SECURITY-03** — HMAC comparison uses `crypto.timingSafeEqual`; `validateInitData` never returns a fabricated dev user on HMAC failure.
-- [ ] **SECURITY-04** — Telegram `initData`, `sessionToken`, and raw `telegramId` are scrubbed from Sentry events, structured logs, and analytics via a `beforeSend` hook / log redactor.
+- [x] **SECURITY-04** — Telegram `initData`, `sessionToken`, and raw `telegramId` are scrubbed from Sentry events, structured logs, and analytics via a `beforeSend` hook / log redactor.
 
 ### ADMIN — Hidden Admin Panel
 
-- [ ] **ADMIN-01** — Admins are identified by an `ADMIN_TELEGRAM_IDS` env allowlist; no `isAdmin` database flag. Admin access is denied by default.
-- [ ] **ADMIN-02** — Admin lives on a separate `io.of('/admin')` Socket.io namespace with namespace-level middleware that re-runs `initData` HMAC and checks allowlist membership.
-- [ ] **ADMIN-03** — Admin UI is a lazy-loaded client subtree (recharts + react-hook-form + zod) with a distinct "ADMIN MODE" banner; it is not linked from the player UI and has no server-side affordance to regular users.
+- [x] **ADMIN-01** — Admins are identified by an `ADMIN_TELEGRAM_IDS` env allowlist; no `isAdmin` database flag. Admin access is denied by default.
+- [x] **ADMIN-02** — Admin lives on a separate `io.of('/admin')` Socket.io namespace with namespace-level middleware that re-runs `initData` HMAC and checks allowlist membership.
+- [x] **ADMIN-03** — Admin UI is a lazy-loaded client subtree (recharts + react-hook-form + zod) with a distinct "ADMIN MODE" banner; it is not linked from the player UI and has no server-side affordance to regular users.
 - [ ] **ADMIN-04** — Admin can view live dashboards: active tables (player count, stakes, hand-in-progress), active users, economy (total chips in play), and recent errors.
 - [ ] **ADMIN-05** — Admin can: enable/disable a table, drain a table (block new seats, finish current hand), edit table parameters (blinds/buy-in — applied at next hand), kick a user (disconnect + clear session), ban a user (sets `bannedAt`), and grant balance (positive or negative delta).
-- [ ] **ADMIN-06** — Every admin mutation writes an `AdminAuditLog` row (admin telegramId, action, target, before/after, timestamp) BEFORE the mutation commits; failed audit write aborts the mutation.
+- [x] **ADMIN-06** — Every admin mutation writes an `AdminAuditLog` row (admin telegramId, action, target, before/after, timestamp) BEFORE the mutation commits; failed audit write aborts the mutation.
 
 ### TEST — UI Test Suite
 
@@ -85,17 +85,17 @@ Requirements are grouped by category. Each has a unique `CATEGORY-NN` ID used by
 
 ### OBS — Observability
 
-- [ ] **OBS-01** — `@sentry/react` + `@sentry/node` are initialized with a shared DSN, environment tag (`development` / `production`), release tag, and the PII scrubber from SECURITY-04.
+- [x] **OBS-01** — `@sentry/react` + `@sentry/node` are initialized with a shared DSN, environment tag (`development` / `production`), release tag, and the PII scrubber from SECURITY-04.
 - [ ] **OBS-02** — Sentry Replay is enabled (errors sampled, privacy-masked) to aid reconnect-bug reproduction.
-- [ ] **OBS-03** — PostHog Cloud is initialized on both server (`posthog-node`) and client (`posthog-js`) with anonymous product analytics. User identity is `sha256(telegramId)`; raw telegramId never leaves the server.
-- [ ] **OBS-04** — A `track()` abstraction emits a fixed event taxonomy: `user_signed_up`, `daily_bonus_claimed`, `table_joined`, `table_left`, `hand_completed`, `reconnect_succeeded`, `reconnect_failed`, `admin_action`, `error_shown`.
+- [x] **OBS-03** — PostHog Cloud is initialized on both server (`posthog-node`) and client (`posthog-js`) with anonymous product analytics. User identity is `sha256(telegramId)`; raw telegramId never leaves the server.
+- [x] **OBS-04** — A `track()` abstraction emits a fixed event taxonomy: `user_signed_up`, `daily_bonus_claimed`, `table_joined`, `table_left`, `hand_completed`, `reconnect_succeeded`, `reconnect_failed`, `admin_action`, `error_shown`.
 
 ### COMPLIANCE — Responsible Gaming, ToS & Privacy
 
 - [ ] **COMPLIANCE-01** — ToS, Privacy Policy, and Responsible Gaming pages are static, reachable from the main menu and settings, and styled in Neon Strip.
 - [ ] **COMPLIANCE-02** — New users must tap "Accept" on a first-launch consent screen before `joinTable` is honored; acceptance sets `tosAcceptedAt` + `tosVersion` on the user row.
 - [ ] **COMPLIANCE-03** — Existing users are grandfathered: they see a non-blocking banner/modal prompting acceptance but are not prevented from playing.
-- [ ] **COMPLIANCE-04** — The server-side `joinTable` handler rejects users with `tosAcceptedAt IS NULL` that were created after the ToS gate shipped (new-user enforcement), with a client error that routes to the consent screen.
+- [x] **COMPLIANCE-04** — The server-side `joinTable` handler rejects users with `tosAcceptedAt IS NULL` that were created after the ToS gate shipped (new-user enforcement), with a client error that routes to the consent screen.
 - [ ] **COMPLIANCE-05** — Responsible-gaming page displays: virtual-chip disclaimer, "not for real money" statement, daily-bonus-only economy description, and (informational) "take a break" guidance — no forced lockouts.
 
 ---
@@ -173,25 +173,25 @@ All requirements above are:
 | SECURITY-01 | Phase 1 | Pending |
 | SECURITY-02 | Phase 1 | Pending |
 | SECURITY-03 | Phase 1 | Pending |
-| SECURITY-04 | Phase 5 | Pending |
-| ADMIN-01 | Phase 5 | Pending |
-| ADMIN-02 | Phase 5 | Pending |
-| ADMIN-03 | Phase 5 | Pending |
+| SECURITY-04 | Phase 5 | Complete |
+| ADMIN-01 | Phase 5 | Complete |
+| ADMIN-02 | Phase 5 | Complete |
+| ADMIN-03 | Phase 5 | Complete |
 | ADMIN-04 | Phase 5 | Pending |
 | ADMIN-05 | Phase 5 | Pending |
-| ADMIN-06 | Phase 5 | Pending |
+| ADMIN-06 | Phase 5 | Complete |
 | TEST-01 | Phase 6 | Pending |
 | TEST-02 | Phase 6 | Pending |
 | TEST-03 | Phase 6 | Pending |
 | TEST-04 | Phase 6 | Pending |
-| OBS-01 | Phase 5 | Pending |
+| OBS-01 | Phase 5 | Complete |
 | OBS-02 | Phase 5 | Pending |
-| OBS-03 | Phase 5 | Pending |
-| OBS-04 | Phase 5 | Pending |
+| OBS-03 | Phase 5 | Complete |
+| OBS-04 | Phase 5 | Complete |
 | COMPLIANCE-01 | Phase 2 | Pending |
 | COMPLIANCE-02 | Phase 2 | Pending |
 | COMPLIANCE-03 | Phase 2 | Pending |
-| COMPLIANCE-04 | Phase 5 | Pending |
+| COMPLIANCE-04 | Phase 5 | Complete |
 | COMPLIANCE-05 | Phase 2 | Pending |
 
 **Coverage:** 44/44 requirements mapped (100%).
