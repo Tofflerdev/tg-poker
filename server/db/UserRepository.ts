@@ -134,6 +134,63 @@ export class UserRepository {
     return { refunded: chipsToRefund };
   }
 
+  /**
+   * Phase 5 / Plan 05-04 / ADMIN-05:
+   * Atomic balance delta for admin grant. Returns { success, newBalance? }.
+   *
+   *   - delta > 0: unconditional increment (no upper cap in MVP).
+   *   - delta < 0: only succeeds if `balance + delta >= 0` (cannot drive into negative).
+   *   - delta === 0: rejected at validation layer (zod refine in admin UI Plan 05-05),
+   *     but defensively returns { success: false } here too.
+   */
+  static async adjustBalanceAtomic(
+    telegramId: string | number,
+    delta: number
+  ): Promise<{ success: boolean; newBalance?: number }> {
+    if (!Number.isInteger(delta) || delta === 0) {
+      return { success: false };
+    }
+    const tid = typeof telegramId === 'string' ? BigInt(telegramId) : BigInt(telegramId);
+    if (delta > 0) {
+      const result = await prisma.user.updateMany({
+        where: { telegramId: tid },
+        data:  { balance: { increment: delta } }
+      });
+      if (result.count !== 1) return { success: false };
+    } else {
+      // delta < 0 → require balance >= |delta|
+      const result = await prisma.user.updateMany({
+        where: { telegramId: tid, balance: { gte: -delta } },
+        data:  { balance: { increment: delta } } // increment by negative number
+      });
+      if (result.count !== 1) return { success: false };
+    }
+    const fresh = await prisma.user.findUnique({ where: { telegramId: tid }, select: { balance: true } });
+    return { success: true, newBalance: fresh?.balance ?? undefined };
+  }
+
+  /**
+   * Phase 5 / Plan 05-04 / ADMIN-05:
+   * Atomic ban: sets bannedAt = banAt AND clears all session columns
+   * (currentTableId, currentSeat, currentChips, disconnectedAt, lastSeenAt) in
+   * one update so the banned user cannot resume a session via reconnect.
+   */
+  static async setBannedAt(telegramId: string | number, banAt: Date): Promise<{ success: boolean }> {
+    const tid = typeof telegramId === 'string' ? BigInt(telegramId) : BigInt(telegramId);
+    const result = await prisma.user.updateMany({
+      where: { telegramId: tid },
+      data: {
+        bannedAt: banAt,
+        currentTableId: null,
+        currentSeat: null,
+        currentChips: null,
+        disconnectedAt: null,
+        lastSeenAt: null,
+      }
+    });
+    return { success: result.count === 1 };
+  }
+
   static async claimDailyBonus(telegramId: number): Promise<{ success: boolean; balance: number; nextClaimAt?: Date; message?: string }> {
     const user = await prisma.user.findUnique({
       where: { telegramId: BigInt(telegramId) }
