@@ -78,8 +78,8 @@ Requirements are grouped by category. Each has a unique `CATEGORY-NN` ID used by
 
 ### TEST — UI Test Suite
 
-- [ ] **TEST-01** — Vitest + `@testing-library/react` + jsdom is configured and runs from `npm test`; shared test setup mocks `Telegram.WebApp` and Socket.io client.
-- [ ] **TEST-02** — Every interactive UI element (button, input, tab, picker) has at least one co-located `*.test.tsx` file covering its happy-path interaction.
+- [x] **TEST-01** — Vitest + `@testing-library/react` + jsdom is configured and runs from `npm test`; shared test setup mocks `Telegram.WebApp` and Socket.io client.
+- [x] **TEST-02** — Every interactive UI element (button, input, tab, picker) has at least one co-located `*.test.tsx` file covering its happy-path interaction.
 - [ ] **TEST-03** — Scenario tests cover: joining a table, folding/calling/raising, disconnect+reconnect UI states, avatar selection, ToS gate, and deposit-stub navigation.
 - [ ] **TEST-04** — CI runs the suite against a prod-like Vite build; the test suite is a hard phase-exit gate for phases that ship UI.
 
@@ -180,8 +180,8 @@ All requirements above are:
 | ADMIN-04 | Phase 5 | Complete |
 | ADMIN-05 | Phase 5 | Complete |
 | ADMIN-06 | Phase 5 | Complete |
-| TEST-01 | Phase 6 | Pending |
-| TEST-02 | Phase 6 | Pending |
+| TEST-01 | Phase 6 | Complete |
+| TEST-02 | Phase 6 | Complete |
 | TEST-03 | Phase 6 | Pending |
 | TEST-04 | Phase 6 | Pending |
 | OBS-01 | Phase 5 | Complete |

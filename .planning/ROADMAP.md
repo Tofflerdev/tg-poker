@@ -99,10 +99,10 @@ Plans:
   2. Every interactive UI element (button, input, tab, picker) has at least one co-located `*.test.tsx` file covering happy-path interaction.
   3. Scenario tests cover joining a table, fold/call/raise, disconnect+reconnect UI states, avatar selection, ToS gate, and deposit-stub navigation.
   4. CI runs the suite against a prod-like Vite build and blocks phase exits for any phase that ships UI.
-**Plans:** 6 plans
+**Plans:** 1/6 plans executed
 
 Plans:
-- [ ] 06-00-PLAN.md — Test infra setup: Telegram.WebApp mock + ui/Button + ui/Tab tests
+- [x] 06-00-PLAN.md — Test infra setup: Telegram.WebApp mock + ui/Button + ui/Tab tests
 - [ ] 06-01-PLAN.md — GameControls + SeatsDisplay unit tests (D-03 / D-04)
 - [ ] 06-02-PLAN.md — DailyBonusButton + Chat + ConsentBanner unit tests
 - [ ] 06-03-PLAN.md — Admin panel smoke tests (Tables, Users, Audit, Economy)
@@ -120,7 +120,7 @@ Plans:
 | 3. Gameplay Additions | 6/6 | Complete | 2026-04-22 |
 | 4. Resilience | 5/7 | In progress | — |
 | 5. Admin, Ops & Observability | 6/6 | Complete   | 2026-05-02 |
-| 6. Test Hardening | 0/0 | Not started | — |
+| 6. Test Hardening | 1/6 | In Progress|  |
 
 ---
 

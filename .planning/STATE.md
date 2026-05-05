@@ -2,33 +2,33 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: completed
-stopped_at: Phase 6 context gathered
-last_updated: "2026-05-03T15:37:33.616Z"
-last_activity: 2026-05-03
+status: executing
+stopped_at: Completed 06-00-PLAN.md (Telegram stub + Button + Tab tests, 71/71 client tests GREEN)
+last_updated: "2026-05-05T05:08:51.347Z"
+last_activity: 2026-05-05
 progress:
   total_phases: 6
   completed_phases: 5
-  total_plans: 32
-  completed_plans: 32
-  percent: 100
+  total_plans: 38
+  completed_plans: 33
+  percent: 87
 ---
 
 # Project State
 
 ## Current Position
 
-Phase: 6
-Plan: Not started
-Status: Phase 05 complete; ready for Phase 06
-Last activity: 2026-05-03
-Stopped at: Phase 6 context gathered
+Phase: 06 (test-hardening) — EXECUTING
+Plan: 2 of 6
+Status: Ready to execute
+Last activity: 2026-05-05
+Stopped at: Completed 06-00-PLAN.md (Telegram stub + Button + Tab tests, 71/71 client tests GREEN)
 
 ## Session Continuity
 
-Last session: 2026-05-03T15:37:33.612Z
+Last session: 2026-05-05T05:08:51.343Z
 Stopped at: Completed 05-05-PLAN.md (lazy admin subtree, AdminApp, 4 tabs, IS_ADMIN_PATH gate)
-Resume file: .planning/phases/06-test-hardening/06-CONTEXT.md
+Resume file: None
 
 ## Current Milestone
 
@@ -88,6 +88,7 @@ Resume file: .planning/phases/06-test-hardening/06-CONTEXT.md
 - 05-05: AdminApp lazy-loaded via React.lazy() — separate Vite chunk AdminApp-C3D6-bPz.js; zero admin code in player main bundle (T-5-05-1 mitigated); ADMIN-03 closed
 - 05-05: IS_ADMIN_PATH = window.location.pathname.startsWith('/admin') computed once at module load; player socket null-cast when on admin path; short-circuit at top of App component before useTelegram or any player state
 - 05-05: TabBar API uses tabs/activeId/onChange props (not children JSX) — adjusted from plan template to match actual Tab.tsx component contract (Rule 1 auto-fix)
+- 06-00: window.Telegram stub uses vi.fn() for all callables in setup.ts; initData='' keeps useTelegram() in standalone mode — tests cannot exercise real Telegram auth; baseline client suite was 60 tests (plan stated 57); final count after Button + Tab tests is 71
 
 ### Blockers
 
