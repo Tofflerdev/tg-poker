@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 06-00-PLAN.md (Telegram stub + Button + Tab tests, 71/71 client tests GREEN)
-last_updated: "2026-05-05T05:08:51.347Z"
+stopped_at: Completed 06-01-PLAN.md (GameControls + SeatsDisplay tests, 82/82 client tests GREEN)
+last_updated: "2026-05-05T05:13:41.481Z"
 last_activity: 2026-05-05
 progress:
   total_phases: 6
   completed_phases: 5
   total_plans: 38
-  completed_plans: 33
-  percent: 87
+  completed_plans: 34
+  percent: 89
 ---
 
 # Project State
@@ -19,14 +19,14 @@ progress:
 ## Current Position
 
 Phase: 06 (test-hardening) — EXECUTING
-Plan: 2 of 6
+Plan: 3 of 6
 Status: Ready to execute
 Last activity: 2026-05-05
-Stopped at: Completed 06-00-PLAN.md (Telegram stub + Button + Tab tests, 71/71 client tests GREEN)
+Stopped at: Completed 06-01-PLAN.md (GameControls + SeatsDisplay tests, 82/82 client tests GREEN)
 
 ## Session Continuity
 
-Last session: 2026-05-05T05:08:51.343Z
+Last session: 2026-05-05T05:13:41.477Z
 Stopped at: Completed 05-05-PLAN.md (lazy admin subtree, AdminApp, 4 tabs, IS_ADMIN_PATH gate)
 Resume file: None
 
