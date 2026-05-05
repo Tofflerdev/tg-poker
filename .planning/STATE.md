@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 06-03-PLAN.md (AdminTables + AdminUsers + AdminAudit + AdminEconomy tests, 109/109 client tests GREEN)
-last_updated: "2026-05-05T05:22:31.788Z"
+stopped_at: Completed 06-04-PLAN.md (5 scenario test files, 15 tests, 124/124 client tests GREEN)
+last_updated: "2026-05-05T05:28:52.925Z"
 last_activity: 2026-05-05
 progress:
   total_phases: 6
   completed_phases: 5
   total_plans: 38
-  completed_plans: 36
-  percent: 95
+  completed_plans: 37
+  percent: 97
 ---
 
 # Project State
@@ -19,14 +19,14 @@ progress:
 ## Current Position
 
 Phase: 06 (test-hardening) — EXECUTING
-Plan: 5 of 6
+Plan: 6 of 6
 Status: Ready to execute
 Last activity: 2026-05-05
-Stopped at: Completed 06-03-PLAN.md (AdminTables + AdminUsers + AdminAudit + AdminEconomy tests, 109/109 client tests GREEN)
+Stopped at: Completed 06-04-PLAN.md (5 scenario test files, 15 tests, 124/124 client tests GREEN)
 
 ## Session Continuity
 
-Last session: 2026-05-05T05:22:31.784Z
+Last session: 2026-05-05T05:28:52.921Z
 Stopped at: Completed 05-05-PLAN.md (lazy admin subtree, AdminApp, 4 tabs, IS_ADMIN_PATH gate)
 Resume file: None
 
@@ -89,6 +89,7 @@ Resume file: None
 - 05-05: IS_ADMIN_PATH = window.location.pathname.startsWith('/admin') computed once at module load; player socket null-cast when on admin path; short-circuit at top of App component before useTelegram or any player state
 - 05-05: TabBar API uses tabs/activeId/onChange props (not children JSX) — adjusted from plan template to match actual Tab.tsx component contract (Rule 1 auto-fix)
 - 06-00: window.Telegram stub uses vi.fn() for all callables in setup.ts; initData='' keeps useTelegram() in standalone mode — tests cannot exercise real Telegram auth; baseline client suite was 60 tests (plan stated 57); final count after Button + Tab tests is 71
+- 06-04: Scenario tests use role='radio' for avatar tiles, role='button' with name regex for BlockCard; Confirm label is 'No changes' when dirty=false (not 'Confirm') — plan template corrected; 5 new files, 15 tests, TEST-03 closed
 
 ### Blockers
 
