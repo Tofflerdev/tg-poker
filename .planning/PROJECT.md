@@ -43,8 +43,8 @@ A polished, fast, mobile-first **Texas Hold'em poker Mini App for Telegram** —
 - **Transport complete** — Socket.io-only communication; Telegram `initData` HMAC auth hardened fail-closed in Phase 1.
 - **Design language shipped** — "Neon Strip" applied across Main Menu, Table List, Profile/Settings, Game Room chrome, GameControls, SeatsDisplay, ActionBubble, and HandHistory UI.
 - **Gameplay additions shipped (Phase 3)** — action bubbles broadcast off `onPlayerAction`, async `HandHistoryQueue` off the hot path, zero-arg `getHandHistory` socket handler with read-time opponent-hole-card strip, hand-boundary `checkpointSeat`.
-- **Test stack in place** — Vitest + RTL scaffolded in Phase 3; 84 tests passing (38 server + 46 client). Dedicated Phase 6 extends coverage to per-element granularity.
-- **Gaps** — no deploy infra (explicitly out of scope), no reconnect logic (Phase 4), no crash-safety recovery on boot (Phase 4), no admin panel (Phase 5), no observability (Phase 5).
+- **Test suite complete (Phase 6)** — Vitest + RTL; 204 tests (80 server + 124 client); per-element files for all 11 interactive components; 5 scenario flows; GitHub Actions CI gate wired on push/PR to main.
+- **Gaps** — 20 WebP avatar binaries not yet generated (human-supplied required; no code changes needed after drop). Deploy infra explicitly out of scope for this cycle.
 
 See `.planning/codebase/` for the full codebase map (7 docs).
 
@@ -53,9 +53,9 @@ See `.planning/codebase/` for the full codebase map (7 docs).
 - [x] Phase 1: Foundations & Design System — 2026-04-15
 - [x] Phase 2: Design System Rollout & Avatars — (complete; 20 WebP binaries pending)
 - [x] Phase 3: Gameplay Additions — 2026-04-22 (automated verification passed; 3 human UAT items tracked in `03-HUMAN-UAT.md`)
-- [ ] Phase 4: Resilience
-- [ ] Phase 5: Admin, Ops & Observability
-- [ ] Phase 6: Test Hardening
+- [x] Phase 4: Resilience — 2026-04-29 (reconnect + crash-safety complete; manual UAT in `04-HUMAN-UAT.md`)
+- [x] Phase 5: Admin, Ops & Observability — 2026-05-05 (admin panel, Sentry, PostHog, ToS gate, CI complete)
+- [x] Phase 6: Test Hardening — 2026-05-05 (204 tests; CI gate live; TEST-01..04 verified)
 
 ## MVP Scope (this initialization)
 
@@ -130,4 +130,4 @@ This document evolves at phase transitions and milestone boundaries.
 3. Audit Out of Scope — reasons still valid?
 4. Update Context with current state
 
-_Last updated: 2026-04-22 — Phase 3 complete (action bubbles, hand history pipeline, profile history UI, hand-boundary checkpointing)_
+_Last updated: 2026-05-05 — Phase 6 complete (Vitest + RTL suite, 204 tests, GitHub Actions CI gate; v1.0 milestone all phases done)_
