@@ -93,11 +93,10 @@ Resume file: None
 
 ### Blockers
 
-- **20 WebP avatar binaries not generated** — no image-generation MCP in executor env. Client build emits Vite runtime-URL warnings for all 20 slugs; runtime will 404 on `<img src>` until files ship at `client/src/assets/avatars/{slug}.webp`. Unblocker: human-supplied WebPs matching the locked brief; no further code changes required after drop.
+None.
 
 ### Pending Todos
 
-- Supply 20 WebP binaries per locked species list + prompt brief
 - Continue Plan 02-03 (next page redesign)
 
 ## Notes

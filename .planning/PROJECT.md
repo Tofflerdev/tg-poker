@@ -44,14 +44,14 @@ A polished, fast, mobile-first **Texas Hold'em poker Mini App for Telegram** —
 - **Design language shipped** — "Neon Strip" applied across Main Menu, Table List, Profile/Settings, Game Room chrome, GameControls, SeatsDisplay, ActionBubble, and HandHistory UI.
 - **Gameplay additions shipped (Phase 3)** — action bubbles broadcast off `onPlayerAction`, async `HandHistoryQueue` off the hot path, zero-arg `getHandHistory` socket handler with read-time opponent-hole-card strip, hand-boundary `checkpointSeat`.
 - **Test suite complete (Phase 6)** — Vitest + RTL; 204 tests (80 server + 124 client); per-element files for all 11 interactive components; 5 scenario flows; GitHub Actions CI gate wired on push/PR to main.
-- **Gaps** — 20 WebP avatar binaries not yet generated (human-supplied required; no code changes needed after drop). Deploy infra explicitly out of scope for this cycle.
+- **Gaps** — Deploy infra explicitly out of scope for this cycle.
 
 See `.planning/codebase/` for the full codebase map (7 docs).
 
 ## Phase Status
 
 - [x] Phase 1: Foundations & Design System — 2026-04-15
-- [x] Phase 2: Design System Rollout & Avatars — (complete; 20 WebP binaries pending)
+- [x] Phase 2: Design System Rollout & Avatars — 2026-05-05 (complete; 20 WebP avatars shipped)
 - [x] Phase 3: Gameplay Additions — 2026-04-22 (automated verification passed; 3 human UAT items tracked in `03-HUMAN-UAT.md`)
 - [x] Phase 4: Resilience — 2026-04-29 (reconnect + crash-safety complete; manual UAT in `04-HUMAN-UAT.md`)
 - [x] Phase 5: Admin, Ops & Observability — 2026-05-05 (admin panel, Sentry, PostHog, ToS gate, CI complete)
