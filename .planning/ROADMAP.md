@@ -15,7 +15,7 @@
 - [x] **Phase 3: Gameplay Additions** — Action bubbles, hand history, async write queue, chip checkpointing ✓ 2026-04-22
 - [ ] **Phase 4: Resilience** — Reconnect with full-snapshot resume, crash-safe recovery, atomic buy-in
 - [x] **Phase 5: Admin, Ops & Observability** — Hidden admin panel, Sentry + PostHog, server-side ToS gate (completed 2026-05-02)
-- [ ] **Phase 6: Test Hardening** — Vitest + RTL suite, per-element coverage, scenario tests, CI gate
+- [x] **Phase 6: Test Hardening** — Vitest + RTL suite, per-element coverage, scenario tests, CI gate (completed 2026-05-05)
 
 ---
 
@@ -99,7 +99,7 @@ Plans:
   2. Every interactive UI element (button, input, tab, picker) has at least one co-located `*.test.tsx` file covering happy-path interaction.
   3. Scenario tests cover joining a table, fold/call/raise, disconnect+reconnect UI states, avatar selection, ToS gate, and deposit-stub navigation.
   4. CI runs the suite against a prod-like Vite build and blocks phase exits for any phase that ships UI.
-**Plans:** 5/6 plans executed
+**Plans:** 6/6 plans complete
 
 Plans:
 - [x] 06-00-PLAN.md — Test infra setup: Telegram.WebApp mock + ui/Button + ui/Tab tests
@@ -107,7 +107,7 @@ Plans:
 - [x] 06-02-PLAN.md — DailyBonusButton + Chat + ConsentBanner unit tests
 - [x] 06-03-PLAN.md — Admin panel smoke tests (Tables, Users, Audit, Economy)
 - [x] 06-04-PLAN.md — Five scenario tests (join-table, fold/call/raise, avatar, ToS, deposit)
-- [ ] 06-05-PLAN.md — npm test gate + GitHub Actions YAML + human verification (TEST-01 / TEST-04)
+- [x] 06-05-PLAN.md — npm test gate + GitHub Actions YAML + human verification (TEST-01 / TEST-04)
 
 ---
 
@@ -120,7 +120,7 @@ Plans:
 | 3. Gameplay Additions | 6/6 | Complete | 2026-04-22 |
 | 4. Resilience | 5/7 | In progress | — |
 | 5. Admin, Ops & Observability | 6/6 | Complete   | 2026-05-02 |
-| 6. Test Hardening | 5/6 | In Progress|  |
+| 6. Test Hardening | 6/6 | Complete   | 2026-05-05 |
 
 ---
 
