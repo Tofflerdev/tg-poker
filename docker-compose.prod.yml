@@ -28,6 +28,7 @@ services:
       PORT: 3000
       DATABASE_URL: postgresql://${POSTGRES_USER:-poker}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-poker_db}
       BOT_TOKEN: ${BOT_TOKEN}
+      JWT_SECRET: ${JWT_SECRET}
     volumes:
       - client-dist:/app/client-dist
     depends_on:
