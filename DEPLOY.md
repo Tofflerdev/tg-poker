@@ -1,191 +1,152 @@
-# 🚀 Deployment Guide — TG Poker
+# Deployment Guide — TG Poker
 
-Deploy the Telegram Poker Mini App to a VPS with Docker, nginx, and Let's Encrypt SSL.
-
-**Domain:** `tgp.isgood.host`  
-**Stack:** Node.js + PostgreSQL + nginx + Docker  
-**OS:** Ubuntu 22.04
+**Domain:** `tgp.isgood.host` | **Stack:** Node.js + PostgreSQL + nginx + Docker | **VPS OS:** Ubuntu 22.04
 
 ---
 
-## Prerequisites
+## Routine deploy (already set up — use this every time)
 
-- VPS with Ubuntu 22.04 (minimum 1GB RAM, 1 CPU)
-- Domain `tgp.isgood.host` pointing to your VPS IP (A record in DNS)
-- SSH access to the VPS as root
-- Telegram Bot Token from [@BotFather](https://t.me/BotFather)
-- GitHub repository with the project code
-
----
-
-## Step 1: Point DNS to VPS
-
-In your DNS provider, create an **A record**:
-
-```
-Type: A
-Name: tgp
-Value: <YOUR_VPS_IP>
-TTL: 300
-```
-
-Verify it resolves:
-```bash
-dig tgp.isgood.host
-```
-
----
-
-## Step 2: Setup Git on VPS
-
-1. **Generate SSH key on VPS** (for GitHub access):
-   ```bash
-   ssh-keygen -t ed25519 -C "vps-deploy"
-   cat ~/.ssh/id_ed25519.pub
-   ```
-
-2. **Add Deploy Key to GitHub**:
-   - Go to your GitHub repo → Settings → Deploy keys
-   - Click "Add deploy key"
-   - Paste the public key
-   - Title: "VPS Deploy Key"
-   - Allow write access: Unchecked (read-only is safer)
-
-3. **Clone the repository**:
-   ```bash
-   mkdir -p /opt/tg-poker
-   git clone git@github.com:your-username/tg-poker.git /opt/tg-poker
-   cd /opt/tg-poker
-   ```
-
----
-
-## Step 3: Configure environment
-
-On the VPS:
+Push your changes to GitHub, then SSH to the VPS and run:
 
 ```bash
-cd /opt/tg-poker
-
-# Copy the production env template
-cp .env.production .env
-
-# Edit with your values
-nano .env
-```
-
-**Required values to change:**
-
-```env
-POSTGRES_PASSWORD=<generate-a-strong-password>
-BOT_TOKEN=<your-bot-token-from-botfather>
-```
-
-Generate a strong password:
-```bash
-openssl rand -base64 32
-```
-
----
-
-## Step 4: Run the deploy script
-
-```bash
-cd /opt/tg-poker
-chmod +x deploy.sh update.sh
-bash deploy.sh
-```
-
-The script will:
-1. ✅ Install Docker & Docker Compose
-2. ✅ Configure firewall (ports 22, 80, 443)
-3. ✅ Verify `.env` configuration
-4. ✅ Obtain SSL certificate via Let's Encrypt
-5. ✅ Build and start all services (postgres, app, nginx)
-
----
-
-## Step 5: Set up Telegram Bot
-
-1. Open [@BotFather](https://t.me/BotFather) in Telegram
-2. Create a new bot: `/newbot`
-3. Copy the bot token → put it in `.env` as `BOT_TOKEN`
-4. Create a Mini App: `/newapp`
-   - Select your bot
-   - Set the Web App URL: `https://tgp.isgood.host`
-5. Optionally set menu button: `/setmenubutton`
-   - URL: `https://tgp.isgood.host`
-   - Button text: `🎰 Play Poker`
-
-After updating `BOT_TOKEN`, restart:
-```bash
-cd /opt/tg-poker
-docker compose -f docker-compose.prod.yml up -d
-```
-
----
-
-## Step 6: Verify deployment
-
-1. Open `https://tgp.isgood.host` in browser — should show the app
-2. Open your bot in Telegram → tap the Mini App button
-3. Test authentication, joining a table, playing a hand
-
----
-
-## Updating the App
-
-After pushing changes to GitHub, run this on the VPS:
-
-```bash
+ssh root@tgp.isgood.host
 cd /opt/tg-poker
 bash update.sh
 ```
 
-This script will:
-1. `git pull` latest changes
-2. Rebuild Docker containers
-3. Restart services
-4. Prune unused images
+That's it. The script:
+1. `git pull origin main` — pulls latest code
+2. `docker compose -f docker-compose.prod.yml up -d --build` — rebuilds and restarts changed containers (postgres data is preserved)
+3. `docker image prune -f` — cleans up old images
+
+The app is back online automatically — nginx and postgres are not rebuilt unless their config changed.
 
 ---
 
-## Useful Commands
+## What's running on the VPS right now
+
+| Container | Image | Role |
+|-----------|-------|------|
+| `tg-poker-postgres-1` | postgres:16-alpine | Database (persistent volume `pgdata`) |
+| `tg-poker-app-1` | tg-poker-app | Node.js server (port 3000, internal only) |
+| `tg-poker-nginx-1` | nginx:alpine | Reverse proxy (ports 80/443, public) |
+
+SSL cert: `/etc/letsencrypt/live/tgp.isgood.host/` (auto-renewed via cron)  
+App dir: `/opt/tg-poker`  
+Env file: `/opt/tg-poker/.env`
+
+---
+
+## Useful commands
 
 ```bash
 cd /opt/tg-poker
 
-# View all logs
-docker compose -f docker-compose.prod.yml logs -f
-
-# View only app logs
+# View live logs
 docker compose -f docker-compose.prod.yml logs -f app
-
-# View only nginx logs
 docker compose -f docker-compose.prod.yml logs -f nginx
 
-# Restart all services
-docker compose -f docker-compose.prod.yml restart
+# Check container status
+docker compose -f docker-compose.prod.yml ps
 
-# Restart only the app (after code changes)
-docker compose -f docker-compose.prod.yml up -d --build app
-docker compose -f docker-compose.prod.yml restart nginx
+# Restart app only (without rebuild)
+docker compose -f docker-compose.prod.yml restart app
+
+# Full rebuild (same as update.sh step 2)
+docker compose -f docker-compose.prod.yml up -d --build
 
 # Stop everything
 docker compose -f docker-compose.prod.yml down
 
-# Full rebuild
-docker compose -f docker-compose.prod.yml up -d --build
-
-# Check service status
-docker compose -f docker-compose.prod.yml ps
-
-# Access PostgreSQL
+# Access the database
 docker compose -f docker-compose.prod.yml exec postgres psql -U poker -d poker_db
 
 # Check SSL certificate expiry
 openssl s_client -connect tgp.isgood.host:443 -servername tgp.isgood.host 2>/dev/null | openssl x509 -noout -dates
 ```
+
+---
+
+## Environment variables
+
+File: `/opt/tg-poker/.env`
+
+```env
+POSTGRES_USER=poker
+POSTGRES_PASSWORD=<strong password>
+POSTGRES_DB=poker_db
+BOT_TOKEN=<telegram bot token>
+NODE_ENV=production
+PORT=3000
+DOMAIN=tgp.isgood.host
+```
+
+To change a value: edit `.env`, then restart:
+```bash
+docker compose -f docker-compose.prod.yml up -d
+```
+
+---
+
+## First-time setup (new VPS)
+
+Only needed if setting up from scratch on a new server.
+
+### 1. Point DNS
+
+Create an A record in your DNS provider:
+```
+Type: A  |  Name: tgp  |  Value: <VPS_IP>  |  TTL: 300
+```
+
+### 2. Install Docker on VPS
+
+```bash
+apt-get update && apt-get install -y ca-certificates curl gnupg
+install -m 0755 -d /etc/apt/keyrings
+curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+chmod a+r /etc/apt/keyrings/docker.gpg
+echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | tee /etc/apt/sources.list.d/docker.list > /dev/null
+apt-get update && apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+```
+
+### 3. Configure GitHub SSH access on VPS
+
+```bash
+ssh-keygen -t ed25519 -C "vps-deploy"
+cat ~/.ssh/id_ed25519.pub
+# Add this key as a Deploy Key in GitHub repo → Settings → Deploy keys
+```
+
+### 4. Clone and configure
+
+```bash
+git clone git@github.com:Tofflerdev/tg-poker.git /opt/tg-poker
+cd /opt/tg-poker
+cp .env.production .env
+nano .env   # set POSTGRES_PASSWORD and BOT_TOKEN
+```
+
+### 5. Get SSL certificate
+
+```bash
+apt-get install -y certbot
+certbot certonly --standalone -d tgp.isgood.host
+# Set up auto-renewal:
+(crontab -l 2>/dev/null; echo "0 3 * * * certbot renew --quiet --pre-hook 'docker compose -f /opt/tg-poker/docker-compose.prod.yml stop nginx' --post-hook 'docker compose -f /opt/tg-poker/docker-compose.prod.yml start nginx'") | crontab -
+```
+
+### 6. Build and start
+
+```bash
+cd /opt/tg-poker
+docker compose -f docker-compose.prod.yml up -d --build
+```
+
+### 7. Configure Telegram Bot
+
+1. [@BotFather](https://t.me/BotFather) → `/newapp` → set Web App URL: `https://tgp.isgood.host`
+2. Optionally: `/setmenubutton` → URL `https://tgp.isgood.host`, text `Play Poker`
 
 ---
 
@@ -195,15 +156,14 @@ openssl s_client -connect tgp.isgood.host:443 -servername tgp.isgood.host 2>/dev
 Internet
     │
     ▼
-┌─────────┐     ┌──────────────┐     ┌────────────┐
+┌──────────┐     ┌──────────────┐     ┌────────────┐
 │  nginx   │────▶│  Node.js App │────▶│ PostgreSQL │
 │ :80/:443 │     │    :3000     │     │   :5432    │
-└─────────┘     └──────────────┘     └────────────┘
+└──────────┘     └──────────────┘     └────────────┘
     │
-    ├── Static files (client SPA)
-    ├── /socket.io/ → WebSocket proxy
-    └── /api/ → HTTP proxy
+    ├── Static files (React SPA built into Docker image)
+    ├── /socket.io/ → WebSocket proxy to app
+    └── /api/      → HTTP proxy to app
 ```
 
-All services run in Docker containers on the same internal network.
-nginx is the only service exposed to the internet.
+Static client files are built inside the Docker image (Stage 2) and copied to a shared Docker volume (`client-dist`) that nginx serves directly. PostgreSQL data lives in the `pgdata` volume and survives container rebuilds.
