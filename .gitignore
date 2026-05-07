@@ -11,3 +11,4 @@ dev.db
 *.tar
 prod-check.png
 screenshots/
+.claude/settings.local.json
