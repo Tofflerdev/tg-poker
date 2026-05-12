@@ -4,7 +4,12 @@
       "Bash(npx tsc:*)",
       "Bash(npx vite:*)",
       "WebSearch",
-      "WebFetch(domain:core.telegram.org)"
+      "WebFetch(domain:core.telegram.org)",
+      "Bash(ssh *)",
+      "PowerShell(Get-ChildItem *)",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(git push *)"
     ]
   }
 }
