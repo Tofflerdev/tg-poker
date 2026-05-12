@@ -268,10 +268,12 @@ const App: React.FC = () => {
         setShowdown(null);
       }
 
-      // Update mySeat based on current state
-      // Server uses socket.id for player identification in game state
-      const playerId = socket.id;
-      const meInSeats = newState.seats.findIndex(p => p && p.id === playerId);
+      // RESILIENCE-03: server stores player.id = telegramId (durable key),
+      // not socket.id. Match on stringified telegramId of the authenticated user.
+      const meId = currentUser ? String(currentUser.telegramId) : null;
+      const meInSeats = meId
+        ? newState.seats.findIndex(p => p && p.id === meId)
+        : -1;
       setMySeat(meInSeats !== -1 ? meInSeats : null);
     });
 
