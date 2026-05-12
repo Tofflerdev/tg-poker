@@ -29,6 +29,8 @@ services:
       DATABASE_URL: postgresql://${POSTGRES_USER:-poker}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-poker_db}
       BOT_TOKEN: ${BOT_TOKEN}
       JWT_SECRET: ${JWT_SECRET}
+      ADMIN_USER: ${ADMIN_USER}
+      ADMIN_PASS: ${ADMIN_PASS}
     volumes:
       - client-dist:/app/client-dist
     depends_on:
