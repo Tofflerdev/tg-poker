@@ -31,7 +31,7 @@ The app is back online automatically — nginx and postgres are not rebuilt unle
 | `tg-poker-app-1` | tg-poker-app | Node.js server (port 3000, internal only) |
 | `tg-poker-nginx-1` | nginx:alpine | Reverse proxy (ports 80/443, public) |
 
-SSL cert: `/etc/letsencrypt/live/tgp.isgood.host/` (auto-renewed via cron)  
+SSL cert: `/etc/letsencrypt/live/tgp.isgood.host/` (auto-renewed via systemd `certbot.timer` + renewal hooks)  
 App dir: `/opt/tg-poker`  
 Env file: `/opt/tg-poker/.env`
 
@@ -135,9 +135,42 @@ nano .env   # set POSTGRES_PASSWORD and BOT_TOKEN
 ```bash
 apt-get install -y certbot
 certbot certonly --standalone -d tgp.isgood.host
-# Set up auto-renewal:
-(crontab -l 2>/dev/null; echo "0 3 * * * certbot renew --quiet --pre-hook 'docker compose -f /opt/tg-poker/docker-compose.prod.yml stop nginx' --post-hook 'docker compose -f /opt/tg-poker/docker-compose.prod.yml start nginx'") | crontab -
 ```
+
+Auto-renewal runs via the systemd `certbot.timer` that ships with the certbot
+package (no cron needed — `certbot.timer` fires twice daily and renews only
+when the cert is within 30 days of expiry). Because the cert uses the
+**standalone** authenticator, certbot needs port 80, which the nginx container
+holds. Renewal hooks free it just for the renewal:
+
+```bash
+mkdir -p /etc/letsencrypt/renewal-hooks/pre /etc/letsencrypt/renewal-hooks/post
+
+printf '%s\n' '#!/bin/sh' \
+  'docker compose -f /opt/tg-poker/docker-compose.prod.yml stop nginx' \
+  > /etc/letsencrypt/renewal-hooks/pre/stop-nginx.sh
+
+printf '%s\n' '#!/bin/sh' \
+  'docker compose -f /opt/tg-poker/docker-compose.prod.yml start nginx' \
+  > /etc/letsencrypt/renewal-hooks/post/start-nginx.sh
+
+chmod +x /etc/letsencrypt/renewal-hooks/pre/stop-nginx.sh \
+         /etc/letsencrypt/renewal-hooks/post/start-nginx.sh
+
+# Verify the whole flow (uses staging, runs the hooks, brings nginx back):
+certbot renew --dry-run
+```
+
+> The hooks only run when a renewal is actually attempted, so nginx is stopped
+> for a few seconds roughly once every ~60 days, not on every timer tick.
+>
+> **If the cert ever expires** (timer disabled / hooks missing), renew manually:
+> ```bash
+> cd /opt/tg-poker
+> docker compose -f docker-compose.prod.yml stop nginx
+> certbot renew
+> docker compose -f docker-compose.prod.yml start nginx
+> ```
 
 ### 6. Build and start
 
