@@ -51,7 +51,7 @@ export default class Game {
 
   // Добавление игрока (разрешаем в любое время)
   // telegramId (stringified) is the durable identity key stored in player.id (RESILIENCE-03)
-  addPlayer(telegramId: string, seat: number, chips: number = 1000, telegramIdNumeric?: number, displayName?: string, avatarUrl?: string, socketId?: string, avatarId?: string): boolean {
+  addPlayer(telegramId: string, seat: number, chips: number = 1000, telegramIdNumeric?: number, displayName?: string, avatarUrl?: string, socketId?: string, avatarId?: string, isBot?: boolean): boolean {
     if (seat < 0 || seat >= this.seats.length) return false;
     if (this.seats[seat]) return false;
 
@@ -83,6 +83,7 @@ export default class Game {
       showCards: false,
       waitingForBB,  // NEW: ждем ББ если игра уже идет
       sittingOut: false,  // NEW: изначально не отсидиваемся
+      isBot: isBot ?? false,  // playtest bot flag (BotDriver acts on this seat)
     };
     this.seats[seat] = player;
     return true;

@@ -21,6 +21,7 @@ export interface Player {
   showCards: boolean;
   waitingForBB: boolean;  // NEW: игрок присоединился во время игры, ждет большого блайнда
   sittingOut: boolean;    // NEW: игрок добровольно отсиделся
+  isBot?: boolean;        // playtest bot — server-side Player driven by BotDriver (no socket)
 }
 
 // Представляет один пот (основной или сайд-пот)

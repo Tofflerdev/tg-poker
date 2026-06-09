@@ -11,6 +11,7 @@ import { assertSafeBootOrExit, validateInitData, createUserFromInitData } from "
 import { gateUserOrEmit } from "./middleware/joinGate.js";
 import { userStorage } from "./models/User.js";
 import { tableManager } from "./TableManager.js";
+import { BotDriver } from "./bot/BotDriver.js";
 import { UserRepository } from "./db/UserRepository.js";
 import { isValidAvatarId } from "../types/avatars.js";
 import * as HandHistoryQueue from "./HandHistoryQueue.js";
@@ -147,6 +148,11 @@ const updateTableState = (tableId: string) => {
       io.to(socketId).emit("state", playerState);
     }
   });
+
+  // Single chokepoint for the playtest BotDriver: every state broadcast (human
+  // action, turn timeout, new hand, bot action) re-checks whether it's now a
+  // bot's turn and schedules its action. Never throws back into the broadcast.
+  botDriver.notifyStateChanged(tableId);
 };
 
 /**
@@ -188,6 +194,29 @@ const handleTableShowdown = (tableId: string, result: any) => {
     updateTableState(tableId);
   }, 100);
 };
+
+/**
+ * Settle a table after an action: run showdown handling if the hand ended,
+ * otherwise just broadcast state. Module-level so both socket action handlers
+ * and the BotDriver share one post-action path.
+ */
+const settleAndBroadcast = (tableId: string) => {
+  const table = tableManager.getTable(tableId);
+  if (!table) return;
+  const state = table.getState();
+  if (state.stage === 'showdown' && table.game?.lastShowdown) {
+    handleTableShowdown(tableId, table.game.lastShowdown);
+  } else {
+    updateTableState(tableId);
+  }
+};
+
+// Playtest BotDriver — acts on `isBot` seats via the same Table action methods
+// the socket handlers use, then settles/broadcasts (which chains bot-to-bot).
+const botDriver = new BotDriver({
+  getTable: (tableId) => tableManager.getTable(tableId),
+  onActed: (tableId) => settleAndBroadcast(tableId),
+});
 
 // Setup table event handlers
 const setupTableEvents = (tableId: string) => {
@@ -787,13 +816,8 @@ io.on("connection", (socket) => {
     return true;
   };
 
-  const checkShowdownAndUpdate = (table: any, tableId: string) => {
-    const state = table.getState();
-    if (state.stage === 'showdown' && table.game?.lastShowdown) {
-      handleTableShowdown(tableId, table.game.lastShowdown);
-    } else {
-      updateTableState(tableId);
-    }
+  const checkShowdownAndUpdate = (_table: any, tableId: string) => {
+    settleAndBroadcast(tableId);
   };
 
   // Game action handlers
