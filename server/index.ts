@@ -11,6 +11,8 @@ import { assertSafeBootOrExit, validateInitData, createUserFromInitData } from "
 import { gateUserOrEmit } from "./middleware/joinGate.js";
 import { userStorage } from "./models/User.js";
 import { tableManager } from "./TableManager.js";
+import { BotDriver } from "./bot/BotDriver.js";
+import { SessionRecorder } from "./bot/SessionRecorder.js";
 import { UserRepository } from "./db/UserRepository.js";
 import { isValidAvatarId } from "../types/avatars.js";
 import * as HandHistoryQueue from "./HandHistoryQueue.js";
@@ -102,7 +104,7 @@ const io = new Server<ExtendedClientEvents, ExtendedServerEvents, DefaultEventsM
 // Phase 5 / Plan 05-04 / ADMIN-02 / D-06: mount the /admin namespace.
 // JWT-authenticated; emits full adminState snapshot on connect; targeted delta
 // events on subsequent admin actions. Player namespace at '/' is unaffected.
-setupAdminNamespace(io);
+setupAdminNamespace(io, { broadcastTableState: (tableId: string) => updateTableState(tableId) });
 
 const PORT = parseInt(process.env.PORT || "3000", 10);
 
@@ -147,6 +149,11 @@ const updateTableState = (tableId: string) => {
       io.to(socketId).emit("state", playerState);
     }
   });
+
+  // Single chokepoint for the playtest BotDriver: every state broadcast (human
+  // action, turn timeout, new hand, bot action) re-checks whether it's now a
+  // bot's turn and schedules its action. Never throws back into the broadcast.
+  botDriver.notifyStateChanged(tableId);
 };
 
 /**
@@ -189,6 +196,36 @@ const handleTableShowdown = (tableId: string, result: any) => {
   }, 100);
 };
 
+/**
+ * Settle a table after an action: run showdown handling if the hand ended,
+ * otherwise just broadcast state. Module-level so both socket action handlers
+ * and the BotDriver share one post-action path.
+ */
+const settleAndBroadcast = (tableId: string) => {
+  const table = tableManager.getTable(tableId);
+  if (!table) return;
+  const state = table.getState();
+  if (state.stage === 'showdown' && table.game?.lastShowdown) {
+    handleTableShowdown(tableId, table.game.lastShowdown);
+  } else {
+    updateTableState(tableId);
+  }
+};
+
+// Playtest BotDriver — acts on `isBot` seats via the same Table action methods
+// the socket handlers use, then settles/broadcasts (which chains bot-to-bot).
+const botDriver = new BotDriver({
+  getTable: (tableId) => tableManager.getTable(tableId),
+  onActed: (tableId) => settleAndBroadcast(tableId),
+});
+
+// Playtest session recorder — appends actions + hand results to sessions/*.jsonl
+// for offline oracle/analysis. Gated by RECORD_SESSIONS so it's a no-op unless
+// explicitly enabled on the playtest box. One file per process run, lazy-created.
+const sessionRecorder = new SessionRecorder({
+  enabled: process.env.RECORD_SESSIONS === '1' || process.env.RECORD_SESSIONS === 'true',
+});
+
 // Setup table event handlers
 const setupTableEvents = (tableId: string) => {
   const table = tableManager.getTable(tableId);
@@ -203,6 +240,8 @@ const setupTableEvents = (tableId: string) => {
   });
 
   table.setOnPlayerAction((evt) => {
+    // Playtest recorder (best-effort, no-op unless RECORD_SESSIONS is set).
+    sessionRecorder.recordAction(evt);
     // Phase 3 / Plan 03-01 (D-01, D-09): synchronous fan-out of actionBubble to
     // every authenticated socket at this table. Mirrors updateTableState's
     // telegramId → socketId resolution. Wrapped in try/catch so a transport
@@ -225,6 +264,8 @@ const setupTableEvents = (tableId: string) => {
     // Game.ts ignores the listener's return value, so we wrap async work in
     // a fire-and-forget IIFE with try/catch so an unhandled rejection never
     // escapes back into the game loop.
+    // Playtest recorder (best-effort, no-op unless RECORD_SESSIONS is set).
+    sessionRecorder.recordHandComplete(evt);
     void (async () => {
       try {
         // (1) Best-effort hand history — fan-in to the async batched queue.
@@ -275,6 +316,7 @@ process.on('SIGTERM', async () => {
   console.log('[Server] SIGTERM received — draining HandHistoryQueue + analytics...');
   try { await HandHistoryQueue.shutdown(); } catch (err) { console.error('[Server] queue drain failed:', err); }
   try { await shutdownAnalytics(); } catch (err) { console.error('[Server] analytics drain failed:', err); }
+  try { await sessionRecorder.close(); } catch (err) { console.error('[Server] recorder close failed:', err); }
   process.exit(0);
 });
 
@@ -282,6 +324,7 @@ process.on('SIGINT', async () => {
   console.log('[Server] SIGINT received — draining HandHistoryQueue + analytics...');
   try { await HandHistoryQueue.shutdown(); } catch (err) { console.error('[Server] queue drain failed:', err); }
   try { await shutdownAnalytics(); } catch (err) { console.error('[Server] analytics drain failed:', err); }
+  try { await sessionRecorder.close(); } catch (err) { console.error('[Server] recorder close failed:', err); }
   process.exit(0);
 });
 
@@ -787,13 +830,8 @@ io.on("connection", (socket) => {
     return true;
   };
 
-  const checkShowdownAndUpdate = (table: any, tableId: string) => {
-    const state = table.getState();
-    if (state.stage === 'showdown' && table.game?.lastShowdown) {
-      handleTableShowdown(tableId, table.game.lastShowdown);
-    } else {
-      updateTableState(tableId);
-    }
+  const checkShowdownAndUpdate = (_table: any, tableId: string) => {
+    settleAndBroadcast(tableId);
   };
 
   // Game action handlers

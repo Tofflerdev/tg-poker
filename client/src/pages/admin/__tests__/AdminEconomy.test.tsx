@@ -43,8 +43,8 @@ describe('AdminEconomy', () => {
       { telegramId: 'u2', displayName: 'P2', chips: 3000, tableId: 't-std-1', seat: 1, bannedAt: null },
     ];
     const tables = [
-      { id: 't-beg-1', name: 'Beginner 1', status: 'enabled' as const, playerCount: 1, handInProgress: false, config: { smallBlind: 5, bigBlind: 10, buyIn: 500 } },
-      { id: 't-std-1', name: 'Standard 1', status: 'enabled' as const, playerCount: 1, handInProgress: false, config: { smallBlind: 10, bigBlind: 20, buyIn: 1000 } },
+      { id: 't-beg-1', name: 'Beginner 1', status: 'enabled' as const, playerCount: 1, botCount: 0, botsContinue: false, handInProgress: false, config: { smallBlind: 5, bigBlind: 10, buyIn: 500, maxPlayers: 6, turnTime: 30, category: 'cash' as const } },
+      { id: 't-std-1', name: 'Standard 1', status: 'enabled' as const, playerCount: 1, botCount: 0, botsContinue: false, handInProgress: false, config: { smallBlind: 10, bigBlind: 20, buyIn: 1000, maxPlayers: 6, turnTime: 30, category: 'cash' as const } },
     ];
     render(
       <AdminEconomy

@@ -2,12 +2,14 @@ import prisma from '../db/prisma.js';
 import { tableManager } from '../TableManager.js';
 import { userStorage } from '../models/User.js';
 import { UserRepository } from '../db/UserRepository.js';
+import { acquireBotIdentity } from '../bot/botRegistry.js';
 import * as GraceRegistry from '../GraceRegistry.js';
 import type { Server } from 'socket.io';
 import type { DefaultEventsMap } from 'socket.io';
 import type {
   AdminClientEvents,
   AdminServerEvents,
+  Player,
 } from '../../types/index.js';
 
 /**
@@ -211,6 +213,86 @@ export async function drainTable(adminNs: AdminNs, adminUser: string, tableId: s
   await runWithAudit(
     { adminUser, action: 'drainTable', targetType: 'table', targetId: tableId, beforeJson: { status: before }, afterJson: { status: 'draining' } },
     async () => { tableAdminState.set(tableId, { status: 'draining' }); }
+  );
+}
+
+// ============================================================================
+// Playtest bot mutations (addBots / removeBots)
+// ============================================================================
+
+/**
+ * Seat up to `count` tight-passive playtest bots at a table (BotDriver acts on
+ * them — see server/bot/). Each bot gets a reserved-range User row (isBot=true)
+ * so its hands persist to hand-history. Stops early if the table fills up.
+ * Returns the number actually seated.
+ */
+export async function addBots(adminUser: string, tableId: string, count: number): Promise<{ added: number }> {
+  const table = tableManager.getTable(tableId);
+  if (!table) throw new Error(`Table ${tableId} not found`);
+
+  const before = { playerCount: table.getState().seats.filter((s) => s !== null).length };
+  let added = 0;
+  await runWithAudit(
+    { adminUser, action: 'addBots', targetType: 'table', targetId: tableId, beforeJson: before, afterJson: { requested: count } },
+    async () => {
+      for (let i = 0; i < count; i++) {
+        const seat = table.findFirstAvailableSeat();
+        if (seat === -1) break; // table full
+        // Re-read seated bots each iteration so successive ids don't collide.
+        const identity = acquireBotIdentity(tableManager.getActiveBotIds());
+        await UserRepository.ensureBotUser(identity.telegramId, identity.displayName, identity.avatarId);
+        const ok = table.addPlayer(
+          String(identity.telegramId),
+          seat,
+          table.config.buyIn,
+          identity.telegramId,
+          identity.displayName,
+          undefined,
+          identity.avatarId,
+          true, // isBot
+        );
+        if (ok) added++;
+      }
+    }
+  );
+  return { added };
+}
+
+/**
+ * Remove every bot seated at a table. Mid-hand bots are auto-folded by
+ * Game.removePlayer. The bot User rows are left in place (reused on next spawn).
+ * Returns the number removed.
+ */
+export async function removeBots(adminUser: string, tableId: string): Promise<{ removed: number }> {
+  const table = tableManager.getTable(tableId);
+  if (!table) throw new Error(`Table ${tableId} not found`);
+
+  const botIds = table.getState().seats
+    .filter((p): p is Player => !!p?.isBot)
+    .map((p) => p.id);
+
+  await runWithAudit(
+    { adminUser, action: 'removeBots', targetType: 'table', targetId: tableId, beforeJson: { botCount: botIds.length }, afterJson: { removed: botIds.length } },
+    async () => {
+      botIds.forEach((id) => table.removePlayer(id));
+    }
+  );
+  return { removed: botIds.length };
+}
+
+/**
+ * Toggle the "bots keep playing without a human" option for a table (decision B).
+ * When turned off, idle bots are dropped if no human is present (between hands).
+ */
+export async function setBotsContinue(adminUser: string, tableId: string, enabled: boolean): Promise<void> {
+  const table = tableManager.getTable(tableId);
+  if (!table) throw new Error(`Table ${tableId} not found`);
+  const before = { botsContinue: table.botsContinue };
+  await runWithAudit(
+    { adminUser, action: 'setBotsContinue', targetType: 'table', targetId: tableId, beforeJson: before, afterJson: { botsContinue: enabled } },
+    async () => {
+      table.setBotsContinue(enabled);
+    }
   );
 }
 

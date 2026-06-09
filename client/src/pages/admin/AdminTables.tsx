@@ -40,6 +40,9 @@ export const AdminTables: React.FC<Props> = ({ state, socket }) => {
   const [editTable, setEditTable] = useState<string | null>(null);
   const [editForm, setEditForm] = useState({ smallBlind: '', bigBlind: '', buyIn: '' });
   const [editError, setEditError] = useState<string | null>(null);
+  // Per-table "how many bots to add" selector (defaults to 3).
+  const [botCounts, setBotCounts] = useState<Record<string, number>>({});
+  const botCountFor = (tableId: string) => botCounts[tableId] ?? 3;
 
   if (state.tables.length === 0) {
     return (
@@ -97,6 +100,11 @@ export const AdminTables: React.FC<Props> = ({ state, socket }) => {
             <span style={{ fontSize: 13, color: 'var(--color-active)' }}>
               {t.playerCount} players
             </span>
+            {t.botCount > 0 && (
+              <span style={{ fontSize: 13, color: 'var(--color-neutral)' }}>
+                {t.botCount} bots
+              </span>
+            )}
             <span style={{ fontSize: 13, color: 'var(--color-action-raise)' }}>
               {t.config.smallBlind}/{t.config.bigBlind}
             </span>
@@ -135,6 +143,41 @@ export const AdminTables: React.FC<Props> = ({ state, socket }) => {
               }}
             >
               Edit Table
+            </Button>
+
+            {/* Playtest bots */}
+            <select
+              aria-label="Number of bots to add"
+              value={botCountFor(t.id)}
+              onChange={(e) => setBotCounts({ ...botCounts, [t.id]: Number.parseInt(e.target.value, 10) })}
+              style={{ minHeight: 36, padding: '4px 8px', background: 'transparent', color: 'white', border: '1px solid var(--color-neutral)', borderRadius: 6 }}
+            >
+              {[1, 2, 3, 4, 5].map((n) => (
+                <option key={n} value={n} style={{ color: 'black' }}>{n}</option>
+              ))}
+            </select>
+            <Button
+              variant="active"
+              style={{ minHeight: 36, padding: '4px 12px' }}
+              onClick={() => socket.emit('addBots', { tableId: t.id, count: botCountFor(t.id) })}
+            >
+              Add Bots
+            </Button>
+            {t.botCount > 0 && (
+              <Button
+                variant="fold"
+                style={{ minHeight: 36, padding: '4px 12px' }}
+                onClick={() => socket.emit('removeBots', { tableId: t.id })}
+              >
+                Remove Bots
+              </Button>
+            )}
+            <Button
+              variant={t.botsContinue ? 'active' : 'neutral'}
+              style={{ minHeight: 36, padding: '4px 12px' }}
+              onClick={() => socket.emit('setBotsContinue', { tableId: t.id, enabled: !t.botsContinue })}
+            >
+              {t.botsContinue ? 'Bots: self-play ON' : 'Bots: self-play OFF'}
             </Button>
           </div>
 

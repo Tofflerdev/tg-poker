@@ -44,6 +44,26 @@ export class UserRepository {
     return this.mapToTelegramUser(user);
   }
 
+  /**
+   * Playtest bots: idempotently ensure a bot User row exists for a (negative)
+   * reserved telegramId. balance is 0 (bots don't use a wallet) and isBot=true
+   * so leaderboard/stats queries can exclude them. Safe to call before every
+   * seat — upsert is a no-op when the row already exists.
+   */
+  static async ensureBotUser(telegramId: number, displayName: string, avatarId: string): Promise<void> {
+    await prisma.user.upsert({
+      where: { telegramId: BigInt(telegramId) },
+      update: { isBot: true },
+      create: {
+        telegramId: BigInt(telegramId),
+        displayName,
+        avatarId,
+        balance: 0,
+        isBot: true,
+      },
+    });
+  }
+
   static async findById(id: number): Promise<TelegramUser | null> {
     const user = await prisma.user.findUnique({
       where: { id }

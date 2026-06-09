@@ -21,6 +21,7 @@ export interface Player {
   showCards: boolean;
   waitingForBB: boolean;  // NEW: игрок присоединился во время игры, ждет большого блайнда
   sittingOut: boolean;    // NEW: игрок добровольно отсиделся
+  isBot?: boolean;        // playtest bot — server-side Player driven by BotDriver (no socket)
 }
 
 // Представляет один пот (основной или сайд-пот)
@@ -321,6 +322,7 @@ export interface HandCompletePerPlayer {
   netDelta: number;             // finalChips - handStartChips[seat]
   won: boolean;
   showedDown: boolean;
+  contributed?: number;         // total chips put into the pot this hand (player.totalBet); for oracle/analysis
 }
 
 // Phase 3 / Plan 03-01: Server-broadcast event for floating action bubbles (D-01).
@@ -335,6 +337,7 @@ export interface HandCompleteEvent {
   completedAt: Date;
   board: string[];              // game.communityCards snapshot
   perPlayer: HandCompletePerPlayer[];
+  pots?: Pot[];                 // pot structure snapshot at completion (before clearing); for oracle/analysis
 }
 
 // --- Phase 3 / Plan 03-04 (PROFILE-03, PROFILE-04): hand-history reader DTO ---
@@ -407,6 +410,8 @@ export interface AdminTableInfo {
   config: TableConfig;
   status: 'enabled' | 'disabled' | 'draining';
   playerCount: number;
+  botCount: number;        // seated playtest bots (subset of playerCount)
+  botsContinue: boolean;   // when true, bots keep playing without a human (decision B)
   handInProgress: boolean;
 }
 
@@ -458,4 +463,7 @@ export interface AdminClientEvents {
   kickUser: (payload: { telegramId: string }) => void;
   banUser: (payload: { telegramId: string }) => void;
   grantBalance: (payload: { telegramId: string; delta: number }) => void;
+  addBots: (payload: { tableId: string; count: number }) => void;
+  removeBots: (payload: { tableId: string }) => void;
+  setBotsContinue: (payload: { tableId: string; enabled: boolean }) => void;
 }

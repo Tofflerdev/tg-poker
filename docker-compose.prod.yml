@@ -31,8 +31,14 @@ services:
       JWT_SECRET: ${JWT_SECRET}
       ADMIN_USER: ${ADMIN_USER}
       ADMIN_PASS: ${ADMIN_PASS}
+      # Playtest bots: set RECORD_SESSIONS=1 in .env to record sessions/*.jsonl
+      RECORD_SESSIONS: ${RECORD_SESSIONS:-}
     volumes:
       - client-dist:/app/client-dist
+      # Persist playtest session logs + generated reports on the host so they
+      # survive container rebuilds and are readable by the oracle/report CLIs.
+      - ./sessions:/app/sessions
+      - ./reports:/app/reports
     depends_on:
       postgres:
         condition: service_healthy

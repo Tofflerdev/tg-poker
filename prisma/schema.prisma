@@ -33,6 +33,9 @@ model User {
   tosAcceptedAt     DateTime?
   tosVersion        String?
 
+  // --- playtest bots ---
+  isBot             Boolean   @default(false) @map("is_bot")
+
   @@index([currentTableId])
   @@map("users")
 }
