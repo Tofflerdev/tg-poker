@@ -136,10 +136,23 @@ UX/интерфейс — вне scope этого плана.
     `pokersolver` (Hand.winners среди eligible-с-картами) == `won`-флаги (только шоудаун).
 - Тесты: `oracle` (11) — server 130 зелёных; client 124 зелёных.
 
-### 5. Reviewer
-- Я (Claude) читаю JSONL + вывод ассерций + код → `reports/<ts>.md`.
-- Структура отчёта по фокусам: Правила | Баланс/геймплей | Стабильность,
-  с приоритезацией находок и конкретными рекомендациями.
+### 5. Reviewer — ✅ СДЕЛАНО (ветка `feat/bot-playtest-driver`)
+- Объективная часть автоматизирована: `server/bot/sessionStats.ts` (метрики:
+  showdown/all-in/side-pot rate, распределение экшенов, per-player net/VPIP/all-ins,
+  bot/human split, длительность), `reportBuilder.ts` (markdown-скаффолд с 3 фокус-
+  секциями: Правила | Баланс/геймплей | Стабильность), CLI `generateReport.ts`
+  → `reports/report-<ts>.md`.
+- Качественная часть: я (Claude) читаю отчёт + JSONL + код и заполняю секцию
+  «Reviewer notes» — интерпретация, приоритезация (правила > баланс > стабильность),
+  привязка рекомендаций к конкретным hand id / метрике.
+- Воркфлоу целиком описан в `server/bot/README.md`.
+- Тесты: `sessionReport` (7) — server 137 зелёных; client 124 зелёных.
+- E2E проверено на синтетической сессии: `runOracle` ловит нарушение (exit 2),
+  `generateReport` пишет корректный отчёт со всеми секциями.
+
+## Статус: ВСЕ КОМПОНЕНТЫ (1–5 + 2a) РЕАЛИЗОВАНЫ
+Ветка `feat/bot-playtest-driver`. Перед запуском плейтеста — `npx prisma db push`
+(колонка `users.is_bot`) и `RECORD_SESSIONS=1`.
 
 ## Проверено по коду (обсуждение 2026-06-09)
 

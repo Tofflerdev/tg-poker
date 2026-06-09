@@ -47,11 +47,20 @@ function setEq(a: Set<string>, b: Set<string>): boolean {
   return true;
 }
 
+export interface ParsedSession {
+  hands: OracleHand[];
+  findings: OracleFinding[];
+  firstTs: number | null;
+  lastTs: number | null;
+}
+
 /** Parse a session JSONL string into per-hand records (streaming, per table). */
-export function parseSession(text: string): { hands: OracleHand[]; findings: OracleFinding[] } {
+export function parseSession(text: string): ParsedSession {
   const hands: OracleHand[] = [];
   const findings: OracleFinding[] = [];
   const actionBuf = new Map<string, PlayerActionEvent[]>(); // tableId -> buffered actions
+  let firstTs: number | null = null;
+  let lastTs: number | null = null;
 
   const lines = text.split('\n');
   for (let i = 0; i < lines.length; i++) {
@@ -64,6 +73,10 @@ export function parseSession(text: string): { hands: OracleHand[]; findings: Ora
       findings.push({ handId: '?', tableId: '?', check: 'parse', message: `Malformed JSONL at line ${i + 1}` });
       continue;
     }
+    if (typeof parsed.ts === 'number') {
+      if (firstTs === null) firstTs = parsed.ts;
+      lastTs = parsed.ts;
+    }
     if (parsed.kind === 'action') {
       const buf = actionBuf.get(parsed.e.tableId) ?? [];
       buf.push(parsed.e);
@@ -74,7 +87,7 @@ export function parseSession(text: string): { hands: OracleHand[]; findings: Ora
       actionBuf.set(parsed.e.tableId, []); // reset buffer for the next hand on this table
     }
   }
-  return { hands, findings };
+  return { hands, findings, firstTs, lastTs };
 }
 
 /** Run all invariant checks against one completed hand. */
