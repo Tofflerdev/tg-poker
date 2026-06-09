@@ -108,10 +108,17 @@ UX/интерфейс — вне scope этого плана.
 - Поведение «человек сидит out»: остаётся за столом → боты НЕ чистятся, но раздачи
   на паузе (нет eligible-человека); сел обратно → раздачи возобновляются.
 
-### 3. Recorder
-- Серверный observer на уже существующих точках: `HandCompleteEvent`, экшены
-  (`PlayerActionEvent`/`ActionBubbleEvent`) → `sessions/<ts>.jsonl`.
-- Переиспользуем существующие типы событий из `types/index.ts`, новых схем не плодим.
+### 3. Recorder — ✅ СДЕЛАНО (ветка `feat/bot-playtest-driver`)
+- `server/bot/SessionRecorder.ts` — append JSONL в `sessions/session-<ts>.jsonl`.
+  Подписан на существующие точки в `index.ts setupTableEvents`:
+  `setOnPlayerAction` → `recordAction`, `setOnHandComplete` → `recordHandComplete`.
+- Формат строки (tagged envelope, новых схем в `types/` нет):
+  `{ ts, kind:'action', e:PlayerActionEvent }` / `{ ts, kind:'hand', e:HandCompleteEvent }`.
+  `HandCompleteEvent` несёт СЫРЫЕ hole-cards всех мест (до broadcast-редакции) — нужно Oracle.
+- Гейт: env `RECORD_SESSIONS` (truthy) — иначе полный no-op (без касания FS). Файл
+  создаётся лениво на первом событии, один на запуск процесса; закрывается на SIGTERM/SIGINT.
+- `sessions/` и `reports/` добавлены в `.gitignore`; флаг описан в `.env.example`.
+- Тесты: `sessionRecorder` (4) — server 119 зелёных.
 
 ### 4. Oracle-ассерции
 - Реплей JSONL и независимая перепроверка:

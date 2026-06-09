@@ -12,6 +12,7 @@ import { gateUserOrEmit } from "./middleware/joinGate.js";
 import { userStorage } from "./models/User.js";
 import { tableManager } from "./TableManager.js";
 import { BotDriver } from "./bot/BotDriver.js";
+import { SessionRecorder } from "./bot/SessionRecorder.js";
 import { UserRepository } from "./db/UserRepository.js";
 import { isValidAvatarId } from "../types/avatars.js";
 import * as HandHistoryQueue from "./HandHistoryQueue.js";
@@ -218,6 +219,13 @@ const botDriver = new BotDriver({
   onActed: (tableId) => settleAndBroadcast(tableId),
 });
 
+// Playtest session recorder — appends actions + hand results to sessions/*.jsonl
+// for offline oracle/analysis. Gated by RECORD_SESSIONS so it's a no-op unless
+// explicitly enabled on the playtest box. One file per process run, lazy-created.
+const sessionRecorder = new SessionRecorder({
+  enabled: process.env.RECORD_SESSIONS === '1' || process.env.RECORD_SESSIONS === 'true',
+});
+
 // Setup table event handlers
 const setupTableEvents = (tableId: string) => {
   const table = tableManager.getTable(tableId);
@@ -232,6 +240,8 @@ const setupTableEvents = (tableId: string) => {
   });
 
   table.setOnPlayerAction((evt) => {
+    // Playtest recorder (best-effort, no-op unless RECORD_SESSIONS is set).
+    sessionRecorder.recordAction(evt);
     // Phase 3 / Plan 03-01 (D-01, D-09): synchronous fan-out of actionBubble to
     // every authenticated socket at this table. Mirrors updateTableState's
     // telegramId → socketId resolution. Wrapped in try/catch so a transport
@@ -254,6 +264,8 @@ const setupTableEvents = (tableId: string) => {
     // Game.ts ignores the listener's return value, so we wrap async work in
     // a fire-and-forget IIFE with try/catch so an unhandled rejection never
     // escapes back into the game loop.
+    // Playtest recorder (best-effort, no-op unless RECORD_SESSIONS is set).
+    sessionRecorder.recordHandComplete(evt);
     void (async () => {
       try {
         // (1) Best-effort hand history — fan-in to the async batched queue.
@@ -304,6 +316,7 @@ process.on('SIGTERM', async () => {
   console.log('[Server] SIGTERM received — draining HandHistoryQueue + analytics...');
   try { await HandHistoryQueue.shutdown(); } catch (err) { console.error('[Server] queue drain failed:', err); }
   try { await shutdownAnalytics(); } catch (err) { console.error('[Server] analytics drain failed:', err); }
+  try { await sessionRecorder.close(); } catch (err) { console.error('[Server] recorder close failed:', err); }
   process.exit(0);
 });
 
@@ -311,6 +324,7 @@ process.on('SIGINT', async () => {
   console.log('[Server] SIGINT received — draining HandHistoryQueue + analytics...');
   try { await HandHistoryQueue.shutdown(); } catch (err) { console.error('[Server] queue drain failed:', err); }
   try { await shutdownAnalytics(); } catch (err) { console.error('[Server] analytics drain failed:', err); }
+  try { await sessionRecorder.close(); } catch (err) { console.error('[Server] recorder close failed:', err); }
   process.exit(0);
 });
 

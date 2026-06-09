@@ -12,3 +12,7 @@ dev.db
 prod-check.png
 screenshots/
 .claude/settings.local.json
+
+# Playtest bot data (raw session logs + generated reports)
+sessions/
+reports/
