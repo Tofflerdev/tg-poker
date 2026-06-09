@@ -408,6 +408,7 @@ export interface AdminTableInfo {
   config: TableConfig;
   status: 'enabled' | 'disabled' | 'draining';
   playerCount: number;
+  botCount: number;       // seated playtest bots (subset of playerCount)
   handInProgress: boolean;
 }
 
@@ -459,4 +460,6 @@ export interface AdminClientEvents {
   kickUser: (payload: { telegramId: string }) => void;
   banUser: (payload: { telegramId: string }) => void;
   grantBalance: (payload: { telegramId: string; delta: number }) => void;
+  addBots: (payload: { tableId: string; count: number }) => void;
+  removeBots: (payload: { tableId: string }) => void;
 }

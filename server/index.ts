@@ -103,7 +103,7 @@ const io = new Server<ExtendedClientEvents, ExtendedServerEvents, DefaultEventsM
 // Phase 5 / Plan 05-04 / ADMIN-02 / D-06: mount the /admin namespace.
 // JWT-authenticated; emits full adminState snapshot on connect; targeted delta
 // events on subsequent admin actions. Player namespace at '/' is unaffected.
-setupAdminNamespace(io);
+setupAdminNamespace(io, { broadcastTableState: (tableId: string) => updateTableState(tableId) });
 
 const PORT = parseInt(process.env.PORT || "3000", 10);
 

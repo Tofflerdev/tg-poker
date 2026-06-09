@@ -162,6 +162,20 @@ export class TableManager {
   }
 
   /**
+   * Playtest bots: telegramId strings of every bot currently seated at any table.
+   * Used to hand out non-colliding bot identities (see acquireBotIdentity).
+   */
+  getActiveBotIds(): Set<string> {
+    const ids = new Set<string>();
+    for (const table of this.tables.values()) {
+      for (const p of table.getState().seats) {
+        if (p?.isBot) ids.add(p.id);
+      }
+    }
+    return ids;
+  }
+
+  /**
    * Add player to a table.
    * If seat is -1, automatically finds the first available seat.
    * @param telegramId  durable player key (stringified Telegram ID)

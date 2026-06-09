@@ -30,6 +30,7 @@ export function buildAdminTableInfo(tableId: string): AdminTableInfo | null {
     config: table.config,
     status: getTableAdminStatus(tableId),
     playerCount: state.seats.filter((s) => s !== null).length,
+    botCount: state.seats.filter((s) => s?.isBot).length,
     handInProgress: state.stage !== 'waiting',
   };
 }

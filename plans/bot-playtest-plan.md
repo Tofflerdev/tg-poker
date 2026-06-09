@@ -75,14 +75,24 @@ UX/интерфейс — вне scope этого плана.
 - Тесты: `botHandStrength`, `botDecideAction`, `botDriver` (23 теста, весь сьют — 103 зелёных).
 - ⚠️ End-to-end пока не запускается: бот-местами никто не сажает — это компонент №2 (addBot).
 
-### 2. Admin addBot / removeBot
-- Новые события в `/admin` namespace (паттерн как `kickUser`/`enableTable`
-  в `server/admin/adminMutations.ts` + `adminNamespace.ts`).
-- Кнопки в админ-UI на строке стола: добавить N ботов / убрать.
-- Через существующий JWT-гейт и audit-лог.
-- Завести бот-`User` (диапазон telegramId, флаг `isBot`), seat'ить через `Game.addPlayer`.
-- **Авто-cleanup (решение D):** хук на уход человека — если за столом не осталось
-  людей и опция «боты продолжают» выключена, вызвать `removeBot` для всех ботов.
+### 2. Admin addBot / removeBot — ✅ СДЕЛАНО (ветка `feat/bot-playtest-driver`)
+- `adminMutations.ts`: `addBots(adminUser, tableId, count)` / `removeBots(adminUser, tableId)` —
+  через `runWithAudit` (audit-строка пишется до посадки). addBots сажает до `count`
+  ботов (стоп при заполнении стола), removeBots снимает все бот-места (мид-хенд → авто-фолд).
+- `adminNamespace.ts`: события `addBots`/`removeBots` (валидация count 1..5),
+  после мутации — `broadcastTableState(tableId)` (рефреш игроков) + `tableStateChanged` (admin UI).
+  `setupAdminNamespace(io, { broadcastTableState })` — broadcast прокинут из `index.ts`.
+- `server/bot/botRegistry.ts`: `acquireBotIdentity(seatedBotIds)` — выдаёт свободный
+  отрицательный `telegramId` (id переиспользуются, пул ограничен), имя/аватар как у людей.
+- `UserRepository.ensureBotUser` — идемпотентный upsert бот-`User` (isBot=true, balance=0).
+- `TableManager.getActiveBotIds()`; `Table.addPlayer`/`Game.addPlayer` принимают `isBot`.
+- Типы: `AdminTableInfo.botCount`, `AdminClientEvents.addBots/removeBots`.
+- Admin UI (`AdminTables.tsx`): селектор 1–5, кнопки Add Bots / Remove Bots, индикатор `N bots`.
+- Тесты: `botAdminMutations` (6) — server 109 зелёных; client 124 зелёных.
+- ⚠️ **ТРЕБУЕТСЯ ПЕРЕД ЗАПУСКОМ:** `npx prisma db push` (добавлена колонка `users.is_bot`).
+  Docker был выключен — миграция не применена; `prisma generate` выполнен.
+- **Авто-cleanup (решение D) — компонент 2a (ещё не сделан):** хук на уход человека —
+  если за столом не осталось людей и опция «боты продолжают» выключена, звать `removeBots`.
 
 ### 2a. Сделать авто-старт bot-aware (находка из кода)
 - `getEligiblePlayers()` (`Game.ts:100`) считает ботов eligible, поэтому

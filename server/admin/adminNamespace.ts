@@ -10,6 +10,8 @@ import {
   disableTable,
   drainTable,
   editTableParams,
+  addBots,
+  removeBots,
 } from './adminMutations.js';
 import type { AdminClientEvents, AdminServerEvents } from '../../types/index.js';
 
@@ -45,7 +47,12 @@ export function adminNamespaceMiddleware(
  * Mounts the /admin namespace on the existing io. Called once at boot from
  * server/index.ts.
  */
-export function setupAdminNamespace(io: Server): void {
+export interface AdminNamespaceDeps {
+  /** Broadcast player-facing game state for a table (server/index.ts updateTableState). */
+  broadcastTableState: (tableId: string) => void;
+}
+
+export function setupAdminNamespace(io: Server, deps: AdminNamespaceDeps): void {
   const adminNs = (io.of('/admin') as any) as ReturnType<typeof io.of>;
 
   adminNs.use((socket, next) => adminNamespaceMiddleware(socket as any, next));
@@ -123,6 +130,32 @@ export function setupAdminNamespace(io: Server): void {
       }
       try { await grantBalance(adminNs as any, adminUser, telegramId, delta); }
       catch (err) { socket.emit('adminError', { code: 'GRANT_FAILED', message: (err as Error).message }); }
+    });
+
+    // Playtest bots — seat/remove server-side bots driven by the BotDriver.
+    socket.on('addBots', async ({ tableId, count }) => {
+      if (!Number.isInteger(count) || count < 1 || count > 5) {
+        socket.emit('adminError', { code: 'INVALID_BOT_COUNT', message: 'count must be an integer in [1, 5]' });
+        return;
+      }
+      try {
+        await addBots(adminUser, tableId, count);
+        deps.broadcastTableState(tableId); // refresh seated humans
+        const info = buildAdminTableInfo(tableId);
+        if (info) adminNs.emit('tableStateChanged', info);
+      } catch (err) {
+        socket.emit('adminError', { code: 'ADD_BOTS_FAILED', message: (err as Error).message });
+      }
+    });
+    socket.on('removeBots', async ({ tableId }) => {
+      try {
+        await removeBots(adminUser, tableId);
+        deps.broadcastTableState(tableId);
+        const info = buildAdminTableInfo(tableId);
+        if (info) adminNs.emit('tableStateChanged', info);
+      } catch (err) {
+        socket.emit('adminError', { code: 'REMOVE_BOTS_FAILED', message: (err as Error).message });
+      }
     });
 
     socket.on('disconnect', () => {
