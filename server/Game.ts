@@ -564,6 +564,8 @@ export default class Game {
         }],
       };
 
+      // Snapshot the pot structure BEFORE clearing — oracle/analysis needs it.
+      const potsSnapshot: Pot[] = this.pots.map(p => ({ amount: p.amount, eligiblePlayers: [...p.eligiblePlayers], name: p.name }));
       this.pots = [];
       this.currentPlayer = null;
 
@@ -583,7 +585,9 @@ export default class Game {
             netDelta: p.chips - (this.handStartChips[p.seat] ?? p.chips),
             won: p.id === winner.id,
             showedDown: false,
+            contributed: p.totalBet,
           })),
+          pots: potsSnapshot,
         };
         this.onHandComplete?.(handCompleteEvt);
         this.currentHandId = null;
@@ -753,6 +757,8 @@ export default class Game {
       winners: potResults.flatMap(pr => pr.winners),
     };
 
+    // Snapshot the pot structure BEFORE clearing — oracle/analysis needs it.
+    const potsSnapshot: Pot[] = this.pots.map(p => ({ amount: p.amount, eligiblePlayers: [...p.eligiblePlayers], name: p.name }));
     this.pots = [];
     this.stage = 'showdown';
     this.currentPlayer = null;
@@ -775,7 +781,9 @@ export default class Game {
           netDelta: p.chips - (this.handStartChips[p.seat] ?? p.chips),
           won: winnerIds.has(p.id),
           showedDown: p.showCards || (!p.folded),
+          contributed: p.totalBet,
         })),
+        pots: potsSnapshot,
       };
       this.onHandComplete?.(handCompleteEvt);
       this.currentHandId = null;

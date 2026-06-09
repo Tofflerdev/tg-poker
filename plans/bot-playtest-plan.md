@@ -120,13 +120,21 @@ UX/интерфейс — вне scope этого плана.
 - `sessions/` и `reports/` добавлены в `.gitignore`; флаг описан в `.env.example`.
 - Тесты: `sessionRecorder` (4) — server 119 зелёных.
 
-### 4. Oracle-ассерции
-- Реплей JSONL и независимая перепроверка:
-  - Σ всех потов = Σ всех ставок (`totalBet`) за раздачу;
-  - корректность `eligiblePlayers` сайд-потов;
-  - победитель пересчитан независимо через `pokersolver` и совпадает;
-  - chip conservation: суммарный стек до = после (фишки не появляются/исчезают).
-- Любое расхождение → находка категории «корректность правил».
+### 4. Oracle-ассерции — ✅ СДЕЛАНО (ветка `feat/bot-playtest-driver`)
+- `server/bot/oracle.ts` — `parseSession` (стриминг, буфер экшенов по столу → руки) +
+  `checkHand` + `runOracle`. CLI: `server/bot/runOracle.ts` (`node dist/server/bot/runOracle.js <file>`).
+- **Обогащение события** (чтобы проверки сайд-потов вообще были возможны): в
+  `HandCompleteEvent` добавлены опц. `pots: Pot[]` (снапшот до очистки) и
+  `HandCompletePerPlayer.contributed` (= `player.totalBet`). Заполняются в `Game.ts`
+  на обоих путях (showdown + win-by-fold). Рекордер пишет их автоматически.
+- Проверяемые инварианты (категория «корректность правил»):
+  - **chipConservation** — Σ netDelta == 0 (есть caveat: уход игрока mid-hand → ложноположит.).
+  - **potsAccounting** — Σ pots.amount == Σ contributed; нет неположит. потов.
+  - **eligibility** — eligible-id реальны (есть в perPlayer), множества вложены
+    (side ⊆ main), на шоудауне eligible ⊆ невыбывшие (showedDown).
+  - **winnerRecompute** — независимый пересчёт победителя каждого пота через
+    `pokersolver` (Hand.winners среди eligible-с-картами) == `won`-флаги (только шоудаун).
+- Тесты: `oracle` (11) — server 130 зелёных; client 124 зелёных.
 
 ### 5. Reviewer
 - Я (Claude) читаю JSONL + вывод ассерций + код → `reports/<ts>.md`.

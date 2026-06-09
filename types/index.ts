@@ -322,6 +322,7 @@ export interface HandCompletePerPlayer {
   netDelta: number;             // finalChips - handStartChips[seat]
   won: boolean;
   showedDown: boolean;
+  contributed?: number;         // total chips put into the pot this hand (player.totalBet); for oracle/analysis
 }
 
 // Phase 3 / Plan 03-01: Server-broadcast event for floating action bubbles (D-01).
@@ -336,6 +337,7 @@ export interface HandCompleteEvent {
   completedAt: Date;
   board: string[];              // game.communityCards snapshot
   perPlayer: HandCompletePerPlayer[];
+  pots?: Pot[];                 // pot structure snapshot at completion (before clearing); for oracle/analysis
 }
 
 // --- Phase 3 / Plan 03-04 (PROFILE-03, PROFILE-04): hand-history reader DTO ---
