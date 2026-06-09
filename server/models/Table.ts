@@ -15,6 +15,11 @@ export class Table {
   status: TableStatus;
   createdAt: Date;
 
+  // Playtest bots (decision B): when false (default), the table will NOT start
+  // bot-only hands — a hand runs only while at least one human is eligible. When
+  // true, bots keep playing among themselves to accumulate data without a human.
+  botsContinue = false;
+
   // Auto-start timer
   private nextHandTimer: NodeJS.Timeout | null = null;
   private readonly NEXT_HAND_DELAY = 5000; // 5 секунд между раздачами
@@ -113,14 +118,78 @@ export class Table {
    * Remove a player from the table (handles mid-hand fold if needed)
    */
   removePlayer(telegramId: string): void {
+    const removed = this.getPlayer(telegramId);
+    const wasHuman = !!removed && !removed.isBot;
+
     this.game.removePlayer(telegramId);
     this.playerIds.delete(telegramId);
     this.updateStatus();
+
+    // Decision D: a human leaving may strand bots. Clean them up — a no-op when
+    // a hand is still in progress (deferred to the next between-hands boundary).
+    if (wasHuman) this.maybeCleanupBots();
 
     // Проверяем, нужно ли продолжить/завершить текущую раздачу
     const state = this.game.getState();
     if (state.stage === 'showdown' || state.stage === 'waiting') {
       this.scheduleNextHand();
+    }
+  }
+
+  // ---- Playtest bot helpers (decisions B + D) ----
+
+  /** A non-bot is seated. */
+  private hasSeatedHuman(): boolean {
+    return this.game.getState().seats.some((p) => p !== null && !p.isBot);
+  }
+
+  /** At least one human can play the next hand. */
+  private hasEligibleHuman(): boolean {
+    return this.game.getEligiblePlayers().some((p) => !p.isBot);
+  }
+
+  /** Decision B: hands may run only with an eligible human, or when bots-continue is on. */
+  private canRunHands(): boolean {
+    return this.botsContinue || this.hasEligibleHuman();
+  }
+
+  /** Remove every seated bot. Only safe to call between hands. */
+  private removeAllBots(): void {
+    const botIds = this.game.getState().seats
+      .filter((p): p is NonNullable<typeof p> => !!p?.isBot)
+      .map((p) => p.id);
+    if (botIds.length === 0) return;
+    botIds.forEach((id) => {
+      this.game.removePlayer(id);
+      this.playerIds.delete(id);
+    });
+    // Nothing left to deal — settle the engine back to 'waiting'.
+    if (this.game.getEligiblePlayers().length < 2) {
+      this.game.startNextHand(); // returns false, sets stage = 'waiting'
+    }
+    this.updateStatus();
+  }
+
+  /**
+   * Decision D: drop idle bots when no humans remain and bots-continue is off.
+   * Deferred while a hand is in progress (acts only between hands).
+   */
+  private maybeCleanupBots(): void {
+    if (this.botsContinue) return;
+    if (this.hasSeatedHuman()) return;
+    const stage = this.game.getState().stage;
+    if (stage !== 'waiting' && stage !== 'showdown') return; // defer to hand end
+    this.removeAllBots();
+  }
+
+  /** Admin toggle for the "bots keep playing without a human" option. */
+  setBotsContinue(enabled: boolean): void {
+    this.botsContinue = enabled;
+    if (enabled) {
+      this.tryStartNextHand(); // may now start a bot-only hand
+    } else {
+      this.maybeCleanupBots(); // may now strand bots if no human is present
+      this.notifyStateChange();
     }
   }
 
@@ -149,15 +218,19 @@ export class Table {
       this.nextHandTimer = null;
     }
 
+    // Decision D: this is a between-hands boundary — drop stranded bots first.
+    this.maybeCleanupBots();
+
     // Устанавливаем timestamp для UI
     this.game.nextHandIn = Date.now() + this.NEXT_HAND_DELAY;
     this.notifyStateChange();
 
     const eligibleCount = this.game.getEligiblePlayers().length;
 
-    // Если игроков достаточно ИЛИ мы в стадии showdown (нужно показать победителя перед переходом в waiting)
+    // Если игроков достаточно ИЛИ мы в стадии showdown (нужно показать победителя перед переходом в waiting).
+    // Decision B: never grind bot-only hands unless bots-continue is enabled.
     const state = this.game.getState();
-    const shouldSchedule = eligibleCount >= 2 || state.stage === 'showdown';
+    const shouldSchedule = this.canRunHands() && (eligibleCount >= 2 || state.stage === 'showdown');
 
     if (shouldSchedule) {
       this.nextHandTimer = setTimeout(() => {
@@ -188,7 +261,8 @@ export class Table {
     // 3. Достаточно eligible игроков
     if ((state.stage === 'waiting' || state.stage === 'showdown') && !this.nextHandTimer) {
       const eligibleCount = this.game.getEligiblePlayers().length;
-      if (eligibleCount >= 2) {
+      // Decision B: require an eligible human (or bots-continue) to start.
+      if (eligibleCount >= 2 && this.canRunHands()) {
         this.scheduleNextHand();
       }
     }

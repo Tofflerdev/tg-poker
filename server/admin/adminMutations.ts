@@ -280,6 +280,22 @@ export async function removeBots(adminUser: string, tableId: string): Promise<{ 
   return { removed: botIds.length };
 }
 
+/**
+ * Toggle the "bots keep playing without a human" option for a table (decision B).
+ * When turned off, idle bots are dropped if no human is present (between hands).
+ */
+export async function setBotsContinue(adminUser: string, tableId: string, enabled: boolean): Promise<void> {
+  const table = tableManager.getTable(tableId);
+  if (!table) throw new Error(`Table ${tableId} not found`);
+  const before = { botsContinue: table.botsContinue };
+  await runWithAudit(
+    { adminUser, action: 'setBotsContinue', targetType: 'table', targetId: tableId, beforeJson: before, afterJson: { botsContinue: enabled } },
+    async () => {
+      table.setBotsContinue(enabled);
+    }
+  );
+}
+
 export async function editTableParams(
   adminNs: AdminNs,
   adminUser: string,

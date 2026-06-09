@@ -91,15 +91,22 @@ UX/интерфейс — вне scope этого плана.
 - Тесты: `botAdminMutations` (6) — server 109 зелёных; client 124 зелёных.
 - ⚠️ **ТРЕБУЕТСЯ ПЕРЕД ЗАПУСКОМ:** `npx prisma db push` (добавлена колонка `users.is_bot`).
   Docker был выключен — миграция не применена; `prisma generate` выполнен.
-- **Авто-cleanup (решение D) — компонент 2a (ещё не сделан):** хук на уход человека —
-  если за столом не осталось людей и опция «боты продолжают» выключена, звать `removeBots`.
-
-### 2a. Сделать авто-старт bot-aware (находка из кода)
-- `getEligiblePlayers()` (`Game.ts:100`) считает ботов eligible, поэтому
-  `Table.tryStartNextHand`/`scheduleNextHand` (`models/Table.ts:145,182`) **по умолчанию
-  закрутят раздачи бот-на-бот** при 2+ ботах. Чтобы решение B («боты сами не доигрывают»)
-  было дефолтом, цикл авто-старта нужно научить отличать «есть ≥1 человек» от
-  «остались одни боты» и не планировать раздачу во втором случае (кроме включённой опции).
+### 2a. Human-aware авто-старт + cleanup (решения B + D) — ✅ СДЕЛАНО (ветка `feat/bot-playtest-driver`)
+- **Gate (B):** `Table.canRunHands() = botsContinue || есть eligible-человек`. Вшит в
+  `scheduleNextHand` и `tryStartNextHand` (`models/Table.ts`) — бот-на-бот по умолчанию
+  НЕ стартует. `getEligiblePlayers()` по-прежнему считает ботов, но gate отсекает старт.
+- **Cleanup (D):** `Table.maybeCleanupBots()` снимает всех ботов, когда не осталось людей —
+  **только между раздачами** (mid-hand откладывается; если человек ушёл mid-hand, боты
+  доигрывают одну руку, чистятся на следующей границе через `scheduleNextHand`).
+  `removeAllBots()` после снятия сбрасывает движок в `waiting` (через `startNextHand`, <2 eligible).
+  Хук на уход человека — в `Table.removePlayer` (только если ушедший — не бот).
+- **Опция (B):** `Table.botsContinue` (default false) + `setBotsContinue()`; включение
+  стартует бот-онли раздачи, выключение чистит ботов (если нет людей).
+- Admin: мутация `setBotsContinue` (audit) + событие; `AdminTableInfo.botsContinue`;
+  кнопка-тумблер «Bots: self-play ON/OFF» в `AdminTables.tsx`.
+- Тесты: `tableBotGating` (6) — server 115 зелёных; client 124 зелёных.
+- Поведение «человек сидит out»: остаётся за столом → боты НЕ чистятся, но раздачи
+  на паузе (нет eligible-человека); сел обратно → раздачи возобновляются.
 
 ### 3. Recorder
 - Серверный observer на уже существующих точках: `HandCompleteEvent`, экшены

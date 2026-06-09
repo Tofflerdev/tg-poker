@@ -12,6 +12,7 @@ import {
   editTableParams,
   addBots,
   removeBots,
+  setBotsContinue,
 } from './adminMutations.js';
 import type { AdminClientEvents, AdminServerEvents } from '../../types/index.js';
 
@@ -155,6 +156,20 @@ export function setupAdminNamespace(io: Server, deps: AdminNamespaceDeps): void 
         if (info) adminNs.emit('tableStateChanged', info);
       } catch (err) {
         socket.emit('adminError', { code: 'REMOVE_BOTS_FAILED', message: (err as Error).message });
+      }
+    });
+    socket.on('setBotsContinue', async ({ tableId, enabled }) => {
+      if (typeof enabled !== 'boolean') {
+        socket.emit('adminError', { code: 'INVALID_FLAG', message: 'enabled must be a boolean' });
+        return;
+      }
+      try {
+        await setBotsContinue(adminUser, tableId, enabled);
+        deps.broadcastTableState(tableId);
+        const info = buildAdminTableInfo(tableId);
+        if (info) adminNs.emit('tableStateChanged', info);
+      } catch (err) {
+        socket.emit('adminError', { code: 'SET_BOTS_CONTINUE_FAILED', message: (err as Error).message });
       }
     });
 

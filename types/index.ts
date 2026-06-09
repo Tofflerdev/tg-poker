@@ -408,7 +408,8 @@ export interface AdminTableInfo {
   config: TableConfig;
   status: 'enabled' | 'disabled' | 'draining';
   playerCount: number;
-  botCount: number;       // seated playtest bots (subset of playerCount)
+  botCount: number;        // seated playtest bots (subset of playerCount)
+  botsContinue: boolean;   // when true, bots keep playing without a human (decision B)
   handInProgress: boolean;
 }
 
@@ -462,4 +463,5 @@ export interface AdminClientEvents {
   grantBalance: (payload: { telegramId: string; delta: number }) => void;
   addBots: (payload: { tableId: string; count: number }) => void;
   removeBots: (payload: { tableId: string }) => void;
+  setBotsContinue: (payload: { tableId: string; enabled: boolean }) => void;
 }

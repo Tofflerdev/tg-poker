@@ -172,6 +172,13 @@ export const AdminTables: React.FC<Props> = ({ state, socket }) => {
                 Remove Bots
               </Button>
             )}
+            <Button
+              variant={t.botsContinue ? 'active' : 'neutral'}
+              style={{ minHeight: 36, padding: '4px 12px' }}
+              onClick={() => socket.emit('setBotsContinue', { tableId: t.id, enabled: !t.botsContinue })}
+            >
+              {t.botsContinue ? 'Bots: self-play ON' : 'Bots: self-play OFF'}
+            </Button>
           </div>
 
           {confirmDrain === t.id && (
