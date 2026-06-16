@@ -491,37 +491,60 @@ export default class Game {
 
     // Получаем уникальные уровни вкладов
     const uniqueLevels = [...new Set(contributions.map(c => c.amount))];
-    
+
     for (const level of uniqueLevels) {
       const levelDiff = level - previousLevel;
-      
+
       // Игроки, которые внесли как минимум эту сумму
       const eligibleContributors = contributions.filter(c => c.amount >= level);
-      
+
       // Только не сфолдившие игроки могут ВЫИГРАТЬ (но сфолдившие все равно вносят вклад)
       const eligibleWinners = eligibleContributors
         .filter(c => !c.folded)
         .map(c => c.playerId);
-      
+
       const potAmount = levelDiff * eligibleContributors.length;
-      
+
       if (potAmount > 0 && eligibleWinners.length > 0) {
-        pots.push({
-          amount: potAmount,
-          eligiblePlayers: eligibleWinners,
-          name: pots.length === 0 ? "Main Pot" : `Side Pot ${pots.length}`
-        });
+        // Настоящий сайд-пот возникает ТОЛЬКО когда набор претендентов меняется
+        // (кто-то all-in за меньшую сумму). Если состав победителей совпадает с
+        // предыдущим уровнем — это тот же пот (напр. сфолдивший блайнд внёс меньше,
+        // или некол­лированная ставка), просто доливаем, а не плодим фантомный side pot.
+        const prev = pots[pots.length - 1];
+        if (prev && Game.samePlayerSet(prev.eligiblePlayers, eligibleWinners)) {
+          prev.amount += potAmount;
+        } else {
+          pots.push({
+            amount: potAmount,
+            eligiblePlayers: eligibleWinners,
+            name: pots.length === 0 ? "Main Pot" : `Side Pot ${pots.length}`
+          });
+        }
       } else if (potAmount > 0 && eligibleWinners.length === 0) {
         // Все eligible игроки сфолдили - добавляем к предыдущему поту
         if (pots.length > 0) {
           pots[pots.length - 1].amount += potAmount;
         }
       }
-      
+
       previousLevel = level;
     }
 
     return pots;
+  }
+
+  // Сравнение двух наборов id игроков без учёта порядка
+  private static samePlayerSet(a: string[], b: string[]): boolean {
+    if (a.length !== b.length) return false;
+    const setB = new Set(b);
+    return a.every(id => setB.has(id));
+  }
+
+  // Порядок места относительно дилера: место сразу слева от баттона = 0.
+  // Используется для детерминированной раздачи нечётного остатка сплит-пота.
+  private seatOrderFromDealer(seat: number): number {
+    const n = this.seats.length;
+    return (seat - this.dealerPosition - 1 + n) % n;
   }
 
   private nextStage() {
@@ -728,10 +751,15 @@ export default class Game {
       const winnerHands = Hand.winners(eligibleHands.map(h => h.hand));
       const winners = eligibleHands.filter(h => winnerHands.includes(h.hand));
       
-      // Распределяем пот
-      const share = Math.floor(pot.amount / winners.length);
-      winners.forEach(w => {
-        w.player.chips += share;
+      // Распределяем пот. Нечётный остаток (odd chip) не теряется: по правилам
+      // покера лишние фишки достаются игрокам ближе всего слева от баттона.
+      const base = Math.floor(pot.amount / winners.length);
+      const remainder = pot.amount - base * winners.length;
+      const ordered = [...winners].sort(
+        (a, b) => this.seatOrderFromDealer(a.player.seat) - this.seatOrderFromDealer(b.player.seat)
+      );
+      ordered.forEach((w, i) => {
+        w.player.chips += base + (i < remainder ? 1 : 0);
       });
       
       potResults.push({
