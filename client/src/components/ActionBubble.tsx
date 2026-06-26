@@ -66,21 +66,21 @@ export const ActionBubble: React.FC<ActionBubbleProps> = ({ action, amount }) =>
       exit={exit}
       transition={transition}
       style={{
+        // Identical to the seat status badge (SeatsDisplay StatusOverlay) —
+        // white text + per-tier accent border/glow. Only the colour varies.
         display: 'inline-block',
-        padding: '4px 8px',
-        borderRadius: 999,
-        fontSize: 11,
-        fontWeight: 700,
+        padding: '3px 10px',
+        borderRadius: 8,
+        fontSize: 9,
+        fontWeight: 800,
         letterSpacing: '0.05em',
         textTransform: 'uppercase',
         whiteSpace: 'nowrap',
-        color: t.color,
-        background: 'rgba(10,10,14,0.88)',
-        backdropFilter: 'blur(12px)',
-        WebkitBackdropFilter: 'blur(12px)',
-        border: `1.5px solid color-mix(in srgb, ${t.color} 50%, transparent)`,
-        boxShadow: `0 0 8px ${t.glow}, inset 0 0 4px ${t.glow}`,
-        textShadow: `0 0 6px ${t.glow}`,
+        color: 'rgb(255,255,255)',
+        background: 'rgba(10,10,14,0.92)',
+        border: `1.5px solid ${t.color}`,
+        boxShadow: `0 0 10px ${t.glow}, inset 0 0 8px color-mix(in srgb, ${t.color} 18%, transparent)`,
+        textShadow: `0 0 6px ${t.color}`,
         // motion overrides transform during animation; pointer-events handled by parent layer.
       }}
     >

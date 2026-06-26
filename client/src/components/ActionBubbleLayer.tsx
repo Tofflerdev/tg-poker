@@ -2,6 +2,12 @@ import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { AnimatePresence } from 'motion/react';
 import { ActionBubble } from './ActionBubble';
 import type { ActionBubbleEvent } from '../../../types/index';
+import {
+  SEAT_POSITIONS_DESKTOP,
+  SEAT_POSITIONS_MOBILE,
+  seatGeometry,
+  SEAT_OVERLAY_Y,
+} from './seatLayout';
 
 /**
  * Phase 3 / Plan 03-03 — per-seat FIFO bubble layer.
@@ -16,27 +22,6 @@ import type { ActionBubbleEvent } from '../../../types/index';
  * spams events; in practice game pace bounds this to ≤ 1 action per seat per
  * ~1 s. No explicit cap in v1.0 (D-03 leaves cap to a future phase if needed).
  */
-
-// Sourced from SeatsDisplay.tsx — KEEP IN SYNC if seat layout changes.
-// (Layout is stable per CLAUDE.md "Compact Card" contract; not extracted to a
-// shared module because the duplication is minimal and the alternative would
-// reshape SeatsDisplay's existing positioning without benefit.)
-const SEAT_POSITIONS_DESKTOP = [
-  { left: '50%', top: '94%', align: 'translate(-50%, -100%)' },
-  { left: '4%',  top: '70%', align: 'translate(-15%, -50%)' },
-  { left: '4%',  top: '30%', align: 'translate(-15%, -50%)' },
-  { left: '50%', top: '6%',  align: 'translate(-50%, 0%)' },
-  { left: '96%', top: '30%', align: 'translate(-85%, -50%)' },
-  { left: '96%', top: '70%', align: 'translate(-85%, -50%)' },
-];
-const SEAT_POSITIONS_MOBILE = [
-  { left: '50%', top: '95%', align: 'translate(-50%, -100%)' },
-  { left: '4%',  top: '73%', align: 'translate(-5%, -50%)' },
-  { left: '4%',  top: '37%', align: 'translate(-5%, -50%)' },
-  { left: '50%', top: '5%',  align: 'translate(-50%, 0%)' },
-  { left: '96%', top: '37%', align: 'translate(-95%, -50%)' },
-  { left: '96%', top: '73%', align: 'translate(-95%, -50%)' },
-];
 
 const TOTAL_SEATS = 6;
 const HOLD_MS = 900;
@@ -177,6 +162,12 @@ export const ActionBubbleLayer: React.FC<ActionBubbleLayerProps> = ({
           if (!head) return null;
           const visualIndex = (seat - rotationOffset + TOTAL_SEATS) % TOTAL_SEATS;
           const pos = positions[visualIndex];
+          // Place the bubble exactly where the seat status badge (Fold etc.)
+          // sits: centred over the seat card at SEAT_OVERLAY_Y down from its top.
+          // visualIndex 0 is "my seat", which is rendered larger.
+          const g = seatGeometry(isMobile, visualIndex === 0);
+          const ox = (0.5 - pos.ax / 100) * g.pillW;
+          const oy = (SEAT_OVERLAY_Y - pos.ay / 100) * g.stageH;
           return (
             <div
               key={`seat-${seat}`}
@@ -185,9 +176,9 @@ export const ActionBubbleLayer: React.FC<ActionBubbleLayerProps> = ({
                 position: 'absolute',
                 left: pos.left,
                 top: pos.top,
-                // Two-step transform: first the seat alignment, then a translateY
-                // upward to clear the seat card top edge. D-02 anchor rule.
-                transform: `${pos.align} translateY(-100%) translateY(-8px)`,
+                // Offset to the seat-card overlay centre (px), then centre the
+                // bubble on that point — matching SeatsDisplay's StatusOverlay.
+                transform: `translate(${ox}px, ${oy}px) translate(-50%, -50%)`,
                 pointerEvents: 'none',
               }}
             >

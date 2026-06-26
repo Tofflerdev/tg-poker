@@ -12,11 +12,16 @@
    always renders at the bottom-centre. Tuning the table geometry happens
    here, in one place. ════════════════════════════════════════════════ */
 
-/** Seat-card anchor: CSS left/top (%) + the translate() that offsets the card. */
+/** Seat-card anchor: CSS left/top (%) + the translate() that offsets the card.
+   `ax`/`ay` are the magnitudes of that translate (e.g. translate(-15%, -50%)
+   → ax 15, ay 50). They let overlays compute the seat's box geometry without
+   re-parsing the `align` string. */
 export interface SeatAnchor {
   left: string;
   top: string;
   align: string;
+  ax: number;
+  ay: number;
 }
 
 /** Overlay anchor (dealer / bet): centre point as % of the container. */
@@ -27,23 +32,46 @@ export interface OverlayPos {
 
 // Desktop: horizontal table
 export const SEAT_POSITIONS_DESKTOP: SeatAnchor[] = [
-  { left: '50%', top: '94%', align: 'translate(-50%, -100%)' },
-  { left: '4%',  top: '70%', align: 'translate(-15%, -50%)' },
-  { left: '4%',  top: '30%', align: 'translate(-15%, -50%)' },
-  { left: '50%', top: '6%',  align: 'translate(-50%, 0%)' },
-  { left: '96%', top: '30%', align: 'translate(-85%, -50%)' },
-  { left: '96%', top: '70%', align: 'translate(-85%, -50%)' },
+  { left: '50%', top: '94%', align: 'translate(-50%, -100%)', ax: 50, ay: 100 },
+  { left: '4%',  top: '70%', align: 'translate(-15%, -50%)',  ax: 15, ay: 50 },
+  { left: '4%',  top: '30%', align: 'translate(-15%, -50%)',  ax: 15, ay: 50 },
+  { left: '50%', top: '6%',  align: 'translate(-50%, 0%)',    ax: 50, ay: 0 },
+  { left: '96%', top: '30%', align: 'translate(-85%, -50%)',  ax: 85, ay: 50 },
+  { left: '96%', top: '70%', align: 'translate(-85%, -50%)',  ax: 85, ay: 50 },
 ];
 
 // Mobile: vertical table
 export const SEAT_POSITIONS_MOBILE: SeatAnchor[] = [
-  { left: '50%', top: '95%', align: 'translate(-50%, -100%)' },
-  { left: '4%',  top: '73%', align: 'translate(-5%, -50%)' },
-  { left: '4%',  top: '37%', align: 'translate(-5%, -50%)' },
-  { left: '50%', top: '5%',  align: 'translate(-50%, 0%)' },
-  { left: '96%', top: '37%', align: 'translate(-95%, -50%)' },
-  { left: '96%', top: '73%', align: 'translate(-95%, -50%)' },
+  { left: '50%', top: '95%', align: 'translate(-50%, -100%)', ax: 50, ay: 100 },
+  { left: '4%',  top: '73%', align: 'translate(-5%, -50%)',   ax: 5,  ay: 50 },
+  { left: '4%',  top: '37%', align: 'translate(-5%, -50%)',   ax: 5,  ay: 50 },
+  { left: '50%', top: '5%',  align: 'translate(-50%, 0%)',    ax: 50, ay: 0 },
+  { left: '96%', top: '37%', align: 'translate(-95%, -50%)',  ax: 95, ay: 50 },
+  { left: '96%', top: '73%', align: 'translate(-95%, -50%)',  ax: 95, ay: 50 },
 ];
+
+/** Seat-card pixel geometry. "My seat" (visualIndex 0) is larger; same layout. */
+export interface SeatGeometry {
+  aSize: number;    // avatar diameter
+  pillW: number;    // name/stack pill width
+  pillH: number;    // pill min height
+  overlap: number;  // how much the pill rides up over the avatar/cards
+  stageH: number;   // total seat-card height
+  cardW: number;    // hole-card width
+}
+
+export function seatGeometry(isMobile: boolean, isMe: boolean): SeatGeometry {
+  const aSize = isMe ? (isMobile ? 88 : 96) : (isMobile ? 60 : 80);
+  const pillW = Math.round(aSize * 1.12);
+  const cardW = Math.round(aSize * 0.57);
+  const pillH = isMobile ? 34 : 38;
+  const overlap = isMobile ? 14 : 16;
+  const stageH = aSize + pillH - overlap;
+  return { aSize, pillW, pillH, overlap, stageH, cardW };
+}
+
+/** Where the centred status/action overlay sits inside the seat card (40% down). */
+export const SEAT_OVERLAY_Y = 0.4;
 
 /* Dealer button — tucked just inside each seat, on the felt.
    Retuned for the larger avatar + wider name/stack pill geometry. */

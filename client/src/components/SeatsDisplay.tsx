@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import HandDisplay from "./HandDisplay";
 import { Player } from "../../../types/index";
 import { avatarUrl as resolveAvatar, type AvatarId } from "../assets/avatars/manifest";
-import { SEAT_POSITIONS_DESKTOP, SEAT_POSITIONS_MOBILE } from "./seatLayout";
+import { SEAT_POSITIONS_DESKTOP, SEAT_POSITIONS_MOBILE, seatGeometry, SEAT_OVERLAY_Y } from "./seatLayout";
 
 interface SeatsDisplayProps {
   seats: (Player | null)[];
@@ -98,7 +98,7 @@ const StatusOverlay: React.FC<{ label: string; color: string; glow: string }> = 
   <div
     style={{
       position: 'absolute',
-      top: '40%',
+      top: `${SEAT_OVERLAY_Y * 100}%`,
       left: '50%',
       transform: 'translate(-50%, -50%)',
       zIndex: 30,
@@ -299,15 +299,8 @@ const SeatsDisplay: React.FC<SeatsDisplayProps> = ({
            avatar (back) ← cards (mid) ← pill name/stack (front).
            Turn timer = glowing divider line inside the pill.
            ═══════════════════════════════════════ */
-        // Avatar diameter (~3× legacy). "My seat" uses the same layout, just larger.
-        const aSize = isMe
-          ? (isMobile ? 88 : 96)
-          : (isMobile ? 60 : 80);
-        const pillW = Math.round(aSize * 1.12);
-        const cardW = Math.round(aSize * 0.57);
-        const pillH = isMobile ? 34 : 38;
-        const pillOverlap = isMobile ? 14 : 16;
-        const stageH = aSize + pillH - pillOverlap;
+        // Avatar/seat geometry. "My seat" uses the same layout, just larger.
+        const { aSize, pillW, cardW, pillH, stageH } = seatGeometry(isMobile, isMe);
         const hasCards = !!player.hand && player.hand.length > 0;
         const timerFrac = isActive && turnExpiresAt
           ? Math.max(0, Math.min(1, (turnExpiresAt - now) / (TURN_DURATION * 1000)))
