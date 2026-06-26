@@ -6,7 +6,8 @@ import { VARIANT_TIER, type ActionTier } from './ui/tokens';
 /**
  * Phase 3 / Plan 03-03 — single animated bubble pill.
  *
- * D-05: pop-scale + fade enter (120 ms easeOut), opacity + 6 px y-drift exit (200 ms easeIn).
+ * D-05: pop-scale + fade enter (120 ms easeOut), in-place opacity fade exit
+ *        (no y-drift — bubble overlays the identical persistent status badge).
  * D-06: prefers-reduced-motion → instant in/out (duration 0), HOLD unchanged at 900 ms (managed by parent).
  * D-07: action-tier color from VARIANT_TIER; uses CSS vars only (no hex literals).
  * UI-SPEC label table: FOLD / CHECK / CALL N / BET N / RAISE TO N / ALL-IN [N].
@@ -49,9 +50,12 @@ export const ActionBubble: React.FC<ActionBubbleProps> = ({ action, amount }) =>
   const t = VARIANT_TIER[tier];
 
   // D-05 vs D-06 variants. Hold duration is enforced by the parent layer.
+  // Exit is a pure in-place fade (no y-drift): the bubble now sits directly on
+  // top of the identical persistent status badge (Fold/All-in), so a drift
+  // would read as that static badge "jerking" upward. Fade out in place instead.
   const initial = reducedMotion ? { opacity: 0 } : { scale: 0.8, opacity: 0 };
   const animate = reducedMotion ? { opacity: 1 } : { scale: 1, opacity: 1 };
-  const exit = reducedMotion ? { opacity: 0 } : { opacity: 0, y: -6 };
+  const exit = { opacity: 0 };
   const transition = reducedMotion
     ? { duration: 0 }
     : { duration: 0.12, ease: 'easeOut' as const };
