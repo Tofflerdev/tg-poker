@@ -19,7 +19,7 @@ describe('bubbleLabel', () => {
     expect(bubbleLabel('call', 100)).toBe('CALL 100');
     expect(bubbleLabel('bet', 250)).toBe('BET 250');
     expect(bubbleLabel('raise', 500)).toBe('RAISE TO 500');
-    expect(bubbleLabel('allin', 1200)).toBe('ALL-IN 1200');
+    expect(bubbleLabel('allin', 1200)).toBe('ALL-IN');
     expect(bubbleLabel('allin', 0)).toBe('ALL-IN');
   });
 });
@@ -51,7 +51,7 @@ describe('ActionBubble (rendering)', () => {
 
   it('maps allin → allin tier', () => {
     render(<ActionBubble action="allin" amount={800} />);
-    expect(screen.getByText('ALL-IN 800')).toHaveAttribute('data-tier', 'allin');
+    expect(screen.getByText('ALL-IN')).toHaveAttribute('data-tier', 'allin');
   });
 
   it('uses CSS vars (no hex literals) for color and glow', () => {

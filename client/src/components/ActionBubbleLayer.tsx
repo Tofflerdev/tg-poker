@@ -162,12 +162,12 @@ export const ActionBubbleLayer: React.FC<ActionBubbleLayerProps> = ({
           if (!head) return null;
           const visualIndex = (seat - rotationOffset + TOTAL_SEATS) % TOTAL_SEATS;
           const pos = positions[visualIndex];
-          // Place the bubble exactly where the seat status badge (Fold etc.)
-          // sits: centred over the seat card at SEAT_OVERLAY_Y down from its top.
-          // visualIndex 0 is "my seat", which is rendered larger.
+          // Mirror the seat card's exact box (same size, same align transform),
+          // then centre the bubble inside it at SEAT_OVERLAY_Y / 50% — identical
+          // to SeatsDisplay's StatusOverlay. This makes the transient bubble and
+          // the persistent status badge land pixel-for-pixel on the same spot, so
+          // they never show a doubled border on overlap. visualIndex 0 = my seat.
           const g = seatGeometry(isMobile, visualIndex === 0);
-          const ox = (0.5 - pos.ax / 100) * g.pillW;
-          const oy = (SEAT_OVERLAY_Y - pos.ay / 100) * g.stageH;
           return (
             <div
               key={`seat-${seat}`}
@@ -176,13 +176,22 @@ export const ActionBubbleLayer: React.FC<ActionBubbleLayerProps> = ({
                 position: 'absolute',
                 left: pos.left,
                 top: pos.top,
-                // Offset to the seat-card overlay centre (px), then centre the
-                // bubble on that point — matching SeatsDisplay's StatusOverlay.
-                transform: `translate(${ox}px, ${oy}px) translate(-50%, -50%)`,
+                transform: pos.align,
+                width: g.pillW,
+                height: g.stageH,
                 pointerEvents: 'none',
               }}
             >
-              <ActionBubble key={head.id} action={head.action} amount={head.amount} />
+              <div
+                style={{
+                  position: 'absolute',
+                  top: `${SEAT_OVERLAY_Y * 100}%`,
+                  left: '50%',
+                  transform: 'translate(-50%, -50%)',
+                }}
+              >
+                <ActionBubble key={head.id} action={head.action} amount={head.amount} />
+              </div>
             </div>
           );
         })}

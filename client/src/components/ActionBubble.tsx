@@ -38,7 +38,10 @@ export function bubbleLabel(action: PlayerActionKind, amount: number): string {
     case 'call': return `CALL ${amount}`;
     case 'bet': return `BET ${amount}`;
     case 'raise': return `RAISE TO ${amount}`;
-    case 'allin': return amount > 0 ? `ALL-IN ${amount}` : 'ALL-IN';
+    // No amount: must match the persistent "All-in" status badge exactly so the
+    // two overlapping badges are the same width (the all-in amount is already
+    // shown by the bet chips).
+    case 'allin': return 'ALL-IN';
   }
 }
 
