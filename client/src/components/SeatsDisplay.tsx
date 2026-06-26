@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import HandDisplay from "./HandDisplay";
 import { Player } from "../../../types/index";
 import { avatarUrl as resolveAvatar, type AvatarId } from "../assets/avatars/manifest";
+import { SEAT_POSITIONS_DESKTOP, SEAT_POSITIONS_MOBILE } from "./seatLayout";
 
 interface SeatsDisplayProps {
   seats: (Player | null)[];
@@ -209,26 +210,6 @@ const StatusOverlay: React.FC<{ label: string; color: string; glow: string }> = 
     {label}
   </div>
 );
-
-// Desktop: horizontal table positions
-const SEAT_POSITIONS_DESKTOP = [
-  { left: '50%', top: '94%',  align: 'translate(-50%, -100%)' },
-  { left: '4%',  top: '70%',  align: 'translate(-15%, -50%)' },
-  { left: '4%',  top: '30%',  align: 'translate(-15%, -50%)' },
-  { left: '50%', top: '6%',   align: 'translate(-50%, 0%)' },
-  { left: '96%', top: '30%',  align: 'translate(-85%, -50%)' },
-  { left: '96%', top: '70%',  align: 'translate(-85%, -50%)' },
-];
-
-// Mobile: vertical table positions
-const SEAT_POSITIONS_MOBILE = [
-  { left: '50%', top: '95%',  align: 'translate(-50%, -100%)' },
-  { left: '4%',  top: '73%',  align: 'translate(-5%, -50%)' },
-  { left: '4%',  top: '37%',  align: 'translate(-5%, -50%)' },
-  { left: '50%', top: '5%',   align: 'translate(-50%, 0%)' },
-  { left: '96%', top: '37%',  align: 'translate(-95%, -50%)' },
-  { left: '96%', top: '73%',  align: 'translate(-95%, -50%)' },
-];
 
 const TURN_DURATION = 30;
 

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { getChipColor } from "./PokerChip";
 import { Player } from "../../../types/index";
+import { BET_POSITIONS_DESKTOP, BET_POSITIONS_MOBILE } from "./seatLayout";
 
 interface BetChipsDisplayProps {
   seats: (Player | null)[];
@@ -9,26 +10,6 @@ interface BetChipsDisplayProps {
   lastRoundBets: number[];
   isMobile?: boolean;
 }
-
-// Desktop: bet chip positions on the table (% of outer container)
-const BET_POSITIONS_DESKTOP = [
-  { left: 50, top: 65 },  // 0: Bottom Center
-  { left: 25, top: 60 },  // 1: Bottom Left
-  { left: 25, top: 38 },  // 2: Top Left
-  { left: 50, top: 32 },  // 3: Top Center
-  { left: 75, top: 38 },  // 4: Top Right
-  { left: 75, top: 60 },  // 5: Bottom Right
-];
-
-// Mobile: bet positions for vertical table
-const BET_POSITIONS_MOBILE = [
-  { left: 50, top: 78 },  // 0: Bottom Center (me)
-  { left: 22, top: 68 },  // 1: Bottom Left
-  { left: 22, top: 40 },  // 2: Left mid
-  { left: 50, top: 22 },  // 3: Top Center
-  { left: 78, top: 40 },  // 4: Right mid
-  { left: 78, top: 68 },  // 5: Bottom Right
-];
 
 const POT_CENTER = { left: 50, top: 50 };
 const SHOW_DURATION = 600;

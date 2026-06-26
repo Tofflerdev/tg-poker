@@ -1,5 +1,6 @@
 import React from "react";
 import dealerButtonImg from "../assets/dealer-button.svg";
+import { DEALER_POSITIONS_DESKTOP, DEALER_POSITIONS_MOBILE } from "./seatLayout";
 
 interface DealerButtonProps {
   dealerPosition: number;
@@ -7,26 +8,6 @@ interface DealerButtonProps {
   stage: string;
   isMobile?: boolean;
 }
-
-// Desktop: dealer button positions (horizontal table)
-const DEALER_POSITIONS_DESKTOP = [
-  { left: 38, top: 78 },  // 0: Bottom Center
-  { left: 20, top: 65 },  // 1: Bottom Left
-  { left: 20, top: 35 },  // 2: Top Left
-  { left: 38, top: 22 },  // 3: Top Center
-  { left: 80, top: 35 },  // 4: Top Right
-  { left: 80, top: 65 },  // 5: Bottom Right
-];
-
-// Mobile: dealer button positions (vertical table)
-const DEALER_POSITIONS_MOBILE = [
-  { left: 62, top: 82 },  // 0: Bottom Center (me)
-  { left: 22, top: 72 },  // 1: Bottom Left
-  { left: 22, top: 38 },  // 2: Left mid
-  { left: 38, top: 18 },  // 3: Top Center
-  { left: 78, top: 38 },  // 4: Right mid
-  { left: 78, top: 72 },  // 5: Bottom Right
-];
 
 const DealerButton: React.FC<DealerButtonProps> = ({
   dealerPosition,
