@@ -45,96 +45,6 @@ const N = {
 const alpha = (color: string, pct: number) =>
   `color-mix(in srgb, ${color} ${pct}%, transparent)`;
 
-/* ── TimerRing — SVG circular progress around avatar ── */
-const TimerRing: React.FC<{ size: number; timeLeft: number; totalTime: number }> = ({
-  size, timeLeft, totalTime,
-}) => {
-  const stroke = 2.5;
-  const r = (size - stroke * 2) / 2;
-  const circumference = 2 * Math.PI * r;
-  const progress = totalTime > 0 ? Math.max(0, timeLeft / totalTime) : 0;
-  const offset = circumference * (1 - progress);
-  const urgent = timeLeft <= 5;
-  const color = urgent ? N.fold.color : N.active.color;
-  const glowColor = urgent ? N.fold.glowStrong : N.active.glowStrong;
-
-  return (
-    <svg
-      width={size}
-      height={size}
-      style={{
-        position: 'absolute',
-        top: 0, left: 0,
-        transform: 'rotate(-90deg)',
-        pointerEvents: 'none',
-      }}
-    >
-      <circle
-        cx={size / 2} cy={size / 2} r={r}
-        fill="none"
-        stroke="rgba(255,255,255,0.06)"
-        strokeWidth={stroke}
-      />
-      <circle
-        cx={size / 2} cy={size / 2} r={r}
-        fill="none"
-        stroke={color}
-        strokeWidth={stroke}
-        strokeDasharray={circumference}
-        strokeDashoffset={offset}
-        strokeLinecap="round"
-        style={{
-          transition: 'stroke-dashoffset 0.25s linear, stroke 0.3s ease',
-          filter: `drop-shadow(0 0 3px ${glowColor})`,
-          ...(urgent ? { animation: 'timer-urgency 0.5s ease-in-out infinite' } : {}),
-        }}
-      />
-    </svg>
-  );
-};
-
-/* ── StatusBadge — pill-shaped status indicator ── */
-const StatusBadge: React.FC<{ label: string; color: string; glow?: string }> = ({
-  label, color, glow,
-}) => (
-  <span
-    style={{
-      display: 'inline-block',
-      padding: '1px 5px',
-      borderRadius: 6,
-      fontSize: 7,
-      fontWeight: 800,
-      letterSpacing: '0.05em',
-      textTransform: 'uppercase',
-      color,
-      border: `1px solid ${alpha(color, 25)}`,
-      background: alpha(color, 3),
-      textShadow: glow ? `0 0 6px ${glow}` : 'none',
-      lineHeight: '14px',
-      whiteSpace: 'nowrap',
-    }}
-  >
-    {label}
-  </span>
-);
-
-/* ── GlowBar — accent bar at bottom edge ── */
-const GlowBar: React.FC<{ color: string; glow?: string }> = ({ color, glow }) => (
-  <span
-    style={{
-      position: 'absolute',
-      bottom: 0,
-      left: '12%',
-      right: '12%',
-      height: 2,
-      borderRadius: 2,
-      background: color,
-      boxShadow: `0 0 6px ${color}, 0 0 16px ${glow ?? alpha(color, 25)}`,
-      pointerEvents: 'none',
-    }}
-  />
-);
-
 /* ── Avatar — circular initial-letter with optional glow ── */
 const Avatar: React.FC<{
   initial: string;
@@ -243,9 +153,8 @@ const SeatsDisplay: React.FC<SeatsDisplayProps> = ({
   const rotationOffset = mySeat !== null ? mySeat : 0;
   const positions = isMobile ? SEAT_POSITIONS_MOBILE : SEAT_POSITIONS_DESKTOP;
 
-  const seatWidth = isMobile ? 64 : 80;
+  const seatWidth = isMobile ? 64 : 80;   // used by empty-seat box only
   const seatHeight = Math.round(seatWidth * 1.35);
-  const avatarSize = isMobile ? 22 : 28;
 
   return (
     <>
@@ -299,96 +208,6 @@ const SeatsDisplay: React.FC<SeatsDisplayProps> = ({
           : '';
         const status = player ? getStatus(player) : null;
         const displayName = player?.displayName || (player ? `Player ${player.id.slice(0, 4)}` : '');
-
-        /* ═══════════════════════════════════════
-           MOBILE "MY SEAT" — expanded layout
-           Large cards above + compact info strip below
-           ═══════════════════════════════════════ */
-        if (isMobile && isMe && player) {
-          return (
-            <div
-              key={i}
-              className="absolute flex flex-col items-center z-20"
-              style={{
-                left: pos.left,
-                top: pos.top,
-                transform: pos.align,
-                width: seatWidth * 1.5,
-              }}
-            >
-              {/* Large cards above */}
-              <div style={{ display: 'flex', justifyContent: 'center', marginBottom: -10 }}>
-                <HandDisplay cards={player.hand} size={seatWidth * 0.75} overlap={seatWidth * 0.2} />
-              </div>
-
-              {/* Compact info strip */}
-              <div
-                style={{
-                  position: 'relative',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 6,
-                  padding: '5px 10px 5px 6px',
-                  borderRadius: 14,
-                  background: 'rgba(10,10,14,0.9)',
-                  backdropFilter: 'blur(12px)',
-                  WebkitBackdropFilter: 'blur(12px)',
-                  border: `1.5px solid ${isActive ? alpha(N.active.color, 31) : 'rgba(176,190,197,0.18)'}`,
-                  ...(isActive ? {
-                    animation: 'seat-glow-pulse 2s ease-in-out infinite',
-                  } : {}),
-                }}
-              >
-                {isActive && <GlowBar color={N.active.color} glow={N.active.glow} />}
-
-                {/* Avatar + timer ring */}
-                <div style={{ position: 'relative', width: avatarSize, height: avatarSize, flexShrink: 0 }}>
-                  {isActive && turnExpiresAt && (
-                    <TimerRing size={avatarSize} timeLeft={timeLeft} totalTime={TURN_DURATION} />
-                  )}
-                  <Avatar
-                    initial={initial}
-                    size={avatarSize}
-                    isActive={isActive}
-                    avatarUrl={resolveAvatar(player.avatarId as AvatarId | undefined)}
-                  />
-                </div>
-
-                {/* Name + stack */}
-                <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0, gap: 0 }}>
-                  <span style={{
-                    fontSize: 9,
-                    fontWeight: 600,
-                    color: '#fff',
-                    whiteSpace: 'nowrap',
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    maxWidth: 68,
-                    lineHeight: '13px',
-                  }}>
-                    {displayName}
-                  </span>
-                  <span style={{
-                    fontSize: 10,
-                    fontWeight: 800,
-                    fontFamily: 'monospace',
-                    color: N.chips.color,
-                    textShadow: `0 0 8px ${N.chips.glow}`,
-                    lineHeight: '13px',
-                    fontVariantNumeric: 'tabular-nums',
-                  }}>
-                    {player.chips.toLocaleString()}
-                  </span>
-                </div>
-
-                {/* Status */}
-                {status && (
-                  <StatusBadge label={status.label} color={status.color} glow={status.glow} />
-                )}
-              </div>
-            </div>
-          );
-        }
 
         /* ═══════════════════════════════════════
            EMPTY SEAT — unchanged.
@@ -480,7 +299,10 @@ const SeatsDisplay: React.FC<SeatsDisplayProps> = ({
            avatar (back) ← cards (mid) ← pill name/stack (front).
            Turn timer = glowing divider line inside the pill.
            ═══════════════════════════════════════ */
-        const aSize = isMobile ? 60 : 80;          // avatar diameter (~3× legacy; tune later)
+        // Avatar diameter (~3× legacy). "My seat" uses the same layout, just larger.
+        const aSize = isMe
+          ? (isMobile ? 88 : 96)
+          : (isMobile ? 60 : 80);
         const pillW = Math.round(aSize * 1.12);
         const cardW = Math.round(aSize * 0.57);
         const pillH = isMobile ? 34 : 38;
