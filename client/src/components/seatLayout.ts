@@ -68,7 +68,7 @@ export const DEALER_POSITIONS_MOBILE: OverlayPos[] = [
 /* Bet stacks — on the betting line, a step further toward the pot than the
    dealer button so the two never collide. */
 export const BET_POSITIONS_DESKTOP: OverlayPos[] = [
-  { left: 50, top: 66 },  // 0: bottom centre
+  { left: 50, top: 61 },  // 0: bottom centre (me) — raised to clear the larger my-seat
   { left: 27, top: 58 },  // 1: bottom left
   { left: 27, top: 40 },  // 2: top left
   { left: 50, top: 34 },  // 3: top centre
@@ -77,7 +77,7 @@ export const BET_POSITIONS_DESKTOP: OverlayPos[] = [
 ];
 
 export const BET_POSITIONS_MOBILE: OverlayPos[] = [
-  { left: 50, top: 79 },  // 0: bottom centre (me)
+  { left: 50, top: 70 },  // 0: bottom centre (me) — raised to clear the larger my-seat
   { left: 36, top: 62 },  // 1: bottom left
   { left: 37, top: 36 },  // 2: left mid
   { left: 50, top: 23 },  // 3: top centre
