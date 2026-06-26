@@ -68,27 +68,40 @@ describe('ActionBubbleLayer', () => {
     render(<ActionBubbleLayer mySeat={null} registerPushHandle={(p) => { push = p; }} />);
     expect(push).toBeDefined();
 
-    act(() => { push!(mkEvt(0, 'fold')); });
-    expect(screen.getByText('FOLD')).toBeInTheDocument();
+    act(() => { push!(mkEvt(0, 'check')); });
+    expect(screen.getByText('CHECK')).toBeInTheDocument();
     expect(screen.getByTestId('bubble-anchor-seat-0')).toBeInTheDocument();
 
     act(() => { vi.advanceTimersByTime(900); });
-    expect(screen.queryByText('FOLD')).not.toBeInTheDocument();
+    expect(screen.queryByText('CHECK')).not.toBeInTheDocument();
     expect(screen.queryByTestId('bubble-anchor-seat-0')).not.toBeInTheDocument();
+  });
+
+  it('does NOT render bubbles for fold / all-in (status-badge-backed actions)', () => {
+    let push: ((evt: ActionBubbleEvent) => void) | undefined;
+    render(<ActionBubbleLayer mySeat={null} registerPushHandle={(p) => { push = p; }} />);
+    act(() => {
+      push!(mkEvt(0, 'fold'));
+      push!(mkEvt(1, 'allin', 800));
+    });
+    expect(screen.queryByText('FOLD')).not.toBeInTheDocument();
+    expect(screen.queryByText('ALL-IN')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('bubble-anchor-seat-0')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('bubble-anchor-seat-1')).not.toBeInTheDocument();
   });
 
   it('renders FIVE bubbles in parallel for FIVE different seats (per-seat queues, D-03)', () => {
     let push: ((evt: ActionBubbleEvent) => void) | undefined;
     render(<ActionBubbleLayer mySeat={null} registerPushHandle={(p) => { push = p; }} />);
     act(() => {
-      push!(mkEvt(0, 'fold'));
-      push!(mkEvt(1, 'fold'));
-      push!(mkEvt(2, 'fold'));
-      push!(mkEvt(3, 'fold'));
-      push!(mkEvt(4, 'fold'));
+      push!(mkEvt(0, 'check'));
+      push!(mkEvt(1, 'check'));
+      push!(mkEvt(2, 'check'));
+      push!(mkEvt(3, 'check'));
+      push!(mkEvt(4, 'check'));
     });
     // All five visible at once — none are queued behind a global serializer.
-    expect(screen.getAllByText('FOLD')).toHaveLength(5);
+    expect(screen.getAllByText('CHECK')).toHaveLength(5);
     expect(screen.getByTestId('bubble-anchor-seat-0')).toBeInTheDocument();
     expect(screen.getByTestId('bubble-anchor-seat-4')).toBeInTheDocument();
   });
@@ -114,16 +127,16 @@ describe('ActionBubbleLayer', () => {
     let push: ((evt: ActionBubbleEvent) => void) | undefined;
     render(<ActionBubbleLayer mySeat={null} registerPushHandle={(p) => { push = p; }} />);
     act(() => {
-      push!(mkEvt(0, 'fold'));
-      push!(mkEvt(0, 'fold')); // identical to the first
+      push!(mkEvt(0, 'check'));
+      push!(mkEvt(0, 'check')); // identical to the first
     });
     // Head renders the first.
-    expect(screen.getAllByText('FOLD')).toHaveLength(1);
+    expect(screen.getAllByText('CHECK')).toHaveLength(1);
     act(() => { vi.advanceTimersByTime(900); });
     // Second (with a fresh unique id) takes over as head.
-    expect(screen.getAllByText('FOLD')).toHaveLength(1);
+    expect(screen.getAllByText('CHECK')).toHaveLength(1);
     act(() => { vi.advanceTimersByTime(900); });
-    expect(screen.queryByText('FOLD')).not.toBeInTheDocument();
+    expect(screen.queryByText('CHECK')).not.toBeInTheDocument();
   });
 
   it('rotates seat positions so mySeat becomes bottom (visualIndex 0)', () => {
@@ -150,7 +163,7 @@ describe('ActionBubbleLayer', () => {
     const { unmount } = render(
       <ActionBubbleLayer mySeat={null} registerPushHandle={(p) => { push = p; }} />
     );
-    act(() => { push!(mkEvt(0, 'fold')); });
+    act(() => { push!(mkEvt(0, 'check')); });
     expect(() => { unmount(); }).not.toThrow();
     // Advancing timers post-unmount must not throw nor try to setState on
     // unmounted component.

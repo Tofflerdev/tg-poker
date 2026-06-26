@@ -26,6 +26,11 @@ import {
 const TOTAL_SEATS = 6;
 const HOLD_MS = 900;
 
+// Actions that already have a persistent seat status badge (SeatsDisplay
+// StatusOverlay) are shown by that badge alone — no transient bubble. This
+// avoids two identical badges stacking on the same spot.
+const STATUS_BACKED_ACTIONS = new Set<ActionBubbleEvent['action']>(['fold', 'allin']);
+
 export interface BubbleQueueItem {
   id: string;          // unique per enqueue (RESEARCH Gotcha #3 — key uniqueness)
   action: ActionBubbleEvent['action'];
@@ -111,6 +116,8 @@ export const ActionBubbleLayer: React.FC<ActionBubbleLayerProps> = ({
   }, []);
 
   const pushBubble = useCallback((evt: ActionBubbleEvent) => {
+    // fold / all-in are represented by the persistent status badge, not a bubble.
+    if (STATUS_BACKED_ACTIONS.has(evt.action)) return;
     const item: BubbleQueueItem = {
       id: nextBubbleId(),
       action: evt.action,
