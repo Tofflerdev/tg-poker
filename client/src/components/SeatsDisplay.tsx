@@ -302,6 +302,9 @@ const SeatsDisplay: React.FC<SeatsDisplayProps> = ({
         // Avatar/seat geometry. "My seat" uses the same layout, just larger.
         const { aSize, pillW, cardW, pillH, stageH } = seatGeometry(isMobile, isMe);
         const hasCards = !!player.hand && player.hand.length > 0;
+        // Hide a folded opponent's face-down "ghost" cards — the Fold badge
+        // alone marks them out. (My own folded cards stay: they're face-up.)
+        const showCards = hasCards && !(isFolded && !isMe);
         const timerFrac = isActive && turnExpiresAt
           ? Math.max(0, Math.min(1, (turnExpiresAt - now) / (TURN_DURATION * 1000)))
           : 0;
@@ -345,7 +348,7 @@ const SeatsDisplay: React.FC<SeatsDisplayProps> = ({
             </div>
 
             {/* Cards — mid layer (top edge ≈ avatar top) */}
-            {hasCards && (
+            {showCards && (
               <div style={{
                 position: 'absolute',
                 left: '50%',
