@@ -31,7 +31,12 @@ vi.mock('motion/react', async () => {
 import { ActionBubbleLayer, ACTION_BUBBLE_HOLD_MS } from '../ActionBubbleLayer';
 import type { ActionBubbleEvent } from '../../../../types/index';
 
-const mkEvt = (seat: number, action: ActionBubbleEvent['action'], amount = 0): ActionBubbleEvent => ({
+const mkEvt = (
+  seat: number,
+  action: ActionBubbleEvent['action'],
+  amount = 0,
+  allIn = false,
+): ActionBubbleEvent => ({
   tableId: 'T',
   telegramId: '1001',
   seat,
@@ -39,6 +44,7 @@ const mkEvt = (seat: number, action: ActionBubbleEvent['action'], amount = 0): A
   amount,
   totalBetThisStreet: amount,
   potAfter: 130,
+  allIn,
 });
 
 describe('ActionBubbleLayer', () => {
@@ -88,6 +94,22 @@ describe('ActionBubbleLayer', () => {
     expect(screen.queryByText('ALL-IN')).not.toBeInTheDocument();
     expect(screen.queryByTestId('bubble-anchor-seat-0')).not.toBeInTheDocument();
     expect(screen.queryByTestId('bubble-anchor-seat-1')).not.toBeInTheDocument();
+  });
+
+  it('suppresses a call/raise that left the player all-in (evt.allIn flag)', () => {
+    let push: ((evt: ActionBubbleEvent) => void) | undefined;
+    render(<ActionBubbleLayer mySeat={null} registerPushHandle={(p) => { push = p; }} />);
+    act(() => {
+      push!(mkEvt(0, 'call', 100, true));   // call-all-in → suppressed
+      push!(mkEvt(1, 'raise', 200, true));  // raise-all-in → suppressed
+      push!(mkEvt(2, 'call', 50, false));   // normal call → still shown
+    });
+    expect(screen.queryByText('CALL 100')).not.toBeInTheDocument();
+    expect(screen.queryByText('RAISE TO 200')).not.toBeInTheDocument();
+    expect(screen.getByText('CALL 50')).toBeInTheDocument();
+    expect(screen.queryByTestId('bubble-anchor-seat-0')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('bubble-anchor-seat-1')).not.toBeInTheDocument();
+    expect(screen.getByTestId('bubble-anchor-seat-2')).toBeInTheDocument();
   });
 
   it('renders FIVE bubbles in parallel for FIVE different seats (per-seat queues, D-03)', () => {

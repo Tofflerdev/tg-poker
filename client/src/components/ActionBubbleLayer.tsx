@@ -116,8 +116,10 @@ export const ActionBubbleLayer: React.FC<ActionBubbleLayerProps> = ({
   }, []);
 
   const pushBubble = useCallback((evt: ActionBubbleEvent) => {
-    // fold / all-in are represented by the persistent status badge, not a bubble.
-    if (STATUS_BACKED_ACTIONS.has(evt.action)) return;
+    // Skip actions already shown by a persistent status badge: fold, the
+    // dedicated all-in, and any call/raise that left the player all-in
+    // (evt.allIn) — all represented by the "Fold"/"All-in" StatusOverlay.
+    if (STATUS_BACKED_ACTIONS.has(evt.action) || evt.allIn) return;
     const item: BubbleQueueItem = {
       id: nextBubbleId(),
       action: evt.action,

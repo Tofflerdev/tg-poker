@@ -313,6 +313,7 @@ export default class Game {
       seat: player.seat,
       action: 'fold' as PlayerActionKind,
       amount: 0,
+      allIn: player.allIn,
       totalBetThisStreet: player.bet,
       potAfter: this.getTotalPot(),
     });
@@ -332,6 +333,7 @@ export default class Game {
       seat: player.seat,
       action: 'check' as PlayerActionKind,
       amount: 0,
+      allIn: player.allIn,
       totalBetThisStreet: player.bet,
       potAfter: this.getTotalPot(),
     });
@@ -359,6 +361,7 @@ export default class Game {
       seat: player.seat,
       action: 'call' as PlayerActionKind,
       amount: actualBet,
+      allIn: player.allIn,
       totalBetThisStreet: player.bet,
       potAfter: this.getTotalPot(),
     });
@@ -397,6 +400,7 @@ export default class Game {
       seat: player.seat,
       action: 'raise' as PlayerActionKind,
       amount: player.bet - prevBet,
+      allIn: player.allIn,
       totalBetThisStreet: player.bet,
       potAfter: this.getTotalPot(),
     });
@@ -440,6 +444,7 @@ export default class Game {
       seat: player.seat,
       action: 'allin' as PlayerActionKind,
       amount: allInAmount,
+      allIn: player.allIn,
       totalBetThisStreet: player.bet,
       potAfter: this.getTotalPot(),
     });

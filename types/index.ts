@@ -312,6 +312,11 @@ export interface PlayerActionEvent {
   amount: number;               // chips committed by this action (delta)
   totalBetThisStreet: number;   // player.bet after the action
   potAfter: number;             // game.getTotalPot() after the action
+  // True when this action left the player all-in (incl. a call/raise that
+  // emptied the stack — action stays 'call'/'raise' for analysis fidelity).
+  // The UI uses this to suppress the transient bubble in favour of the
+  // persistent "All-in" status badge. Optional: absent in older recorded logs.
+  allIn?: boolean;
 }
 
 export interface HandCompletePerPlayer {
