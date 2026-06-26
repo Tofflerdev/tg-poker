@@ -140,14 +140,16 @@ const Avatar: React.FC<{
   size: number;
   isActive: boolean;
   avatarUrl?: string;
-}> = ({ initial, size, isActive, avatarUrl }) => (
+  imgScale?: number;   // zoom the source art to fill the circle (source has baked-in margins)
+  borderWidth?: number;
+}> = ({ initial, size, isActive, avatarUrl, imgScale = 1, borderWidth = 1.5 }) => (
   <div
     style={{
       width: size,
       height: size,
       borderRadius: '50%',
       background: 'rgba(14,14,20,0.95)',
-      border: `1.5px solid ${isActive ? alpha(N.active.color, 56) : 'rgba(176,190,197,0.25)'}`,
+      border: `${borderWidth}px solid ${isActive ? alpha(N.active.color, 56) : 'rgba(176,190,197,0.25)'}`,
       boxShadow: isActive
         ? `0 0 10px ${N.active.glow}, 0 0 3px ${N.active.glowStrong}`
         : 'none',
@@ -166,12 +168,45 @@ const Avatar: React.FC<{
       <img
         src={avatarUrl}
         alt=""
-        style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '50%' }}
+        style={{
+          width: '100%', height: '100%', objectFit: 'cover', borderRadius: '50%',
+          transform: imgScale !== 1 ? `scale(${imgScale})` : undefined,
+        }}
         onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
       />
     ) : (
       initial
     )}
+  </div>
+);
+
+/* ── StatusOverlay — contrast badge centered over a seat (Fold / All-in / Sit out / Wait BB) ── */
+const StatusOverlay: React.FC<{ label: string; color: string; glow: string }> = ({
+  label, color, glow,
+}) => (
+  <div
+    style={{
+      position: 'absolute',
+      top: '40%',
+      left: '50%',
+      transform: 'translate(-50%, -50%)',
+      zIndex: 30,
+      color: '#fff',
+      fontSize: 9,
+      fontWeight: 800,
+      letterSpacing: '0.05em',
+      textTransform: 'uppercase',
+      padding: '3px 10px',
+      borderRadius: 8,
+      border: `1.5px solid ${color}`,
+      background: 'rgba(10,10,14,0.92)',
+      boxShadow: `0 0 10px ${glow}, inset 0 0 8px ${alpha(color, 18)}`,
+      textShadow: `0 0 6px ${color}`,
+      whiteSpace: 'nowrap',
+      pointerEvents: 'none',
+    }}
+  >
+    {label}
   </div>
 );
 
@@ -375,9 +410,108 @@ const SeatsDisplay: React.FC<SeatsDisplayProps> = ({
         }
 
         /* ═══════════════════════════════════════
-           STANDARD SEAT — Compact Card style
-           Avatar on top, cards in middle, name+stack at bottom
+           EMPTY SEAT — unchanged.
+           (With auto-seating a player normally never sees this, but keep
+            the existing dashed "+/Sit" box so nothing regresses.)
            ═══════════════════════════════════════ */
+        if (isFree) {
+          return (
+            <div
+              key={i}
+              className="absolute"
+              style={{
+                left: pos.left,
+                top: pos.top,
+                transform: pos.align,
+                width: seatWidth,
+                height: seatHeight,
+                zIndex: 10,
+                transition: 'z-index 0.3s',
+              }}
+              onClick={() => canSit && onSit(i)}
+            >
+              <div
+                style={{
+                  position: 'relative',
+                  width: '100%',
+                  height: '100%',
+                  borderRadius: 14,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  textAlign: 'center',
+                  padding: '4px 6px 8px',
+                  background: canSit ? alpha(N.sit.color, 4) : 'rgba(20,20,28,0.4)',
+                  backdropFilter: 'blur(12px)',
+                  WebkitBackdropFilter: 'blur(12px)',
+                  border: canSit
+                    ? `1.5px dashed ${alpha(N.sit.color, 25)}`
+                    : '1.5px dashed rgba(176,190,197,0.15)',
+                  cursor: canSit ? 'pointer' : 'default',
+                  transition: 'box-shadow 0.3s ease, border-color 0.3s ease',
+                  ...(canSit ? { animation: 'empty-seat-breathe 3s ease-in-out infinite' } : {}),
+                }}
+                onMouseEnter={(e) => {
+                  if (canSit) {
+                    e.currentTarget.style.boxShadow = `0 0 16px ${N.sit.glow}, inset 0 0 8px ${N.sit.glow}`;
+                    e.currentTarget.style.borderColor = alpha(N.sit.color, 44);
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  if (canSit) {
+                    e.currentTarget.style.boxShadow = 'none';
+                    e.currentTarget.style.borderColor = '';
+                  }
+                }}
+              >
+                <div style={{
+                  fontSize: 24,
+                  fontWeight: 300,
+                  color: canSit ? N.sit.color : N.neutral.color,
+                  opacity: canSit ? 0.8 : 0.25,
+                  lineHeight: 1,
+                  textShadow: canSit ? `0 0 10px ${N.sit.glow}` : 'none',
+                  transition: 'opacity 0.3s',
+                }}>
+                  +
+                </div>
+                {canSit && (
+                  <div style={{
+                    fontSize: 8,
+                    fontWeight: 800,
+                    color: N.sit.color,
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.08em',
+                    marginTop: 2,
+                    textShadow: `0 0 6px ${N.sit.glow}`,
+                  }}>
+                    Sit
+                  </div>
+                )}
+              </div>
+            </div>
+          );
+        }
+
+        /* ═══════════════════════════════════════
+           OCCUPIED SEAT — layered layout
+           avatar (back) ← cards (mid) ← pill name/stack (front).
+           Turn timer = glowing divider line inside the pill.
+           ═══════════════════════════════════════ */
+        const aSize = isMobile ? 60 : 80;          // avatar diameter (~3× legacy; tune later)
+        const pillW = Math.round(aSize * 1.12);
+        const cardW = Math.round(aSize * 0.57);
+        const pillH = isMobile ? 34 : 38;
+        const pillOverlap = isMobile ? 14 : 16;
+        const stageH = aSize + pillH - pillOverlap;
+        const hasCards = !!player.hand && player.hand.length > 0;
+        const timerFrac = isActive && turnExpiresAt
+          ? Math.max(0, Math.min(1, (turnExpiresAt - now) / (TURN_DURATION * 1000)))
+          : 0;
+        const urgent = timeLeft <= 5;
+        const dim = isFolded ? 0.5 : 1;
+
         return (
           <div
             key={i}
@@ -386,169 +520,132 @@ const SeatsDisplay: React.FC<SeatsDisplayProps> = ({
               left: pos.left,
               top: pos.top,
               transform: pos.align,
-              width: seatWidth,
-              height: seatHeight,
+              width: pillW,
+              height: stageH,
               zIndex: isActive ? 20 : 10,
               transition: 'z-index 0.3s',
             }}
-            onClick={() => canSit && onSit(i)}
           >
-            <div
-              style={{
-                position: 'relative',
-                width: '100%',
-                height: '100%',
-                borderRadius: 14,
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                justifyContent: 'center',
-                textAlign: 'center',
-                padding: '4px 6px 8px',
-                background: isFree
-                  ? (canSit ? alpha(N.sit.color, 4) : 'rgba(20,20,28,0.4)')
-                  : 'rgba(10,10,14,0.88)',
-                backdropFilter: 'blur(12px)',
-                WebkitBackdropFilter: 'blur(12px)',
-                border: isActive
-                  ? `1.5px solid ${alpha(N.active.color, 31)}`
-                  : player?.waitingForBB
-                    ? `1.5px solid ${alpha(N.waitbb.color, 25)}`
-                    : canSit
-                      ? `1.5px dashed ${alpha(N.sit.color, 25)}`
-                      : isFree
-                        ? '1.5px dashed rgba(176,190,197,0.15)'
-                        : '1.5px solid rgba(176,190,197,0.12)',
-                overflow: 'visible',
-                cursor: canSit ? 'pointer' : 'default',
-                transition: 'box-shadow 0.3s ease, border-color 0.3s ease',
-                opacity: isFolded ? 0.65 : 1,
-                ...(isActive ? {
-                  animation: 'seat-glow-pulse 2s ease-in-out infinite',
-                } : canSit ? {
-                  animation: 'empty-seat-breathe 3s ease-in-out infinite',
-                } : {}),
-              }}
-              onMouseEnter={(e) => {
-                if (canSit) {
-                  e.currentTarget.style.boxShadow = `0 0 16px ${N.sit.glow}, inset 0 0 8px ${N.sit.glow}`;
-                  e.currentTarget.style.borderColor = alpha(N.sit.color, 44);
-                }
-              }}
-              onMouseLeave={(e) => {
-                if (canSit) {
-                  e.currentTarget.style.boxShadow = 'none';
-                  e.currentTarget.style.borderColor = '';
-                }
-              }}
-            >
-              {isActive && <GlowBar color={N.active.color} glow={N.active.glow} />}
-
-              {player ? (
-                <>
-                  {/* Avatar floats above the seat box */}
-                  <div
-                    style={{
-                      position: 'absolute',
-                      top: -(avatarSize / 2) - 1,
-                      left: '50%',
-                      transform: 'translateX(-50%)',
-                      width: avatarSize,
-                      height: avatarSize,
-                      zIndex: 25,
-                    }}
-                  >
-                    {isActive && turnExpiresAt && (
-                      <TimerRing size={avatarSize} timeLeft={timeLeft} totalTime={TURN_DURATION} />
-                    )}
-                    <Avatar
-                      initial={initial}
-                      size={avatarSize}
-                      isActive={isActive}
-                      avatarUrl={resolveAvatar(player.avatarId as AvatarId | undefined)}
-                    />
-                  </div>
-
-                  {/* Name — truncated, white */}
-                  <div style={{
-                    marginTop: (avatarSize / 2) + 2,
-                    fontSize: isMobile ? 9 : 10,
-                    fontWeight: 600,
-                    color: '#fff',
-                    whiteSpace: 'nowrap',
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    maxWidth: '92%',
-                    lineHeight: '13px',
-                  }}>
-                    {displayName}
-                  </div>
-
-                  {/* Cards — scaled down */}
-                  <div style={{
-                    transform: `scale(${isMobile ? 0.7 : 0.85})`,
-                    transformOrigin: 'center top',
-                    height: Math.round((seatWidth * 0.6 * 1.4) * (isMobile ? 0.7 : 0.85)),
-                    marginTop: 1,
-                    marginBottom: -2,
-                    display: 'flex',
-                    justifyContent: 'center',
-                    width: '100%',
-                    pointerEvents: 'none',
-                  }}>
-                    <HandDisplay cards={player.hand} size={seatWidth * 0.6} />
-                  </div>
-
-                  {/* Stack — monospace amber with glow */}
-                  <div style={{
-                    fontSize: 10,
-                    fontWeight: 800,
-                    fontFamily: 'monospace',
-                    fontVariantNumeric: 'tabular-nums',
-                    color: N.chips.color,
-                    textShadow: `0 0 8px ${N.chips.glow}`,
-                    lineHeight: '13px',
-                  }}>
-                    {player.chips.toLocaleString()}
-                  </div>
-
-                  {/* Status badge */}
-                  {status && (
-                    <div style={{ marginTop: 1 }}>
-                      <StatusBadge label={status.label} color={status.color} glow={status.glow} />
-                    </div>
-                  )}
-                </>
-              ) : (
-                /* ── Empty seat ── */
-                <>
-                  <div style={{
-                    fontSize: 24,
-                    fontWeight: 300,
-                    color: canSit ? N.sit.color : N.neutral.color,
-                    opacity: canSit ? 0.8 : 0.25,
-                    lineHeight: 1,
-                    textShadow: canSit ? `0 0 10px ${N.sit.glow}` : 'none',
-                    transition: 'opacity 0.3s',
-                  }}>
-                    +
-                  </div>
-                  {canSit && (
-                    <div style={{
-                      fontSize: 8,
-                      fontWeight: 800,
-                      color: N.sit.color,
-                      textTransform: 'uppercase',
-                      letterSpacing: '0.08em',
-                      marginTop: 2,
-                      textShadow: `0 0 6px ${N.sit.glow}`,
-                    }}>
-                      Sit
-                    </div>
-                  )}
-                </>
-              )}
+            {/* Avatar — back layer */}
+            <div style={{
+              position: 'absolute',
+              top: 0,
+              left: '50%',
+              transform: 'translateX(-50%)',
+              width: aSize,
+              height: aSize,
+              zIndex: 1,
+              opacity: dim,
+              transition: 'opacity 0.3s',
+            }}>
+              <Avatar
+                initial={initial}
+                size={aSize}
+                isActive={isActive}
+                avatarUrl={resolveAvatar(player.avatarId as AvatarId | undefined)}
+                imgScale={1.32}
+                borderWidth={2}
+              />
             </div>
+
+            {/* Cards — mid layer (top edge ≈ avatar top) */}
+            {hasCards && (
+              <div style={{
+                position: 'absolute',
+                left: '50%',
+                top: Math.round(aSize * 0.05),
+                transform: 'translateX(-50%)',
+                zIndex: 2,
+                pointerEvents: 'none',
+                opacity: dim,
+                filter: isFolded
+                  ? 'grayscale(1) brightness(0.6) drop-shadow(0 3px 6px rgba(0,0,0,0.55))'
+                  : 'drop-shadow(0 3px 6px rgba(0,0,0,0.55))',
+                transition: 'opacity 0.3s',
+              }}>
+                <HandDisplay cards={player.hand} size={cardW} overlap={Math.round(cardW * 0.42)} />
+              </div>
+            )}
+
+            {/* Pill — front layer: name / timer-divider / stack */}
+            <div style={{
+              position: 'absolute',
+              bottom: 0,
+              left: '50%',
+              transform: 'translateX(-50%)',
+              width: pillW,
+              minHeight: pillH,
+              zIndex: 3,
+              borderRadius: 11,
+              overflow: 'hidden',
+              background: 'rgba(10,10,14,0.92)',
+              backdropFilter: 'blur(12px)',
+              WebkitBackdropFilter: 'blur(12px)',
+              border: `1.5px solid ${isActive ? alpha(N.active.color, 45) : 'rgba(176,190,197,0.16)'}`,
+              boxShadow: isActive
+                ? `0 0 14px ${N.active.glow}, 0 4px 12px rgba(0,0,0,0.45)`
+                : '0 4px 12px rgba(0,0,0,0.45)',
+              opacity: dim,
+              transition: 'border-color 0.3s, box-shadow 0.3s, opacity 0.3s',
+            }}>
+              {/* Name */}
+              <div style={{
+                textAlign: 'center',
+                fontSize: isMobile ? 10 : 11,
+                fontWeight: 600,
+                color: '#fff',
+                padding: '4px 8px 3px',
+                whiteSpace: 'nowrap',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                lineHeight: 1.1,
+              }}>
+                {displayName}
+              </div>
+
+              {/* Divider doubling as turn timer */}
+              <div style={{
+                position: 'relative',
+                height: 2,
+                background: 'rgba(255,255,255,0.07)',
+                overflow: 'hidden',
+              }}>
+                {isActive && turnExpiresAt && (
+                  <div style={{
+                    position: 'absolute',
+                    top: 0,
+                    bottom: 0,
+                    left: 0,
+                    width: `${timerFrac * 100}%`,
+                    background: urgent ? N.fold.color : N.active.color,
+                    boxShadow: `0 0 6px ${urgent ? N.fold.color : N.active.color}, 0 0 12px ${urgent ? N.fold.glow : N.active.glow}`,
+                    transition: 'width 0.25s linear, background 0.3s, box-shadow 0.3s',
+                    ...(urgent ? { animation: 'timer-urgency 0.5s ease-in-out infinite' } : {}),
+                  }} />
+                )}
+              </div>
+
+              {/* Stack */}
+              <div style={{
+                textAlign: 'center',
+                fontSize: isMobile ? 12 : 13,
+                fontWeight: 800,
+                fontFamily: 'monospace',
+                fontVariantNumeric: 'tabular-nums',
+                color: N.chips.color,
+                textShadow: `0 0 8px ${N.chips.glow}`,
+                padding: '3px 8px 5px',
+                lineHeight: 1,
+                background: 'rgba(255,255,255,0.025)',
+              }}>
+                {player.chips.toLocaleString()}
+              </div>
+            </div>
+
+            {/* Status overlay — contrast badge (Fold / All-in / Sit out / Wait BB) */}
+            {status && (
+              <StatusOverlay label={status.label} color={status.color} glow={status.glow} />
+            )}
           </div>
         );
       })}
