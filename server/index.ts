@@ -783,6 +783,11 @@ io.on("connection", (socket) => {
 
       case 'raise':
         const amount = args[0];
+        // Валидация на входе (defense-in-depth; Game.raise тоже проверяет).
+        if (!Number.isSafeInteger(amount) || amount <= 0) {
+          socket.emit("errorMessage", "Invalid raise amount");
+          break;
+        }
         if (table.raise(telegramId, amount)) {
           checkShowdownAndUpdate(table, tableId);
         } else {
@@ -802,11 +807,6 @@ io.on("connection", (socket) => {
         if (table.showCards(telegramId)) {
           updateTableState(tableId);
         }
-        break;
-
-      case 'showdown':
-        const result = table.showdown();
-        handleTableShowdown(tableId, result);
         break;
 
       case 'getState':
@@ -842,7 +842,6 @@ io.on("connection", (socket) => {
   socket.on("raise", (amount: number) => handleGameAction('raise', amount));
   socket.on("allIn", () => handleGameAction('allIn'));
   socket.on("showCards", () => handleGameAction('showCards'));
-  socket.on("showdown", () => handleGameAction('showdown'));
   socket.on("sitOut", () => handleGameAction('sitOut'));
   socket.on("sitIn", () => handleGameAction('sitIn'));
 

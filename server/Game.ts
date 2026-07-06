@@ -26,7 +26,7 @@ export default class Game {
 
   private turnTimer: NodeJS.Timeout | null = null;
   private turnExpiresAt: number | null = null;
-  private readonly TURN_TIME_LIMIT = 30000; // 30 seconds
+  private turnTimeLimit = 30000; // ms per turn — set from table config (default 30s)
   private onTurnTimeout: (() => void) | null = null;
   private onStateChange: (() => void) | null = null;
   private onShowdown: ((result: ShowdownResult) => void) | null = null;
@@ -38,8 +38,14 @@ export default class Game {
   public lastShowdown: ShowdownResult | null = null;
   public nextHandIn: number | null = null;  // NEW: timestamp когда начнется следующая раздача
 
-  constructor(tableId: string = '') {
+  constructor(
+    tableId: string = '',
+    options?: { smallBlind?: number; bigBlind?: number; turnTimeMs?: number }
+  ) {
     this.tableId = tableId;
+    if (options?.smallBlind !== undefined) this.smallBlind = options.smallBlind;
+    if (options?.bigBlind !== undefined) this.bigBlind = options.bigBlind;
+    if (options?.turnTimeMs !== undefined) this.turnTimeLimit = options.turnTimeMs;
   }
 
   // Вспомогательный метод для получения общей суммы всех потов (включая текущие ставки)
@@ -372,6 +378,11 @@ export default class Game {
   raise(playerId: string, amount: number): boolean {
     const player = this.getCurrentPlayerIfValid(playerId);
     if (!player) return false;
+
+    // Защита от некорректного ввода: amount должен быть целым положительным числом.
+    // Без этого NaN/строка/дробь проходят проверки ниже (NaN сравнения всегда false)
+    // и необратимо ломают стек, банк и currentBet.
+    if (!Number.isSafeInteger(amount) || amount <= 0) return false;
 
     const toCall = this.currentBet - player.bet;
     const totalBet = toCall + amount;
@@ -903,8 +914,8 @@ export default class Game {
     this.stopTurnTimer();
     if (this.currentPlayer === null) return;
 
-    this.turnExpiresAt = Date.now() + this.TURN_TIME_LIMIT;
-    
+    this.turnExpiresAt = Date.now() + this.turnTimeLimit;
+
     const currentPlayerId = this.seats[this.currentPlayer]?.id;
     if (!currentPlayerId) return;
 
@@ -917,7 +928,7 @@ export default class Game {
           this.onTurnTimeout();
         }
       }
-    }, this.TURN_TIME_LIMIT);
+    }, this.turnTimeLimit);
   }
 
   private stopTurnTimer() {
@@ -968,8 +979,12 @@ export default class Game {
     };
   }
 
-  setBlinds(small: number, big: number) {
-    if (this.stage !== 'waiting') return false;
+  // Обновляет блайнды. Значения читаются только в postBlinds() на старте раздачи,
+  // поэтому вызов между раздачами (или из админки) корректно применится к следующей
+  // раздаче и не влияет на текущую. Игнорирует некорректный ввод.
+  setBlinds(small: number, big: number): boolean {
+    if (!Number.isSafeInteger(small) || !Number.isSafeInteger(big)) return false;
+    if (small <= 0 || big <= 0) return false;
     this.smallBlind = small;
     this.bigBlind = big;
     return true;

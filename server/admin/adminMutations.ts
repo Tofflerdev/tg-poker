@@ -308,12 +308,13 @@ export async function editTableParams(
   await runWithAudit(
     { adminUser, action: 'editTableParams', targetType: 'table', targetId: tableId, beforeJson: before, afterJson: params },
     async () => {
-      // Apply at next hand: mutate config in place. The Table's continuous game loop
-      // picks up the new values when it starts the next hand (existing behavior —
-      // smallBlind/bigBlind are read at hand start in Game.ts).
+      // Apply at next hand: mutate config in place AND push blinds into the engine.
+      // Game reads smallBlind/bigBlind only at hand start (postBlinds), so setBlinds
+      // here takes effect on the next hand and never corrupts the current one.
       (table.config as any).smallBlind = params.smallBlind;
       (table.config as any).bigBlind = params.bigBlind;
       (table.config as any).buyIn = params.buyIn;
+      table.game.setBlinds(params.smallBlind, params.bigBlind);
     }
   );
 }

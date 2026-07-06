@@ -29,7 +29,13 @@ export class Table {
     this.id = id;
     this.name = name;
     this.config = config;
-    this.game = new Game(id);
+    // Прокидываем блайнды и лимит хода из конфига стола в движок. Без этого Game
+    // играл захардкоженные 10/20 и 30с независимо от стола (Beginner/Pro/High Stakes).
+    this.game = new Game(id, {
+      smallBlind: config.smallBlind,
+      bigBlind: config.bigBlind,
+      turnTimeMs: config.turnTime * 1000,
+    });
     this.playerIds = new Set();
     this.status = 'waiting';
     this.createdAt = new Date();

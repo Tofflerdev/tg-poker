@@ -93,11 +93,6 @@ export interface ClientEvents {
   // Auto-start continuous game
   sitOut: () => void;     // NEW: добровольный сит-аут
   sitIn: () => void;      // NEW: вернуться за стол (будет ждать ББ)
-  // Dev only
-  flop: () => void;
-  turn: () => void;
-  river: () => void;
-  showdown: () => void;
 }
 
 // События сокетов (Server -> Client)
