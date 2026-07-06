@@ -23,6 +23,14 @@ export default class Game {
   private bigBlind: number = 20;
   private stage: GameStage = 'waiting';
   private lastRaisePosition: number | null = null;
+  // Размер последнего полного рейза (инкремент, на который вырос currentBet).
+  // Задаёт минимальный размер следующего рейза по правилам NLHE. Инициализируется
+  // большим блайндом на старте раздачи.
+  private lastRaiseSize: number = 20;
+  // Вклады игроков, покинувших стол посреди раздачи. Их фишки остаются в банке
+  // (игрок их форфейтит), чтобы деньги не «сгорали» при обнулении места (audit #4).
+  // Всегда folded — уходящий не может выиграть. Очищается в reset().
+  private deadContributions: { playerId: string; amount: number }[] = [];
 
   private turnTimer: NodeJS.Timeout | null = null;
   private turnExpiresAt: number | null = null;
@@ -48,11 +56,14 @@ export default class Game {
     if (options?.turnTimeMs !== undefined) this.turnTimeLimit = options.turnTimeMs;
   }
 
-  // Вспомогательный метод для получения общей суммы всех потов (включая текущие ставки)
+  // Общая сумма банка = все фишки, внесённые за раздачу. totalBet каждого игрока
+  // накапливается по всем улицам (сбрасывается только в reset()), поэтому сумма
+  // totalBet живых мест плюс «мёртвые» вклады ушедших даёт полный банк в любой момент
+  // — включая только что покинувших стол (audit #4), без просадки до конца улицы.
   private getTotalPot(): number {
-    const collectedPots = this.pots.reduce((sum, pot) => sum + pot.amount, 0);
-    const currentBets = this.seats.reduce((sum, player) => sum + (player ? player.bet : 0), 0);
-    return collectedPots + currentBets;
+    const seatTotal = this.seats.reduce((sum, player) => sum + (player ? player.totalBet : 0), 0);
+    const deadTotal = this.deadContributions.reduce((sum, d) => sum + d.amount, 0);
+    return seatTotal + deadTotal;
   }
 
   // Добавление игрока (разрешаем в любое время)
@@ -134,11 +145,10 @@ export default class Game {
       return true;
     }
 
+    const handActive = this.stage !== 'waiting' && this.stage !== 'showdown';
+
     // Если игрок в текущей раздаче (есть карты и не сфолдил)
-    const isInHand = this.stage !== 'waiting' &&
-                     this.stage !== 'showdown' &&
-                     player.hand.length > 0 &&
-                     !player.folded;
+    const isInHand = handActive && player.hand.length > 0 && !player.folded;
 
     if (isInHand) {
       // Авто-фолд при выходе во время раздачи
@@ -152,6 +162,15 @@ export default class Game {
         // Просто помечаем как сфолдившего
         player.folded = true;
       }
+    }
+
+    // Сохраняем уже внесённые в этот банк фишки уходящего игрока (audit #4). Иначе
+    // при обнулении места его totalBet исчезает из calculatePots и деньги «сгорают»
+    // — ни возврата уходящему, ни выигрыша оставшимся. Важно захватить ПОСЛЕ nextPlayer()
+    // выше: если тот дошёл до nextStage/showdown, calculatePots уже учёл место (ещё не
+    // обнулённое). calculatePots всегда пересчитывается целиком, поэтому двойного учёта нет.
+    if (handActive && player.totalBet > 0) {
+      this.deadContributions.push({ playerId: player.id, amount: player.totalBet });
     }
 
     this.seats = this.seats.map((p) => (p?.id === id ? null : p));
@@ -186,6 +205,8 @@ export default class Game {
     this.currentPlayer = null;
     this.stage = 'waiting';
     this.lastRaisePosition = null;
+    this.lastRaiseSize = this.bigBlind;
+    this.deadContributions = [];
     this.lastShowdown = null;
     
     this.seats.forEach((p) => {
@@ -388,13 +409,17 @@ export default class Game {
     const totalBet = toCall + amount;
 
     if (totalBet > player.chips) return false;
-    if (amount < this.bigBlind) return false;
+    // Мин-рейз по правилам NLHE: инкремент рейза не меньше размера последнего
+    // рейза (для первого рейза lastRaiseSize инициализируется большим блайндом).
+    // Раньше требовался только >= bigBlind, что позволяло нелегальные мини-ре-рейзы (audit #9).
+    if (amount < this.lastRaiseSize) return false;
 
     const prevBet = player.bet;
     player.chips -= totalBet;
     player.bet += totalBet;
     player.totalBet += totalBet;
     this.currentBet = player.bet;
+    this.lastRaiseSize = amount; // размер этого рейза задаёт минимум для следующего
 
     if (player.chips === 0) player.allIn = true;
 
@@ -442,11 +467,20 @@ export default class Game {
     player.acted = true;
 
     if (player.bet > this.currentBet) {
+      const raiseIncrement = player.bet - this.currentBet;
+      const isFullRaise = raiseIncrement >= this.lastRaiseSize;
       this.currentBet = player.bet;
-      // Если это рейз, сбрасываем acted у других
-      this.seats.forEach(p => {
-          if (p && p !== player) p.acted = false;
-      });
+
+      if (isFullRaise) {
+        // Полноценный рейз: обновляем минимум и переоткрываем торги остальным.
+        this.lastRaiseSize = raiseIncrement;
+        this.seats.forEach(p => {
+          if (p && p !== player && !p.folded && !p.allIn) p.acted = false;
+        });
+      }
+      // Андер-рейз олл-ином (меньше полного рейза) НЕ переоткрывает торги для уже
+      // походивших игроков (audit #9). Те, чья ставка меньше новой currentBet, всё
+      // равно получат ход через isBettingRoundComplete и смогут уравнять/сбросить.
     }
 
     this.onPlayerAction?.({
@@ -490,14 +524,22 @@ export default class Game {
 
   // Алгоритм расчета потов (основной + сайд-поты)
   private calculatePots(): Pot[] {
-    // Собираем все вклады игроков (включая сфолдивших)
-    const contributions = this.seats
+    // Собираем все вклады игроков (включая сфолдивших) плюс «мёртвые» вклады
+    // игроков, покинувших раздачу (audit #4) — они всегда folded, не могут выиграть,
+    // но их фишки остаются в банке для оставшихся игроков.
+    const seatContributions = this.seats
       .filter((p): p is Player => p !== null && p.totalBet > 0)
       .map(p => ({
         playerId: p.id,
         amount: p.totalBet,
         folded: p.folded
-      }))
+      }));
+    const deadContribs = this.deadContributions.map(d => ({
+      playerId: d.playerId,
+      amount: d.amount,
+      folded: true,
+    }));
+    const contributions = [...seatContributions, ...deadContribs]
       .sort((a, b) => a.amount - b.amount);
 
     if (contributions.length === 0) return [];
@@ -883,12 +925,37 @@ export default class Game {
     return fromSeat;
   }
 
+  // Следующее место с игроком, который РЕАЛЬНО играет эту раздачу (не пустое,
+  // не sit-out, не waitingForBB, есть фишки). Используется для позиций блайндов,
+  // чтобы блайнд не назначался отсиживающемуся/ждущему ББ игроку (audit #7).
+  private getNextEligibleSeat(fromSeat: number): number {
+    let seat = (fromSeat + 1) % this.seats.length;
+    let attempts = 0;
+    while (attempts < this.seats.length) {
+      const player = this.seats[seat];
+      if (player && this.canPlayerPlayInCurrentHand(player)) {
+        return seat;
+      }
+      seat = (seat + 1) % this.seats.length;
+      attempts++;
+    }
+    return fromSeat;
+  }
+
   private getSmallBlindPosition(): number {
-    return this.getNextSeat(this.dealerPosition);
+    // Хедз-ап (ровно 2 участника): баттон ставит малый блайнд и ходит первым
+    // на префлопе (audit #8). В остальных случаях SB — первый eligible слева от баттона.
+    if (this.getEligiblePlayers().length === 2) {
+      const dealer = this.seats[this.dealerPosition];
+      if (dealer && this.canPlayerPlayInCurrentHand(dealer)) {
+        return this.dealerPosition;
+      }
+    }
+    return this.getNextEligibleSeat(this.dealerPosition);
   }
 
   private getBigBlindPosition(): number {
-    return this.getNextSeat(this.getSmallBlindPosition());
+    return this.getNextEligibleSeat(this.getSmallBlindPosition());
   }
 
   getState(): GameState {
@@ -956,8 +1023,8 @@ export default class Game {
       ...state,
       seats: state.seats.map(p => {
         if (!p) return null;
-        
-        if (p.id === playerId) return p;
+
+        if (p.id === playerId) return this.toPublicPlayer(p);
 
         // Вскрываем карты, если:
         // 1. Это шоудаун (и не победа фолдом)
@@ -966,17 +1033,26 @@ export default class Game {
 
         if (!p.folded) {
           if (shouldReveal) {
-            return p;
+            return this.toPublicPlayer(p);
           }
           // Если победа фолдом, показываем только если игрок захотел
           if (this.stage === 'showdown' && isWinByFold && p.showCards) {
-            return p;
+            return this.toPublicPlayer(p);
           }
         }
 
-        return { ...p, hand: p.hand.map(() => "back") }; // скрываем карты
+        // Скрываем карты соперника
+        return this.toPublicPlayer({ ...p, hand: p.hand.map(() => "back") });
       }),
     };
+  }
+
+  // Публичное представление игрока для бродкаста: убираем транспортный socketId и
+  // числовой telegramId — клиенту они не нужны (он матчит своё место по строковому
+  // player.id), а их рассылка утекала бы всем за столом (audit #6).
+  private toPublicPlayer(p: Player): Omit<Player, 'socketId' | 'telegramId'> {
+    const { socketId: _socketId, telegramId: _telegramId, ...pub } = p;
+    return pub;
   }
 
   // Обновляет блайнды. Значения читаются только в postBlinds() на старте раздачи,
