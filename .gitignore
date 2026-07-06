@@ -16,3 +16,6 @@ screenshots/
 # Playtest bot data (raw session logs + generated reports)
 sessions/
 reports/
+
+# Internal audit notes (not for the repo)
+AUDIT.md
