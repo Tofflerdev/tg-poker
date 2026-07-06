@@ -1,4 +1,5 @@
 import "dotenv/config";
+import crypto from "crypto";
 import express from "express";
 import http from "http";
 import path from "path";
@@ -25,6 +26,7 @@ import * as Sentry from '@sentry/node';
 import { PostHog } from 'posthog-node';
 import { scrubSentryEvent } from './utils/scrubber.js';
 import { initAnalytics, toAnalyticsId, shutdownAnalytics } from './utils/analytics.js';
+import { RateLimiter } from './utils/rateLimit.js';
 import type {
   TelegramUser,
   AuthPayload,
@@ -60,7 +62,21 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
+// Behind nginx in prod — trust the first proxy so req.ip reflects the real client
+// IP (X-Forwarded-For) for rate limiting rather than the proxy's address.
+app.set('trust proxy', 1);
 const server = http.createServer(app);
+
+// Rate limiters (audit #11). Fixed-window, in-memory.
+// - admin login: 5 attempts / 15 min per IP — throttles password brute force.
+// - chat: 5 messages / 5 s per player — throttles flood.
+const adminLoginLimiter = new RateLimiter(5, 15 * 60 * 1000);
+const chatLimiter = new RateLimiter(5, 5 * 1000);
+const rateLimitSweep = setInterval(() => {
+  adminLoginLimiter.sweep();
+  chatLimiter.sweep();
+}, 60 * 1000);
+rateLimitSweep.unref?.();
 
 // CORS: allow all in dev, restrict in production
 const CORS_ORIGIN = process.env.NODE_ENV === 'production'
@@ -80,6 +96,11 @@ app.use(cors({ origin: CORS_ORIGIN, credentials: true }));
 // 8-hour JWT to a successful credential pair. Failure responses use a generic
 // message — no oracle distinction between "wrong username" and "wrong password".
 app.post('/api/admin/login', (req, res) => {
+  // Rate limit by client IP to throttle credential brute force (audit #11).
+  if (!adminLoginLimiter.take(req.ip ?? 'unknown')) {
+    res.status(429).json({ error: 'Too many attempts. Try again later.' });
+    return;
+  }
   const { username, password } = (req.body ?? {}) as { username?: unknown; password?: unknown };
   if (!validateCredentials(username, password)) {
     res.status(401).json({ error: 'Invalid credentials' });
@@ -274,6 +295,13 @@ const setupTableEvents = (tableId: string) => {
         });
         // (2) Authoritative chip/seat checkpoint — separate awaited path (D-14).
         await checkpointSeatedPlayers(evt);
+        // (2b) Profile stats (audit #12). Skip bots (negative telegramId) and
+        // players not dealt into this hand (no hole cards). winnings = netDelta.
+        await Promise.all(
+          evt.perPlayer
+            .filter((p) => Number(p.telegramId) > 0 && p.holeCards.length > 0)
+            .map((p) => UserRepository.updateStats(Number(p.telegramId), p.won, p.netDelta))
+        );
         // Phase 4 / Plan 04-06 / Pitfall 1: every per-player entry that is still in
         // mid-hand grace must be promoted to between-hands grace, so the 30 s
         // mid-hand timer doesn't spuriously fire AFTER the hand they disconnected
@@ -922,6 +950,11 @@ io.on("connection", (socket) => {
       return;
     }
 
+    // Rate limit per player to throttle flood (audit #5/#11).
+    if (!chatLimiter.take(telegramId)) {
+      return; // silent drop — client will just see its message not appear
+    }
+
     const tableId = tableManager.getPlayerTableId(telegramId);
     if (!tableId) {
       socket.emit("errorMessage", "You are not at a table");
@@ -931,10 +964,25 @@ io.on("connection", (socket) => {
     const table = tableManager.getTable(tableId);
     if (!table) return;
 
-    // Create full message with ID and timestamp
+    // SECURITY (audit #5): never trust client-supplied authorId/authorName — that
+    // allowed impersonation (posting as another player or as "System"). Take only
+    // the text from the payload and derive identity from the authenticated session.
+    const rawText = typeof messageData?.text === 'string' ? messageData.text : '';
+    const text = rawText.trim().slice(0, 300); // cap length; reject empty below
+    if (text.length === 0) return;
+
+    const user = userStorage.getUser(telegramId);
+    if (!user) return;
+
     const fullMessage = {
-      ...messageData,
-      id: `${telegramId}-${Date.now()}`, // use telegramId in message ID for traceability
+      // Opaque id — no raw telegramId leaked to other clients (audit #5).
+      id: crypto.randomUUID(),
+      // authorId = internal DB id (matches client's currentUser.id own-message check),
+      // NOT the telegram id.
+      authorId: user.id,
+      authorName: user.displayName || user.username || 'Player',
+      text,
+      type: 'player' as const,
       timestamp: Date.now(),
     };
 
@@ -947,7 +995,7 @@ io.on("connection", (socket) => {
       }
     });
 
-    console.log(`[Chat] ${tableId}: ${messageData.authorName}: ${messageData.text.substring(0, 50)}`);
+    console.log(`[Chat] ${tableId}: ${fullMessage.authorName}: ${text.substring(0, 50)}`);
   });
 
   // ==========================================

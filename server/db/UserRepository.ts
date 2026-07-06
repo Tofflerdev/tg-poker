@@ -331,26 +331,28 @@ export class UserRepository {
     return user ? this.mapToUserProfile(user) : null;
   }
 
-  static async updateStats(telegramId: number, won: boolean, winnings: number) {
+  /**
+   * Increment per-hand stats for one player. `winnings` is the net chip delta for
+   * the hand (may be negative). Called from the onHandComplete flow (audit #12).
+   */
+  static async updateStats(telegramId: number, won: boolean, winnings: number): Promise<void> {
     await prisma.user.update({
       where: { telegramId: BigInt(telegramId) },
       data: {
         handsPlayed: { increment: 1 },
         handsWon: won ? { increment: 1 } : undefined,
         totalWinnings: { increment: winnings },
-        biggestPot: winnings > 0 ? { set: Math.max(winnings, 0) } : undefined // Logic for biggest pot needs check against current biggest
       }
     });
-    
-    // Correct logic for biggest pot:
+
+    // biggestPot = max(biggestPot, winnings), race-free: a single guarded UPDATE
+    // (WHERE biggest_pot < winnings) instead of the old read-then-write TOCTOU that
+    // could overwrite a larger concurrent value (audit #12 / prior WR-03).
     if (winnings > 0) {
-        const user = await prisma.user.findUnique({ where: { telegramId: BigInt(telegramId) } });
-        if (user && winnings > user.biggestPot) {
-            await prisma.user.update({
-                where: { telegramId: BigInt(telegramId) },
-                data: { biggestPot: winnings }
-            });
-        }
+      await prisma.user.updateMany({
+        where: { telegramId: BigInt(telegramId), biggestPot: { lt: winnings } },
+        data: { biggestPot: winnings }
+      });
     }
   }
 
