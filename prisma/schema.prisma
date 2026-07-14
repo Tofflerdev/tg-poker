@@ -36,8 +36,52 @@ model User {
   // --- playtest bots ---
   isBot             Boolean   @default(false) @map("is_bot")
 
+  // --- crypto-payments-rake phase 1: ledger ---
+  transactions      Transaction[]
+
   @@index([currentTableId])
   @@map("users")
+}
+
+// crypto-payments-rake phase 1 — append-only money ledger.
+// Every balance mutation writes exactly one Transaction row inside the same
+// DB transaction as the balance UPDATE (see UserRepository). `amount` is a
+// signed chip delta (1 chip = 0.01 USDT peg). `balanceAfter` snapshots the
+// user's balance immediately after this entry. `externalId` is @unique to
+// make deposit/withdrawal webhooks idempotent (phase 4/5). Never UPDATE or
+// DELETE rows — corrections are new `adjustment` entries.
+enum TransactionType {
+  deposit
+  withdrawal
+  buyin
+  cashout
+  rake
+  bonus
+  adjustment
+  fee
+}
+
+enum TransactionStatus {
+  pending
+  completed
+  failed
+}
+
+model Transaction {
+  id           String            @id @default(cuid())
+  userId       Int?              @map("user_id")
+  user         User?             @relation(fields: [userId], references: [id])
+  type         TransactionType
+  amount       Int
+  balanceAfter Int               @map("balance_after")
+  externalId   String?           @unique @map("external_id")
+  status       TransactionStatus @default(completed)
+  meta         Json?
+  createdAt    DateTime          @default(now()) @map("created_at") @db.Timestamptz
+
+  @@index([userId, createdAt(sort: Desc)])
+  @@index([type, createdAt(sort: Desc)])
+  @@map("transactions")
 }
 
 model HandHistory {

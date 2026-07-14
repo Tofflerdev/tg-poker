@@ -699,7 +699,7 @@ io.on("connection", (socket) => {
 
     // Phase 4 / Plan 04-06 / D-D1, D-D2: atomic buy-in with insufficient-funds guard.
     // Closes Concern #5 (buy-in double-spend race) and #11 (rollback TODO).
-    const ok = await UserRepository.tryDecrementBalance(user.telegramId, tableInfo!.config.buyIn);
+    const ok = await UserRepository.tryDecrementBalance(user.telegramId, tableInfo!.config.buyIn, { tableId });
     if (!ok) {
       // Roll back the in-memory join (player was added by tableManager.joinTable above).
       socket.leave(tableId);
@@ -916,7 +916,7 @@ io.on("connection", (socket) => {
     }
 
     // Phase 4 / Plan 04-06 / D-D2: same atomic buy-in pattern as joinTable.
-    const ok2 = await UserRepository.tryDecrementBalance(user.telegramId, availableTable.config.buyIn);
+    const ok2 = await UserRepository.tryDecrementBalance(user.telegramId, availableTable.config.buyIn, { tableId: availableTable.id });
     if (!ok2) {
       socket.leave(availableTable.id);
       tableManager.leaveTable(telegramId);
