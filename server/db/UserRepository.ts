@@ -78,6 +78,36 @@ export class UserRepository {
     return user ? this.mapToTelegramUser(user) : null;
   }
 
+  /**
+   * crypto-payments-rake phase 2: append a `rake` row to the ledger.
+   *
+   * The rake chips are removed from play at hand settlement (Game.ts deducts
+   * them from the pots before payout), so this is purely an accounting record —
+   * it is the source of truth for total rake collected (invariant §E). Until the
+   * house account (§H) is introduced, the row is system-scoped: `userId` and
+   * `balanceAfter` are null and no balance is credited (the chips are simply out
+   * of circulation). `meta` carries { handId, tableId, breakdown } where
+   * `breakdown` is the per-participant rake split proportional to contribution —
+   * a hook for future rakeback with no schema change.
+   *
+   * No-op for `amount <= 0` (preflop folds / sub-threshold pots rake nothing).
+   */
+  static async recordRake(
+    amount: number,
+    meta: { handId: string; tableId: string; breakdown?: Record<string, number> }
+  ): Promise<void> {
+    if (!Number.isInteger(amount) || amount <= 0) return;
+    await prisma.transaction.create({
+      data: {
+        userId: null,
+        type: 'rake',
+        amount,
+        balanceAfter: null,
+        meta: meta as any,
+      },
+    });
+  }
+
   static async updateBalance(telegramId: number, amount: number): Promise<number> {
     const user = await prisma.user.update({
       where: { telegramId: BigInt(telegramId) },
@@ -90,18 +120,45 @@ export class UserRepository {
    * Plan 04-01 / RESILIENCE-07 / D-D1 / D-D2:
    * Atomic balance deduction with insufficient-funds guard.
    *
-   * Single SQL round-trip: `UPDATE users SET balance = balance - n WHERE telegram_id = ? AND balance >= n`.
+   * The guarded `UPDATE ... WHERE balance >= n` and the ledger `buyin` row are
+   * written inside one interactive DB transaction (crypto-payments-rake phase 1),
+   * so a successful buy-in and its ledger entry commit or roll back together.
+   * The UPDATE takes a row lock, so the subsequent read of `balance` for
+   * `balanceAfter` reflects our own write (no TOCTOU on the snapshot).
+   *
    * Returns true iff exactly one row was updated (caller had sufficient balance).
+   * On insufficient funds no row is touched and no ledger row is written.
    *
    * Closes Concern #5 (buy-in double-spend race) — no read-then-write window.
    * Verified safe on Prisma 7.4.2 (post issue #8612 fix in 4.4.0).
    */
-  static async tryDecrementBalance(telegramId: number, amount: number): Promise<boolean> {
-    const result = await prisma.user.updateMany({
-      where: { telegramId: BigInt(telegramId), balance: { gte: amount } },
-      data:  { balance: { decrement: amount } }
+  static async tryDecrementBalance(
+    telegramId: number,
+    amount: number,
+    meta?: Record<string, unknown>
+  ): Promise<boolean> {
+    return prisma.$transaction(async (tx) => {
+      const result = await tx.user.updateMany({
+        where: { telegramId: BigInt(telegramId), balance: { gte: amount } },
+        data:  { balance: { decrement: amount } }
+      });
+      if (result.count !== 1) return false;
+
+      const fresh = await tx.user.findUnique({
+        where: { telegramId: BigInt(telegramId) },
+        select: { id: true, balance: true }
+      });
+      await tx.transaction.create({
+        data: {
+          userId: fresh!.id,
+          type: 'buyin',
+          amount: -amount,
+          balanceAfter: fresh!.balance,
+          ...(meta ? { meta: meta as any } : {}),
+        }
+      });
+      return true;
     });
-    return result.count === 1;
   }
 
   /**
@@ -130,28 +187,46 @@ export class UserRepository {
    * Telegram IDs are ≤10 digits in 2026; BigInt(Number(telegramId)) round-trip is safe (Pitfall 7).
    */
   static async refundCurrentChips(telegramId: string): Promise<{ refunded: number } | null> {
-    const user = await prisma.user.findUnique({
-      where: { telegramId: BigInt(Number(telegramId)) },
-      select: { currentChips: true }
+    return prisma.$transaction(async (tx) => {
+      const user = await tx.user.findUnique({
+        where: { telegramId: BigInt(Number(telegramId)) },
+        select: { id: true, currentChips: true, currentTableId: true }
+      });
+      if (!user || user.currentChips === null) return null;
+
+      const chipsToRefund = user.currentChips;
+
+      const result = await tx.user.updateMany({
+        where: { telegramId: BigInt(Number(telegramId)), currentChips: { not: null } },
+        data:  {
+          balance: { increment: chipsToRefund },
+          currentChips: null,
+          currentTableId: null,
+          currentSeat: null,
+          disconnectedAt: null,
+          lastSeenAt: null
+        }
+      });
+
+      // Idempotency (Pitfall 3): a concurrent refund committed first → count 0.
+      // No balance change happened here, so we write no ledger row and bail.
+      if (result.count === 0) return null;
+
+      const fresh = await tx.user.findUnique({
+        where: { telegramId: BigInt(Number(telegramId)) },
+        select: { balance: true }
+      });
+      await tx.transaction.create({
+        data: {
+          userId: user.id,
+          type: 'cashout',
+          amount: chipsToRefund,
+          balanceAfter: fresh!.balance,
+          ...(user.currentTableId ? { meta: { tableId: user.currentTableId } } : {}),
+        }
+      });
+      return { refunded: chipsToRefund };
     });
-    if (!user || user.currentChips === null) return null;
-
-    const chipsToRefund = user.currentChips;
-
-    const result = await prisma.user.updateMany({
-      where: { telegramId: BigInt(Number(telegramId)), currentChips: { not: null } },
-      data:  {
-        balance: { increment: chipsToRefund },
-        currentChips: null,
-        currentTableId: null,
-        currentSeat: null,
-        disconnectedAt: null,
-        lastSeenAt: null
-      }
-    });
-
-    if (result.count === 0) return null;
-    return { refunded: chipsToRefund };
   }
 
   /**
@@ -171,22 +246,34 @@ export class UserRepository {
       return { success: false };
     }
     const tid = typeof telegramId === 'string' ? BigInt(telegramId) : BigInt(telegramId);
-    if (delta > 0) {
-      const result = await prisma.user.updateMany({
-        where: { telegramId: tid },
-        data:  { balance: { increment: delta } }
+    // The guarded UPDATE and the ledger `adjustment` row commit together
+    // (crypto-payments-rake phase 1).
+    return prisma.$transaction(async (tx) => {
+      if (delta > 0) {
+        const result = await tx.user.updateMany({
+          where: { telegramId: tid },
+          data:  { balance: { increment: delta } }
+        });
+        if (result.count !== 1) return { success: false };
+      } else {
+        // delta < 0 → require balance >= |delta|
+        const result = await tx.user.updateMany({
+          where: { telegramId: tid, balance: { gte: -delta } },
+          data:  { balance: { increment: delta } } // increment by negative number
+        });
+        if (result.count !== 1) return { success: false };
+      }
+      const fresh = await tx.user.findUnique({ where: { telegramId: tid }, select: { id: true, balance: true } });
+      await tx.transaction.create({
+        data: {
+          userId: fresh!.id,
+          type: 'adjustment',
+          amount: delta,
+          balanceAfter: fresh!.balance,
+        }
       });
-      if (result.count !== 1) return { success: false };
-    } else {
-      // delta < 0 → require balance >= |delta|
-      const result = await prisma.user.updateMany({
-        where: { telegramId: tid, balance: { gte: -delta } },
-        data:  { balance: { increment: delta } } // increment by negative number
-      });
-      if (result.count !== 1) return { success: false };
-    }
-    const fresh = await prisma.user.findUnique({ where: { telegramId: tid }, select: { balance: true } });
-    return { success: true, newBalance: fresh?.balance ?? undefined };
+      return { success: true, newBalance: fresh!.balance };
+    });
   }
 
   /**
@@ -212,36 +299,51 @@ export class UserRepository {
   }
 
   static async claimDailyBonus(telegramId: number): Promise<{ success: boolean; balance: number; nextClaimAt?: Date; message?: string }> {
-    const user = await prisma.user.findUnique({
-      where: { telegramId: BigInt(telegramId) }
-    });
-
-    if (!user) return { success: false, balance: 0, message: 'User not found' };
-
-    if (user.balance >= 1000) {
-      return { success: false, balance: user.balance, message: 'Balance is already 1000 or more' };
-    }
-
     const now = new Date();
-    const lastRefill = user.lastDailyRefill;
-    
-    if (lastRefill) {
-      const nextClaim = new Date(lastRefill.getTime() + 24 * 60 * 60 * 1000);
-      if (now < nextClaim) {
-        return { success: false, balance: user.balance, nextClaimAt: nextClaim, message: 'Daily bonus already claimed' };
-      }
-    }
+    // NOTE (crypto-payments-rake): daily bonus / play-money is slated for removal
+    // (plan §G) once deposits (phase 4) exist. Until then it stays testable, but
+    // the balance jump is recorded as a `bonus` ledger entry so the money
+    // invariant stays complete. Balance write + ledger row commit together.
+    return prisma.$transaction(async (tx) => {
+      const user = await tx.user.findUnique({
+        where: { telegramId: BigInt(telegramId) }
+      });
 
-    const updatedUser = await prisma.user.update({
-      where: { telegramId: BigInt(telegramId) },
-      data: {
-        balance: 1000,
-        lastDailyRefill: now
+      if (!user) return { success: false, balance: 0, message: 'User not found' };
+
+      if (user.balance >= 1000) {
+        return { success: false, balance: user.balance, message: 'Balance is already 1000 or more' };
       }
+
+      const lastRefill = user.lastDailyRefill;
+      if (lastRefill) {
+        const nextClaim = new Date(lastRefill.getTime() + 24 * 60 * 60 * 1000);
+        if (now < nextClaim) {
+          return { success: false, balance: user.balance, nextClaimAt: nextClaim, message: 'Daily bonus already claimed' };
+        }
+      }
+
+      const delta = 1000 - user.balance;
+      const updatedUser = await tx.user.update({
+        where: { telegramId: BigInt(telegramId) },
+        data: {
+          balance: 1000,
+          lastDailyRefill: now
+        }
+      });
+
+      await tx.transaction.create({
+        data: {
+          userId: user.id,
+          type: 'bonus',
+          amount: delta,
+          balanceAfter: updatedUser.balance,
+        }
+      });
+
+      const nextClaimAt = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+      return { success: true, balance: updatedUser.balance, nextClaimAt };
     });
-
-    const nextClaimAt = new Date(now.getTime() + 24 * 60 * 60 * 1000);
-    return { success: true, balance: updatedUser.balance, nextClaimAt };
   }
 
   static async updateProfile(telegramId: number, displayName?: string, avatarUrl?: string): Promise<UserProfile> {

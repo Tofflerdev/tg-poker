@@ -34,7 +34,8 @@ export interface Pot {
 // Результат распределения одного пота
 export interface PotResult {
   potName: string;
-  amount: number;
+  amount: number;              // gross pot size (before rake)
+  rake?: number;               // chips raked from THIS pot (phase 2); winner receives amount - rake
   winners: {
     id: string;
     descr: string;
@@ -58,6 +59,8 @@ export interface GameState {
   dealerPosition: number;
   smallBlind: number;
   bigBlind: number;
+  rakeBps: number;              // phase 2: rake in basis points (500 = 5%) for UI transparency
+  rakeCapBB: number;            // phase 2: per-hand rake cap in big blinds
   stage: GameStage;
   turnExpiresAt: number | null; // Timestamp окончания хода
   nextHandIn: number | null;  // NEW: timestamp когда начнется следующая раздача
@@ -196,6 +199,13 @@ export interface TableConfig {
   turnTime: number; // seconds
   buyIn: number;
   category: TableCategory;
+  // crypto-payments-rake phase 2 — rake structure. Integers only, no float on
+  // the money path. `rakeBps` is rake in basis points of the raked pot
+  // (500 = 5%). `rakeCapBB` caps the per-hand rake in big blinds (may be
+  // fractional, e.g. 2.5) — chips cap = floor(rakeCapBB * bigBlind).
+  // No-flop-no-drop and uncalled-bet exclusion are enforced in Game.ts.
+  rakeBps: number;
+  rakeCapBB: number;
 }
 
 export interface TableInfo {
@@ -338,6 +348,7 @@ export interface HandCompleteEvent {
   board: string[];              // game.communityCards snapshot
   perPlayer: HandCompletePerPlayer[];
   pots?: Pot[];                 // pot structure snapshot at completion (before clearing); for oracle/analysis
+  rake?: number;                // crypto-payments-rake phase 2: total chips raked this hand (0 if no flop / preflop fold)
 }
 
 // --- Phase 3 / Plan 03-04 (PROFILE-03, PROFILE-04): hand-history reader DTO ---

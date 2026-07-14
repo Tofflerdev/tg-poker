@@ -3,6 +3,7 @@ import Deck from "./Deck.js";
 import pkg from "pokersolver";
 import { Player, GameState, GameStage, Spectator, ShowdownResult, Pot, PotResult } from "../types/index.js";
 import type { PlayerActionEvent, HandCompleteEvent, PlayerActionKind } from '../types/index.js';
+import { computeRake } from './rake.js';
 const { Hand } = pkg;
 
 
@@ -21,6 +22,10 @@ export default class Game {
   private dealerPosition: number = 0;
   private smallBlind: number = 10;
   private bigBlind: number = 20;
+  // crypto-payments-rake phase 2 — rake structure from table config. Default 0
+  // (no rake) so unconfigured/legacy Game instances and tests stay rake-free.
+  private rakeBps: number = 0;
+  private rakeCapBB: number = 0;
   private stage: GameStage = 'waiting';
   private lastRaisePosition: number | null = null;
   // Размер последнего полного рейза (инкремент, на который вырос currentBet).
@@ -48,12 +53,14 @@ export default class Game {
 
   constructor(
     tableId: string = '',
-    options?: { smallBlind?: number; bigBlind?: number; turnTimeMs?: number }
+    options?: { smallBlind?: number; bigBlind?: number; turnTimeMs?: number; rakeBps?: number; rakeCapBB?: number }
   ) {
     this.tableId = tableId;
     if (options?.smallBlind !== undefined) this.smallBlind = options.smallBlind;
     if (options?.bigBlind !== undefined) this.bigBlind = options.bigBlind;
     if (options?.turnTimeMs !== undefined) this.turnTimeLimit = options.turnTimeMs;
+    if (options?.rakeBps !== undefined) this.rakeBps = options.rakeBps;
+    if (options?.rakeCapBB !== undefined) this.rakeCapBB = options.rakeCapBB;
   }
 
   // Общая сумма банка = все фишки, внесённые за раздачу. totalBet каждого игрока
@@ -64,6 +71,28 @@ export default class Game {
     const seatTotal = this.seats.reduce((sum, player) => sum + (player ? player.totalBet : 0), 0);
     const deadTotal = this.deadContributions.reduce((sum, d) => sum + d.amount, 0);
     return seatTotal + deadTotal;
+  }
+
+  /**
+   * crypto-payments-rake phase 2 — rake for the just-finished hand. Must be
+   * called AFTER `this.pots` is populated (calculatePots) and BEFORE pots are
+   * cleared/distributed. Pure math lives in `./rake.ts` (unit-tested); this only
+   * assembles live state. Dead contributions from mid-hand leavers are included
+   * so the uncalled-bet calculation stays correct.
+   */
+  private computeHandRake(): { total: number; perPot: number[] } {
+    const contributions = [
+      ...this.seats
+        .filter((p): p is Player => p !== null && p.totalBet > 0)
+        .map((p) => p.totalBet),
+      ...this.deadContributions.map((d) => d.amount),
+    ];
+    return computeRake({
+      pots: this.pots,
+      contributions,
+      communityCardCount: this.communityCards.length,
+      params: { rakeBps: this.rakeBps, rakeCapBB: this.rakeCapBB, bigBlind: this.bigBlind },
+    });
   }
 
   // Добавление игрока (разрешаем в любое время)
@@ -626,17 +655,21 @@ export default class Game {
     // Если остался только один игрок - он победитель
     if (activePlayers.length === 1) {
       const winner = activePlayers[0];
-      
-      // Выдаем все поты победителю
-      const totalWon = this.getTotalPot();
+
+      // crypto-payments-rake phase 2: rake is taken BEFORE awarding. Win-by-fold
+      // only rakes once a flop was seen (no-flop-no-drop) and never the uncalled
+      // portion — both enforced inside computeHandRake().
+      const rake = this.computeHandRake();
+      const totalWon = this.getTotalPot() - rake.total;
       winner.chips += totalWon;
 
       // Создаем искусственный результат "showdown", чтобы фронтенд понял, что игра окончена
       this.lastShowdown = {
         results: [], // Пустой список результатов, т.к. карты не сравнивались
-        potResults: this.pots.map(pot => ({
+        potResults: this.pots.map((pot, i) => ({
           potName: pot.name,
           amount: pot.amount,
+          rake: rake.perPot[i],
           winners: [{ id: winner.id, descr: "Win by Fold" }]
         })),
         winners: [{
@@ -669,6 +702,7 @@ export default class Game {
             contributed: p.totalBet,
           })),
           pots: potsSnapshot,
+          rake: rake.total,
         };
         this.onHandComplete?.(handCompleteEvt);
         this.currentHandId = null;
@@ -794,41 +828,49 @@ export default class Game {
       };
     });
 
+    // crypto-payments-rake phase 2: rake is taken BEFORE distribution. Computed
+    // once for the whole hand (single cap across side pots) and split per pot;
+    // each pot pays out its amount minus its rake share.
+    const rake = this.computeHandRake();
+
     // Обрабатываем каждый пот отдельно
     const potResults: PotResult[] = [];
-    
-    for (const pot of this.pots) {
+
+    this.pots.forEach((pot, potIndex) => {
       // Фильтруем только eligible игроков для этого пота
-      const eligibleHands = playerHands.filter(ph => 
+      const eligibleHands = playerHands.filter(ph =>
         pot.eligiblePlayers.includes(ph.player.id)
       );
-      
-      if (eligibleHands.length === 0) continue;
-      
+
+      if (eligibleHands.length === 0) return;
+
       // Находим победителей для этого пота
       const winnerHands = Hand.winners(eligibleHands.map(h => h.hand));
       const winners = eligibleHands.filter(h => winnerHands.includes(h.hand));
-      
-      // Распределяем пот. Нечётный остаток (odd chip) не теряется: по правилам
-      // покера лишние фишки достаются игрокам ближе всего слева от баттона.
-      const base = Math.floor(pot.amount / winners.length);
-      const remainder = pot.amount - base * winners.length;
+
+      // Распределяем пот ЗА ВЫЧЕТОМ рейка. Нечётный остаток (odd chip) не теряется:
+      // по правилам покера лишние фишки достаются игрокам ближе всего слева от баттона.
+      const potRake = rake.perPot[potIndex] ?? 0;
+      const payout = pot.amount - potRake;
+      const base = Math.floor(payout / winners.length);
+      const remainder = payout - base * winners.length;
       const ordered = [...winners].sort(
         (a, b) => this.seatOrderFromDealer(a.player.seat) - this.seatOrderFromDealer(b.player.seat)
       );
       ordered.forEach((w, i) => {
         w.player.chips += base + (i < remainder ? 1 : 0);
       });
-      
+
       potResults.push({
         potName: pot.name,
         amount: pot.amount,
+        rake: potRake,
         winners: winners.map(w => ({
           id: w.player.id,
           descr: w.descr
         }))
       });
-    }
+    });
 
     // Формируем результат showdown
     this.lastShowdown = {
@@ -870,6 +912,7 @@ export default class Game {
           contributed: p.totalBet,
         })),
         pots: potsSnapshot,
+        rake: rake.total,
       };
       this.onHandComplete?.(handCompleteEvt);
       this.currentHandId = null;
@@ -970,6 +1013,8 @@ export default class Game {
       dealerPosition: this.dealerPosition,
       smallBlind: this.smallBlind,
       bigBlind: this.bigBlind,
+      rakeBps: this.rakeBps,
+      rakeCapBB: this.rakeCapBB,
       stage: this.stage,
       turnExpiresAt: this.turnExpiresAt,
       nextHandIn: this.nextHandIn,

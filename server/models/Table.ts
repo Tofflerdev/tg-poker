@@ -35,6 +35,8 @@ export class Table {
       smallBlind: config.smallBlind,
       bigBlind: config.bigBlind,
       turnTimeMs: config.turnTime * 1000,
+      rakeBps: config.rakeBps,
+      rakeCapBB: config.rakeCapBB,
     });
     this.playerIds = new Set();
     this.status = 'waiting';
