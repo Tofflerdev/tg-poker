@@ -17,7 +17,7 @@ function makeTable(overrides: Partial<AdminTableInfo> = {}): AdminTableInfo {
     botCount: 0,
     botsContinue: false,
     handInProgress: false,
-    config: { smallBlind: 5, bigBlind: 10, buyIn: 500 },
+    config: { smallBlind: 5, bigBlind: 10, minBuyIn: 400, maxBuyIn: 1000 },
     ...overrides,
   } as AdminTableInfo;
 }

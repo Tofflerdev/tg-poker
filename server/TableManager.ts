@@ -1,5 +1,6 @@
 import { Table } from './models/Table.js';
 import { userStorage } from './models/User.js';
+import { clampBuyIn } from './config/tables.js';
 import type { TableConfig, TableInfo, TableStatus } from '../types/index.js';
 
 /**
@@ -47,7 +48,8 @@ export class TableManager {
           bigBlind: 10,
           maxPlayers: 6,
           turnTime: 30,
-          buyIn: 500,
+          minBuyIn: 400,
+          maxBuyIn: 1000,
           category: 'cash',
           rakeBps: 500,
           rakeCapBB: 4,
@@ -61,7 +63,8 @@ export class TableManager {
           bigBlind: 20,
           maxPlayers: 6,
           turnTime: 30,
-          buyIn: 1000,
+          minBuyIn: 800,
+          maxBuyIn: 2000,
           category: 'cash',
           rakeBps: 500,
           rakeCapBB: 4,
@@ -75,7 +78,8 @@ export class TableManager {
           bigBlind: 50,
           maxPlayers: 6,
           turnTime: 20,
-          buyIn: 2500,
+          minBuyIn: 2000,
+          maxBuyIn: 5000,
           category: 'cash',
           rakeBps: 500,
           rakeCapBB: 3,
@@ -89,7 +93,8 @@ export class TableManager {
           bigBlind: 200,
           maxPlayers: 6,
           turnTime: 15,
-          buyIn: 10000,
+          minBuyIn: 8000,
+          maxBuyIn: 20000,
           category: 'cash',
           rakeBps: 500,
           rakeCapBB: 2.5,
@@ -190,7 +195,7 @@ export class TableManager {
    * @param tableId     target table
    * @param seat        seat number, or -1 for auto-assign
    */
-  joinTable(telegramId: string, tableId: string, seat: number): { success: boolean; error?: string; seat?: number } {
+  joinTable(telegramId: string, tableId: string, seat: number, buyInAmount?: number): { success: boolean; error?: string; seat?: number; buyIn?: number } {
     // Check if player is already at another table
     const currentTableId = this.playerToTable.get(telegramId);
     if (currentTableId && currentTableId !== tableId) {
@@ -218,10 +223,15 @@ export class TableManager {
       return { success: false, error: 'User not found' };
     }
 
+    // crypto-payments-rake phase 3: seat with the chosen buy-in, clamped to the
+    // table's [minBuyIn, maxBuyIn] range (defaults to maxBuyIn when unspecified).
+    // The server-side balance deduction in index.ts uses this same clamped amount.
+    const chips = clampBuyIn(buyInAmount, table.config);
+
     const success = table.addPlayer(
       telegramId,
       seat,
-      table.config.buyIn,
+      chips,
       user.telegramId,
       user.displayName,
       user.avatarUrl,
@@ -230,7 +240,7 @@ export class TableManager {
 
     if (success) {
       this.playerToTable.set(telegramId, tableId);
-      return { success: true, seat };
+      return { success: true, seat, buyIn: chips };
     }
 
     return { success: false, error: 'Failed to join table' };

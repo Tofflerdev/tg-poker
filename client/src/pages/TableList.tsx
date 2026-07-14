@@ -26,9 +26,10 @@ interface TableListProps {
  * preserved from the previous implementation.
  */
 
-type Tier = 'Beginner' | 'Standard' | 'Pro' | 'High Stakes';
+type Tier = 'Funnel' | 'Beginner' | 'Standard' | 'Pro' | 'High Stakes';
 
 const TIER_ORDER: readonly Tier[] = [
+  'Funnel',
   'Beginner',
   'Standard',
   'Pro',
@@ -36,6 +37,7 @@ const TIER_ORDER: readonly Tier[] = [
 ] as const;
 
 const TIER_VARIANT: Record<Tier, ActionTier> = {
+  Funnel: 'active',
   Beginner: 'sit',
   Standard: 'call',
   Pro: 'raise',
@@ -44,6 +46,7 @@ const TIER_VARIANT: Record<Tier, ActionTier> = {
 
 function tierOf(t: TableInfo): Tier {
   const bb = t.config.bigBlind;
+  if (bb <= 2) return 'Funnel';
   if (bb <= 10) return 'Beginner';
   if (bb <= 20) return 'Standard';
   if (bb <= 50) return 'Pro';
@@ -52,6 +55,7 @@ function tierOf(t: TableInfo): Tier {
 
 function groupByTier(tables: TableInfo[]): Record<Tier, TableInfo[]> {
   const groups: Record<Tier, TableInfo[]> = {
+    Funnel: [],
     Beginner: [],
     Standard: [],
     Pro: [],
@@ -349,26 +353,27 @@ const TableRow: React.FC<TableRowProps> = ({ table, variant, onSelect }) => {
           </span>
         </div>
 
-        {/* Right: buy-in + N/6 */}
+        {/* Right: buy-in range + N/6 */}
         <div
           style={{
             display: 'flex',
             flexDirection: 'column',
             alignItems: 'flex-end',
-            minWidth: 64,
+            minWidth: 74,
           }}
         >
           <span
             style={{
               fontFamily:
                 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
-              fontSize: 13,
+              fontSize: 12,
               color: 'var(--color-chip)',
               textShadow: '0 0 6px var(--glow-raise)',
               letterSpacing: '0.02em',
+              whiteSpace: 'nowrap',
             }}
           >
-            {table.config.buyIn.toLocaleString()}
+            {table.config.minBuyIn.toLocaleString()}–{table.config.maxBuyIn.toLocaleString()}
           </span>
           <span
             style={{

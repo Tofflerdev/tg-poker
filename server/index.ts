@@ -12,6 +12,7 @@ import { assertSafeBootOrExit, validateInitData, createUserFromInitData } from "
 import { gateUserOrEmit } from "./middleware/joinGate.js";
 import { userStorage } from "./models/User.js";
 import { tableManager } from "./TableManager.js";
+import { clampBuyIn } from "./config/tables.js";
 import { BotDriver } from "./bot/BotDriver.js";
 import { SessionRecorder } from "./bot/SessionRecorder.js";
 import { UserRepository } from "./db/UserRepository.js";
@@ -683,14 +684,14 @@ io.on("connection", (socket) => {
   });
 
   // Join a specific table and seat
-  socket.on("joinTable", async (payload: { tableId: string; seat: number }) => {
+  socket.on("joinTable", async (payload: { tableId: string; seat: number; buyInAmount?: number }) => {
     const telegramId = socket.data.telegramId;
     if (!telegramId) {
       socket.emit("authError", { message: 'Not authenticated' } as any);
       return;
     }
 
-    const { tableId, seat } = payload;
+    const { tableId, seat, buyInAmount } = payload;
     const user = userStorage.getUser(telegramId);
 
     if (!user) {
@@ -704,11 +705,17 @@ io.on("connection", (socket) => {
       return;
     }
 
-    // Check balance against buy-in
+    // crypto-payments-rake phase 3: buy-in is a range. Clamp the requested amount
+    // to [minBuyIn, maxBuyIn] (defaulting to maxBuyIn) and check the balance
+    // against that. The authoritative seated amount comes back from joinTable.
     const tableInfo = tableManager.getTable(tableId);
-    if (tableInfo && user.balance < tableInfo.config.buyIn) {
-      socket.emit("tableError", `Insufficient balance. Buy-in is ${tableInfo.config.buyIn}`);
-      return;
+    if (tableInfo) {
+      const cfg = tableInfo.config;
+      const effectiveBuyIn = clampBuyIn(buyInAmount, cfg);
+      if (user.balance < effectiveBuyIn) {
+        socket.emit("tableError", `Insufficient balance. Buy-in for this table is ${cfg.minBuyIn}–${cfg.maxBuyIn}.`);
+        return;
+      }
     }
 
     // Leave current table if at one
@@ -718,8 +725,8 @@ io.on("connection", (socket) => {
       tableManager.leaveTable(telegramId);
     }
 
-    // Join new table
-    const result = tableManager.joinTable(telegramId, tableId, seat);
+    // Join new table (seats with the clamped buy-in; returns the exact chips seated)
+    const result = tableManager.joinTable(telegramId, tableId, seat, buyInAmount);
 
     if (!result.success) {
       socket.emit("tableError", result.error || "Failed to join table");
@@ -727,13 +734,15 @@ io.on("connection", (socket) => {
     }
 
     // Phase 4 / Plan 04-06 / D-D1, D-D2: atomic buy-in with insufficient-funds guard.
-    // Closes Concern #5 (buy-in double-spend race) and #11 (rollback TODO).
-    const ok = await UserRepository.tryDecrementBalance(user.telegramId, tableInfo!.config.buyIn, { tableId });
+    // Deduct EXACTLY the chips that were seated (result.buyIn) so balance and
+    // in-play chips stay in lock-step. Closes Concern #5 (double-spend race).
+    const seatedBuyIn = result.buyIn ?? tableInfo!.config.maxBuyIn;
+    const ok = await UserRepository.tryDecrementBalance(user.telegramId, seatedBuyIn, { tableId });
     if (!ok) {
       // Roll back the in-memory join (player was added by tableManager.joinTable above).
       socket.leave(tableId);
       tableManager.leaveTable(telegramId);
-      socket.emit("tableError", `Insufficient balance. Buy-in is ${tableInfo!.config.buyIn}`);
+      socket.emit("tableError", `Insufficient balance. Buy-in for this table is ${tableInfo!.config.minBuyIn}–${tableInfo!.config.maxBuyIn}.`);
       return;
     }
     // Reflect new balance to the client (updateMany doesn't return the row).
@@ -932,12 +941,14 @@ io.on("connection", (socket) => {
       socket.emit("errorMessage", "Auth required");
       return;
     }
-    if (user.balance < availableTable.config.buyIn) {
+    // Legacy quick-join: no amount picker, so buy in for the table minimum
+    // (cheapest safe default). Phase 3 range still applies via joinTable clamp.
+    if (user.balance < availableTable.config.minBuyIn) {
       socket.emit("errorMessage", "Insufficient balance");
       return;
     }
 
-    const result = tableManager.joinTable(telegramId, availableTable.id, seat);
+    const result = tableManager.joinTable(telegramId, availableTable.id, seat, availableTable.config.minBuyIn);
 
     if (!result.success) {
       socket.emit("errorMessage", result.error || "Failed to join table");
@@ -945,7 +956,8 @@ io.on("connection", (socket) => {
     }
 
     // Phase 4 / Plan 04-06 / D-D2: same atomic buy-in pattern as joinTable.
-    const ok2 = await UserRepository.tryDecrementBalance(user.telegramId, availableTable.config.buyIn, { tableId: availableTable.id });
+    const seatedBuyIn2 = result.buyIn ?? availableTable.config.minBuyIn;
+    const ok2 = await UserRepository.tryDecrementBalance(user.telegramId, seatedBuyIn2, { tableId: availableTable.id });
     if (!ok2) {
       socket.leave(availableTable.id);
       tableManager.leaveTable(telegramId);

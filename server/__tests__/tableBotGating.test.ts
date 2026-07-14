@@ -3,7 +3,7 @@ import { Table } from '../models/Table.js';
 import type { TableConfig } from '../../types/index.js';
 
 const CONFIG: TableConfig = {
-  smallBlind: 5, bigBlind: 10, maxPlayers: 6, turnTime: 30, buyIn: 500, category: 'cash',
+  smallBlind: 5, bigBlind: 10, maxPlayers: 6, turnTime: 30, minBuyIn: 400, maxBuyIn: 1000, category: 'cash',
 };
 
 const seatHuman = (t: Table, seat: number, id: string) =>

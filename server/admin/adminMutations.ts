@@ -244,7 +244,7 @@ export async function addBots(adminUser: string, tableId: string, count: number)
         const ok = table.addPlayer(
           String(identity.telegramId),
           seat,
-          table.config.buyIn,
+          table.config.maxBuyIn,
           identity.telegramId,
           identity.displayName,
           undefined,
@@ -300,11 +300,11 @@ export async function editTableParams(
   adminNs: AdminNs,
   adminUser: string,
   tableId: string,
-  params: { smallBlind: number; bigBlind: number; buyIn: number }
+  params: { smallBlind: number; bigBlind: number; minBuyIn: number; maxBuyIn: number }
 ): Promise<void> {
   const table = tableManager.getTable(tableId);
   if (!table) throw new Error(`Table ${tableId} not found`);
-  const before = { smallBlind: table.config.smallBlind, bigBlind: table.config.bigBlind, buyIn: table.config.buyIn };
+  const before = { smallBlind: table.config.smallBlind, bigBlind: table.config.bigBlind, minBuyIn: table.config.minBuyIn, maxBuyIn: table.config.maxBuyIn };
   await runWithAudit(
     { adminUser, action: 'editTableParams', targetType: 'table', targetId: tableId, beforeJson: before, afterJson: params },
     async () => {
@@ -313,7 +313,8 @@ export async function editTableParams(
       // here takes effect on the next hand and never corrupts the current one.
       (table.config as any).smallBlind = params.smallBlind;
       (table.config as any).bigBlind = params.bigBlind;
-      (table.config as any).buyIn = params.buyIn;
+      (table.config as any).minBuyIn = params.minBuyIn;
+      (table.config as any).maxBuyIn = params.maxBuyIn;
       table.game.setBlinds(params.smallBlind, params.bigBlind);
     }
   );

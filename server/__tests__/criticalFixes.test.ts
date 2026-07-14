@@ -50,7 +50,7 @@ describe('raise input validation (audit 1.2 — NaN/float/negative must not corr
 
 describe('blind config wiring (audit 2.1 — engine must use table config, not hardcoded 10/20)', () => {
   const cfg = (over: Partial<TableConfig> = {}): TableConfig => ({
-    smallBlind: 5, bigBlind: 10, maxPlayers: 6, turnTime: 20, buyIn: 500, category: 'cash', ...over,
+    smallBlind: 5, bigBlind: 10, maxPlayers: 6, turnTime: 20, minBuyIn: 400, maxBuyIn: 1000, category: 'cash', ...over,
   });
 
   it('Table posts blinds from its config, not the engine default', () => {
