@@ -197,7 +197,11 @@ export interface TableConfig {
   bigBlind: number;
   maxPlayers: number;
   turnTime: number; // seconds
-  buyIn: number;
+  // crypto-payments-rake phase 3 — buy-in is a range (40–100BB), not a fixed
+  // amount. The player picks any integer chip count within [minBuyIn, maxBuyIn]
+  // when sitting down. Deep stacks (100BB) are kept intentionally (plan §B).
+  minBuyIn: number;
+  maxBuyIn: number;
   category: TableCategory;
   // crypto-payments-rake phase 2 — rake structure. Integers only, no float on
   // the money path. `rakeBps` is rake in basis points of the raked pot
@@ -283,7 +287,7 @@ export interface ChatMessage {
 export interface ExtendedClientEvents extends ClientEvents {
   auth: (payload: AuthPayload) => void;
   getTables: () => void;
-  joinTable: (payload: { tableId: string; seat: number }) => void;
+  joinTable: (payload: { tableId: string; seat: number; buyInAmount?: number }) => void;
   leaveTable: () => void;
   // Chat
   sendChatMessage: (message: Omit<ChatMessage, 'id' | 'timestamp'>) => void;
@@ -470,7 +474,7 @@ export interface AdminClientEvents {
   enableTable: (payload: { tableId: string }) => void;
   disableTable: (payload: { tableId: string }) => void;
   drainTable: (payload: { tableId: string }) => void;
-  editTableParams: (payload: { tableId: string; smallBlind: number; bigBlind: number; buyIn: number }) => void;
+  editTableParams: (payload: { tableId: string; smallBlind: number; bigBlind: number; minBuyIn: number; maxBuyIn: number }) => void;
   kickUser: (payload: { telegramId: string }) => void;
   banUser: (payload: { telegramId: string }) => void;
   grantBalance: (payload: { telegramId: string; delta: number }) => void;

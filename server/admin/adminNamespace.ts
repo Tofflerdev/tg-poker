@@ -100,15 +100,17 @@ export function setupAdminNamespace(io: Server, deps: AdminNamespaceDeps): void 
         socket.emit('adminError', { code: 'DRAIN_TABLE_FAILED', message: (err as Error).message });
       }
     });
-    socket.on('editTableParams', async ({ tableId, smallBlind, bigBlind, buyIn }) => {
+    socket.on('editTableParams', async ({ tableId, smallBlind, bigBlind, minBuyIn, maxBuyIn }) => {
       // Validate basic invariants server-side too (defense-in-depth — UI uses zod).
-      if (!Number.isInteger(smallBlind) || !Number.isInteger(bigBlind) || !Number.isInteger(buyIn) ||
-          smallBlind <= 0 || bigBlind <= 0 || buyIn <= 0 || bigBlind !== smallBlind * 2) {
-        socket.emit('adminError', { code: 'INVALID_PARAMS', message: 'Invalid table params (need positive ints; bigBlind = 2 * smallBlind)' });
+      if (!Number.isInteger(smallBlind) || !Number.isInteger(bigBlind) ||
+          !Number.isInteger(minBuyIn) || !Number.isInteger(maxBuyIn) ||
+          smallBlind <= 0 || bigBlind <= 0 || minBuyIn <= 0 || maxBuyIn <= 0 ||
+          bigBlind !== smallBlind * 2 || minBuyIn > maxBuyIn) {
+        socket.emit('adminError', { code: 'INVALID_PARAMS', message: 'Invalid table params (positive ints; bigBlind = 2 * smallBlind; minBuyIn ≤ maxBuyIn)' });
         return;
       }
       try {
-        await editTableParams(adminNs as any, adminUser, tableId, { smallBlind, bigBlind, buyIn });
+        await editTableParams(adminNs as any, adminUser, tableId, { smallBlind, bigBlind, minBuyIn, maxBuyIn });
         const info = buildAdminTableInfo(tableId);
         if (info) adminNs.emit('tableStateChanged', info);
       } catch (err) {

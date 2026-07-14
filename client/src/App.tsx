@@ -12,6 +12,7 @@ import { ToS } from "./pages/legal/ToS";
 import { Privacy } from "./pages/legal/Privacy";
 import { ResponsibleGaming } from "./pages/legal/ResponsibleGaming";
 import { ReconnectOverlay } from "./components/ReconnectOverlay";
+import BuyInModal from "./components/BuyInModal";
 import "./styles/telegram.css";
 import "./styles/neon.css";
 import type {
@@ -126,6 +127,8 @@ const App: React.FC = () => {
   const [view, setView] = useState<AppView>('loading');
   const [authError, setAuthError] = useState<string | null>(null);
   const [currentUser, setCurrentUser] = useState<TelegramUser | null>(null);
+  // crypto-payments-rake phase 3: table pending a buy-in-amount choice.
+  const [pendingTable, setPendingTable] = useState<TableInfo | null>(null);
   
   // Tables state
   const [tables, setTables] = useState<TableInfo[]>([]);
@@ -352,18 +355,25 @@ const App: React.FC = () => {
   // Actions
   const handleFindTable = useCallback(() => {
     hapticFeedback?.impactOccurred('medium');
-    // Find first non-full table and join
+    // Find first non-full table, then open the buy-in picker for it.
     socket.emit("getTables");
     socket.once("tablesList", (tablesData) => {
       const availableTable = tablesData.find(t => t.status !== 'full');
       if (availableTable) {
-        // Auto-select seat (-1 means server will find first available)
-        socket.emit("joinTable", { tableId: availableTable.id, seat: -1 });
+        setPendingTable(availableTable);
       } else {
         alert('Нет доступных столов');
       }
     });
   }, [hapticFeedback]);
+
+  // crypto-payments-rake phase 3: confirm the chosen buy-in amount and join.
+  const handleConfirmBuyIn = useCallback((amount: number) => {
+    if (!pendingTable) return;
+    hapticFeedback?.impactOccurred('medium');
+    socket.emit("joinTable", { tableId: pendingTable.id, seat: -1, buyInAmount: amount });
+    setPendingTable(null);
+  }, [pendingTable, hapticFeedback]);
 
   const handleShowTables = useCallback(() => {
     hapticFeedback?.impactOccurred('light');
@@ -373,9 +383,10 @@ const App: React.FC = () => {
 
   const handleSelectTable = useCallback((tableId: string) => {
     hapticFeedback?.impactOccurred('medium');
-    // Auto-select seat (-1 means server will find first available)
-    socket.emit("joinTable", { tableId, seat: -1 });
-  }, [hapticFeedback]);
+    // Open the buy-in picker; the actual join happens on confirm.
+    const table = tables.find((t) => t.id === tableId);
+    if (table) setPendingTable(table);
+  }, [hapticFeedback, tables]);
 
   const handleLeaveTable = useCallback(() => {
     socket.emit("leaveTable");
@@ -430,6 +441,17 @@ const App: React.FC = () => {
     />
   );
 
+  // crypto-payments-rake phase 3: buy-in amount picker, shown over the menu /
+  // table list when a table is selected. Confirming emits joinTable.
+  const buyInSheet = pendingTable ? (
+    <BuyInModal
+      table={pendingTable}
+      balance={currentUser?.balance ?? 0}
+      onConfirm={handleConfirmBuyIn}
+      onCancel={() => setPendingTable(null)}
+    />
+  ) : null;
+
   // Auth error view
   if (view === 'auth') {
     return (
@@ -483,6 +505,7 @@ const App: React.FC = () => {
           }}
           onClaimBonus={handleClaimBonus}
         />
+        {buyInSheet}
       </>
     );
   }
@@ -498,6 +521,7 @@ const App: React.FC = () => {
           onSelectTable={handleSelectTable}
           onBack={handleBackFromTables}
         />
+        {buyInSheet}
       </>
     );
   }

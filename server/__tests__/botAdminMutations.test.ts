@@ -23,7 +23,7 @@ function makeFakeTable(occupied: { seat: number; isBot: boolean; id?: string }[]
   });
   return {
     seats,
-    config: { buyIn: 500 },
+    config: { minBuyIn: 400, maxBuyIn: 1000 },
     getState: () => ({ seats }),
     findFirstAvailableSeat: () => seats.findIndex((s) => s === null),
     addPlayer: vi.fn((id: string, seat: number) => {

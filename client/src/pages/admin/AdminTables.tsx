@@ -38,7 +38,7 @@ const STATUS_LABEL: Record<AdminTableInfo['status'], string> = {
 export const AdminTables: React.FC<Props> = ({ state, socket }) => {
   const [confirmDrain, setConfirmDrain] = useState<string | null>(null);
   const [editTable, setEditTable] = useState<string | null>(null);
-  const [editForm, setEditForm] = useState({ smallBlind: '', bigBlind: '', buyIn: '' });
+  const [editForm, setEditForm] = useState({ smallBlind: '', bigBlind: '', minBuyIn: '', maxBuyIn: '' });
   const [editError, setEditError] = useState<string | null>(null);
   // Per-table "how many bots to add" selector (defaults to 3).
   const [botCounts, setBotCounts] = useState<Record<string, number>>({});
@@ -55,10 +55,11 @@ export const AdminTables: React.FC<Props> = ({ state, socket }) => {
   const submitEdit = (tableId: string) => {
     const sb = Number.parseInt(editForm.smallBlind, 10);
     const bb = Number.parseInt(editForm.bigBlind, 10);
-    const bi = Number.parseInt(editForm.buyIn, 10);
-    if (![sb, bb, bi].every((n) => Number.isInteger(n) && n > 0) || bb !== sb * 2) {
+    const minBi = Number.parseInt(editForm.minBuyIn, 10);
+    const maxBi = Number.parseInt(editForm.maxBuyIn, 10);
+    if (![sb, bb, minBi, maxBi].every((n) => Number.isInteger(n) && n > 0) || bb !== sb * 2 || minBi > maxBi) {
       setEditError(
-        'Values must be positive integers; big blind must equal 2x small blind.'
+        'Positive integers; big blind = 2× small blind; min buy-in ≤ max buy-in.'
       );
       return;
     }
@@ -66,7 +67,8 @@ export const AdminTables: React.FC<Props> = ({ state, socket }) => {
       tableId,
       smallBlind: sb,
       bigBlind: bb,
-      buyIn: bi,
+      minBuyIn: minBi,
+      maxBuyIn: maxBi,
     });
     setEditTable(null);
     setEditError(null);
@@ -138,7 +140,8 @@ export const AdminTables: React.FC<Props> = ({ state, socket }) => {
                 setEditForm({
                   smallBlind: String(t.config.smallBlind),
                   bigBlind: String(t.config.bigBlind),
-                  buyIn: String(t.config.buyIn),
+                  minBuyIn: String(t.config.minBuyIn),
+                  maxBuyIn: String(t.config.maxBuyIn),
                 });
               }}
             >
@@ -250,11 +253,21 @@ export const AdminTables: React.FC<Props> = ({ state, socket }) => {
                   />
                 </label>
                 <label style={{ flex: 1, color: 'var(--color-neutral)' }}>
-                  Buy-in
+                  Min buy-in
                   <input
-                    value={editForm.buyIn}
+                    value={editForm.minBuyIn}
                     onChange={(e) =>
-                      setEditForm({ ...editForm, buyIn: e.target.value })
+                      setEditForm({ ...editForm, minBuyIn: e.target.value })
+                    }
+                    style={{ display: 'block', width: '100%', height: 36, marginTop: 4 }}
+                  />
+                </label>
+                <label style={{ flex: 1, color: 'var(--color-neutral)' }}>
+                  Max buy-in
+                  <input
+                    value={editForm.maxBuyIn}
+                    onChange={(e) =>
+                      setEditForm({ ...editForm, maxBuyIn: e.target.value })
                     }
                     style={{ display: 'block', width: '100%', height: 36, marginTop: 4 }}
                   />

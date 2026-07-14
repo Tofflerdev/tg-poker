@@ -7,7 +7,7 @@ function makeTable(overrides: Partial<TableInfo> = {}): TableInfo {
   return {
     id: 't-beg-1',
     name: 'Beginner 1',
-    config: { smallBlind: 5, bigBlind: 10, buyIn: 500, maxPlayers: 6, turnDuration: 20 },
+    config: { smallBlind: 5, bigBlind: 10, minBuyIn: 400, maxBuyIn: 1000, maxPlayers: 6, turnDuration: 20 },
     playerCount: 2,
     maxPlayers: 6,
     status: 'waiting',
@@ -23,7 +23,7 @@ describe('Scenario: join table', () => {
       makeTable({
         id: 't-std-1',
         name: 'Standard 1',
-        config: { smallBlind: 10, bigBlind: 20, buyIn: 1000, maxPlayers: 6, turnDuration: 20 } as any,
+        config: { smallBlind: 10, bigBlind: 20, minBuyIn: 800, maxBuyIn: 2000, maxPlayers: 6, turnDuration: 20 } as any,
       }),
     ];
     render(<TableList tables={tables} onSelectTable={onSelectTable} onBack={vi.fn()} />);

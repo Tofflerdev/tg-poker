@@ -23,7 +23,7 @@ const calc = (g: Game): Pot[] => (g as any).calculatePots();
 const sum = (xs: number[]) => xs.reduce((a, b) => a + b, 0);
 
 const cfg = (over: Partial<TableConfig> = {}): TableConfig => ({
-  smallBlind: 5, bigBlind: 10, maxPlayers: 6, turnTime: 20, buyIn: 500, category: 'cash', ...over,
+  smallBlind: 5, bigBlind: 10, maxPlayers: 6, turnTime: 20, minBuyIn: 400, maxBuyIn: 1000, category: 'cash', ...over,
 });
 
 describe('audit #4 — pot preserved when a player leaves mid-hand', () => {
