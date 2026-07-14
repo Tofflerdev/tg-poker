@@ -78,6 +78,36 @@ export class UserRepository {
     return user ? this.mapToTelegramUser(user) : null;
   }
 
+  /**
+   * crypto-payments-rake phase 2: append a `rake` row to the ledger.
+   *
+   * The rake chips are removed from play at hand settlement (Game.ts deducts
+   * them from the pots before payout), so this is purely an accounting record —
+   * it is the source of truth for total rake collected (invariant §E). Until the
+   * house account (§H) is introduced, the row is system-scoped: `userId` and
+   * `balanceAfter` are null and no balance is credited (the chips are simply out
+   * of circulation). `meta` carries { handId, tableId, breakdown } where
+   * `breakdown` is the per-participant rake split proportional to contribution —
+   * a hook for future rakeback with no schema change.
+   *
+   * No-op for `amount <= 0` (preflop folds / sub-threshold pots rake nothing).
+   */
+  static async recordRake(
+    amount: number,
+    meta: { handId: string; tableId: string; breakdown?: Record<string, number> }
+  ): Promise<void> {
+    if (!Number.isInteger(amount) || amount <= 0) return;
+    await prisma.transaction.create({
+      data: {
+        userId: null,
+        type: 'rake',
+        amount,
+        balanceAfter: null,
+        meta: meta as any,
+      },
+    });
+  }
+
   static async updateBalance(telegramId: number, amount: number): Promise<number> {
     const user = await prisma.user.update({
       where: { telegramId: BigInt(telegramId) },

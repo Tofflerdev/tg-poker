@@ -73,7 +73,10 @@ model Transaction {
   user         User?             @relation(fields: [userId], references: [id])
   type         TransactionType
   amount       Int
-  balanceAfter Int               @map("balance_after")
+  // Nullable: system rows with no single owning balance (e.g. a `rake` row while
+  // the house account is not yet introduced — plan §H, deferred) carry null.
+  // User-scoped rows (buyin/cashout/bonus/adjustment/deposit/withdrawal) always set it.
+  balanceAfter Int?              @map("balance_after")
   externalId   String?           @unique @map("external_id")
   status       TransactionStatus @default(completed)
   meta         Json?
@@ -97,6 +100,11 @@ model HandHistory {
   finalChips Int
   showedDown Boolean
   won        Boolean
+  // crypto-payments-rake phase 2: total chips raked in THIS hand, denormalized
+  // onto every player row of the hand (same value across a handId). The ledger
+  // (Transaction type='rake') is the source of truth for totals — to sum rake
+  // from here, dedupe by handId first.
+  rake       Int      @default(0)
 
   @@index([telegramId, playedAt(sort: Desc)])
   @@index([playedAt])

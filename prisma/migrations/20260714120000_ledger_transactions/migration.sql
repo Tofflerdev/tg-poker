@@ -10,7 +10,7 @@ CREATE TABLE "transactions" (
     "user_id" INTEGER,
     "type" "TransactionType" NOT NULL,
     "amount" INTEGER NOT NULL,
-    "balance_after" INTEGER NOT NULL,
+    "balance_after" INTEGER,
     "external_id" TEXT,
     "status" "TransactionStatus" NOT NULL DEFAULT 'completed',
     "meta" JSONB,

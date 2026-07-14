@@ -1,0 +1,2 @@
+-- AlterTable
+ALTER TABLE "HandHistory" ADD COLUMN "rake" INTEGER NOT NULL DEFAULT 0;

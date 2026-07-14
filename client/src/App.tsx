@@ -143,6 +143,8 @@ const App: React.FC = () => {
     dealerPosition: 0,
     smallBlind: 0,
     bigBlind: 0,
+    rakeBps: 0,
+    rakeCapBB: 0,
     stage: 'waiting',
     turnExpiresAt: null,
     nextHandIn: null,

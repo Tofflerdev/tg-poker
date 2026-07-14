@@ -293,6 +293,35 @@ const setupTableEvents = (tableId: string) => {
         evt.perPlayer.forEach((p) => {
           HandHistoryQueue.enqueue(HandHistoryRepository.toWriteRow(evt, p));
         });
+        // (1b) crypto-payments-rake phase 2: record the hand's rake in the ledger.
+        // breakdown splits the rake across contributors proportional to what each
+        // put in the pot (floor; rounding remainder assigned to the largest
+        // contributor) — a rakeback hook that never needs a schema change.
+        if (evt.rake && evt.rake > 0) {
+          const contributors = evt.perPlayer
+            .map((p) => ({ telegramId: p.telegramId, contributed: p.contributed ?? 0 }))
+            .filter((c) => c.contributed > 0);
+          const totalContributed = contributors.reduce((s, c) => s + c.contributed, 0);
+          const breakdown: Record<string, number> = {};
+          if (totalContributed > 0) {
+            let assigned = 0;
+            for (const c of contributors) {
+              const share = Math.floor((evt.rake * c.contributed) / totalContributed);
+              breakdown[c.telegramId] = share;
+              assigned += share;
+            }
+            const leftover = evt.rake - assigned;
+            if (leftover > 0) {
+              const top = [...contributors].sort((a, b) => b.contributed - a.contributed)[0];
+              breakdown[top.telegramId] = (breakdown[top.telegramId] ?? 0) + leftover;
+            }
+          }
+          await UserRepository.recordRake(evt.rake, {
+            handId: evt.handId,
+            tableId: evt.tableId,
+            breakdown,
+          });
+        }
         // (2) Authoritative chip/seat checkpoint — separate awaited path (D-14).
         await checkpointSeatedPlayers(evt);
         // (2b) Profile stats (audit #12). Skip bots (negative telegramId) and

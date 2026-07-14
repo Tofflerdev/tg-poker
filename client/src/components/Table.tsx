@@ -21,6 +21,7 @@ interface TableProps {
   stage?: string;
   lastRoundBets?: number[];
   blinds?: { small: number; big: number };
+  rake?: { bps: number; capBB: number };
   showdown?: ShowdownResult | null;
   onSit: (seat: number) => void;
 }
@@ -41,6 +42,7 @@ const Table: React.FC<TableProps> = ({
   stage = "waiting",
   lastRoundBets = [],
   blinds,
+  rake,
   showdown = null,
   onSit,
 }) => {
@@ -158,6 +160,11 @@ const Table: React.FC<TableProps> = ({
                 {blinds && (
                   <div className="text-[10px] text-white/50 mt-1 whitespace-nowrap">
                     NLH ~ {blinds.small}/{blinds.big} 6MAX
+                  </div>
+                )}
+                {rake && rake.bps > 0 && (
+                  <div className="text-[9px] text-white/40 whitespace-nowrap">
+                    rake {rake.bps / 100}% · cap {rake.capBB}BB · no flop no drop
                   </div>
                 )}
               </div>

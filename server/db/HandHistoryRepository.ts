@@ -30,6 +30,7 @@ export type HandHistoryWriteRow = {
   finalChips: number;
   showedDown: boolean;
   won: boolean;
+  rake: number;                 // phase 2: hand's total rake, denormalized per row
 };
 
 export class HandHistoryRepository {
@@ -66,6 +67,7 @@ export class HandHistoryRepository {
       finalChips: p.finalChips,
       showedDown: p.showedDown,
       won: p.won,
+      rake: evt.rake ?? 0,
     };
   }
 

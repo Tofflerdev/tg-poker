@@ -49,6 +49,8 @@ export class TableManager {
           turnTime: 30,
           buyIn: 500,
           category: 'cash',
+          rakeBps: 500,
+          rakeCapBB: 4,
         },
       },
       {
@@ -61,6 +63,8 @@ export class TableManager {
           turnTime: 30,
           buyIn: 1000,
           category: 'cash',
+          rakeBps: 500,
+          rakeCapBB: 4,
         },
       },
       {
@@ -73,6 +77,8 @@ export class TableManager {
           turnTime: 20,
           buyIn: 2500,
           category: 'cash',
+          rakeBps: 500,
+          rakeCapBB: 3,
         },
       },
       {
@@ -85,6 +91,8 @@ export class TableManager {
           turnTime: 15,
           buyIn: 10000,
           category: 'cash',
+          rakeBps: 500,
+          rakeCapBB: 2.5,
         },
       },
     ];

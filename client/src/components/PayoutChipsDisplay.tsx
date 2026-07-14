@@ -142,6 +142,7 @@ const PayoutChipsDisplay: React.FC<PayoutChipsDisplayProps> = ({
   const seatPositions = isMobile ? SEAT_POSITIONS_MOBILE : SEAT_POSITIONS_DESKTOP;
 
   const [payoutTargets, setPayoutTargets] = useState<PayoutTarget[]>([]);
+  const [rakeTotal, setRakeTotal] = useState(0);
   const [animPhase, setAnimPhase] = useState<AnimPhase>('idle');
   const lastShowdownRef = useRef<ShowdownResult | null>(null);
 
@@ -152,11 +153,15 @@ const PayoutChipsDisplay: React.FC<PayoutChipsDisplayProps> = ({
 
       // Build payout targets: aggregate amounts per winning seat
       const amountBySeat: Record<number, number> = {};
+      let rakeSum = 0;
 
       for (const potResult of showdown.potResults) {
+        rakeSum += potResult.rake ?? 0;
         const winnerCount = potResult.winners.length;
         if (winnerCount === 0) continue;
-        const share = Math.floor(potResult.amount / winnerCount);
+        // crypto-payments-rake phase 2: winners receive the pot minus its rake.
+        const payout = potResult.amount - (potResult.rake ?? 0);
+        const share = Math.floor(payout / winnerCount);
 
         for (const winner of potResult.winners) {
           // Find seat index for this winner
@@ -173,6 +178,7 @@ const PayoutChipsDisplay: React.FC<PayoutChipsDisplayProps> = ({
 
       if (targets.length > 0) {
         setPayoutTargets(targets);
+        setRakeTotal(rakeSum);
         setAnimPhase('show');
       }
     }
@@ -222,6 +228,31 @@ const PayoutChipsDisplay: React.FC<PayoutChipsDisplayProps> = ({
 
   return (
     <>
+      {/* crypto-payments-rake phase 2: rake taken from this hand, shown by the pot. */}
+      {rakeTotal > 0 && (
+        <div
+          className="absolute z-30 pointer-events-none"
+          style={{
+            left: `${potRight.left}%`,
+            top: `${potRight.top - 9}%`,
+            transform: 'translate(-50%, -50%)',
+          }}
+        >
+          <span
+            className="px-2 py-0.5 rounded-full font-mono whitespace-nowrap"
+            style={{
+              fontSize: isMobile ? 9 : 10,
+              color: '#ff6d00',
+              background: 'rgba(10,10,14,0.85)',
+              border: '1px solid rgba(255,109,0,0.5)',
+              boxShadow: '0 0 8px rgba(255,109,0,0.35)',
+              backdropFilter: 'blur(6px)',
+            }}
+          >
+            Rake {rakeTotal}
+          </span>
+        </div>
+      )}
       {payoutTargets.map((target, idx) => {
         const visualIndex = (target.seatIndex - rotationOffset + totalSeats) % totalSeats;
         const position = seatPositions[visualIndex];
