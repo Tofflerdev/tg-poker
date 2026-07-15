@@ -85,7 +85,8 @@ export interface ShowdownResult {
 
 // События сокетов (Client -> Server)
 export interface ClientEvents {
-  join: (seat: number) => void;
+  // NOTE: `join(seat)` is gone. Seats are auto-assigned by design — sitting down is
+  // always joinTable with seat -1 and a chosen buy-in amount. See exit-reconnect B10.
   getState: () => void;
   // Actions
   fold: () => void;
@@ -244,6 +245,10 @@ export interface ExtendedServerEvents extends ServerEvents {
   // exit-reconnect F: an exit requested mid-hand settles only at the hand boundary,
   // so the refund is asynchronous. The player is told both that it is coming and,
   // once the hand ends, exactly how much came back.
+  // Busting out is not an error — it is a decision point. The client shows the
+  // buy-in picker ("top up or leave"), so the table travels with the event: the
+  // player is mid-game and may never have loaded the table list.
+  bustedOut: (payload: { table: TableInfo }) => void;
   exitPending: (payload: { tableId: string }) => void;
   // reason distinguishes "you pressed leave" from "your reconnect window ran out and
   // we cashed you out while you were away" — the client must word those differently.

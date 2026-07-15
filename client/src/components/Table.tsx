@@ -23,7 +23,6 @@ interface TableProps {
   blinds?: { small: number; big: number };
   rake?: { bps: number; capBB: number };
   showdown?: ShowdownResult | null;
-  onSit: (seat: number) => void;
 }
 
 // Total chip animation time: show (600ms) + move (800ms) + buffer
@@ -44,7 +43,6 @@ const Table: React.FC<TableProps> = ({
   blinds,
   rake,
   showdown = null,
-  onSit,
 }) => {
   const isMobile = useIsMobile();
   const containerRef = useRef<HTMLDivElement>(null);
@@ -195,7 +193,6 @@ const Table: React.FC<TableProps> = ({
               tableHeight={dimensions.height}
               currentPlayer={currentPlayer}
               turnExpiresAt={turnExpiresAt}
-              onSit={onSit}
               isMobile={isMobile}
             />
 

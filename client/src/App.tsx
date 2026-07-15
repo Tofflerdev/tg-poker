@@ -138,6 +138,9 @@ const App: React.FC = () => {
   const [currentUser, setCurrentUser] = useState<TelegramUser | null>(null);
   // crypto-payments-rake phase 3: table pending a buy-in-amount choice.
   const [pendingTable, setPendingTable] = useState<TableInfo | null>(null);
+  // exit-reconnect B10: 'rebuy' = the picker shown after busting, where cancelling
+  // means leaving the table rather than dismissing a sheet.
+  const [pendingReason, setPendingReason] = useState<'join' | 'rebuy'>('join');
   
   // Tables state
   const [tables, setTables] = useState<TableInfo[]>([]);
@@ -291,6 +294,17 @@ const App: React.FC = () => {
       setExitNotice({ kind: 'pending' });
     });
 
+    // exit-reconnect B10: busting out is a decision point, not an error. Offer the
+    // buy-in picker (top up / leave) instead of the old system alert that told the
+    // player their stack was 0 and left them staring at a clickable seat map. The
+    // table rides along on the event — the player is mid-game and may never have
+    // loaded the table list.
+    socket.on("bustedOut", (payload) => {
+      setPendingTable(payload.table);
+      setPendingReason('rebuy');
+      hapticFeedback?.notificationOccurred('warning');
+    });
+
     // exit-reconnect F: the refund landed. 'disconnected' means the reconnect window
     // ran out while the player was away and the seat was cashed out without them.
     socket.on("exitCompleted", (payload) => {
@@ -402,6 +416,9 @@ const App: React.FC = () => {
       socket.off("profileUpdated");
       socket.off("avatarUpdated");
       socket.off("tosAccepted");
+      socket.off("exitPending");
+      socket.off("exitCompleted");
+      socket.off("bustedOut");
     };
   }, [currentUser, hapticFeedback]);
 
@@ -431,8 +448,10 @@ const App: React.FC = () => {
   const handleConfirmBuyIn = useCallback((amount: number) => {
     if (!pendingTable) return;
     hapticFeedback?.impactOccurred('medium');
+    // seat: -1 — seats are always auto-assigned; the client never names one (B10).
     socket.emit("joinTable", { tableId: pendingTable.id, seat: -1, buyInAmount: amount });
     setPendingTable(null);
+    setPendingReason('join');
   }, [pendingTable, hapticFeedback]);
 
   const handleShowTables = useCallback(() => {
@@ -510,8 +529,14 @@ const App: React.FC = () => {
     <BuyInModal
       table={pendingTable}
       balance={currentUser?.balance ?? 0}
+      variant={pendingReason}
       onConfirm={handleConfirmBuyIn}
-      onCancel={() => setPendingTable(null)}
+      onCancel={() => {
+        // After busting there is no "just close" — you top up or you leave.
+        if (pendingReason === 'rebuy') socket.emit("leaveTable");
+        setPendingTable(null);
+        setPendingReason('join');
+      }}
     />
   ) : null;
 
@@ -698,6 +723,9 @@ const App: React.FC = () => {
           showdown={showdown}
           onLeaveTable={handleLeaveTable}
         />
+        {/* exit-reconnect B10: busting out fires here, in the game view — this is
+            where the re-buy picker has to appear. */}
+        {buyInSheet}
       </>
     );
   }

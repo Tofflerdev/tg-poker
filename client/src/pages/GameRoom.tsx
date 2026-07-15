@@ -30,7 +30,6 @@ export const GameRoom: React.FC<GameRoomProps> = ({
 }) => {
   const { showBackButton, hideBackButton, setHeaderColor, showConfirm, hapticFeedback } = useTelegram();
   const isMobile = useIsMobile();
-  const [selectedSeat, setSelectedSeat] = useState<number | null>(null);
   const [isMyTurn, setIsMyTurn] = useState(false);
   const [lastStage, setLastStage] = useState(gameState.stage);
   const [isChatOpen, setIsChatOpen] = useState(false);
@@ -107,25 +106,9 @@ export const GameRoom: React.FC<GameRoomProps> = ({
     };
   }, [socket]);
 
-  const handleSeatClick = (seat: number) => {
-    if (mySeat === null && !selectedSeat) {
-      setSelectedSeat(seat);
-      hapticFeedback?.impactOccurred("light");
-    }
-  };
-
-  const handleJoinSeat = () => {
-    if (selectedSeat !== null) {
-      socket.emit("join", selectedSeat);
-      setSelectedSeat(null);
-      hapticFeedback?.impactOccurred("medium");
-    }
-  };
-
-  const handleCancelSeat = () => {
-    setSelectedSeat(null);
-    hapticFeedback?.impactOccurred("light");
-  };
+  // exit-reconnect B10: seat picking is gone. Seats are auto-assigned by design;
+  // sitting down (including a re-buy after busting) goes through the buy-in picker
+  // in App.tsx, which emits joinTable with seat -1.
 
   return (
     <div className="h-[100dvh] bg-gradient-to-b from-[#0d1b0f] to-[#1a2e1a] flex flex-col overflow-hidden">
@@ -208,7 +191,6 @@ export const GameRoom: React.FC<GameRoomProps> = ({
               blinds={{ small: gameState.smallBlind, big: gameState.bigBlind }}
               rake={{ bps: gameState.rakeBps, capBB: gameState.rakeCapBB }}
               showdown={showdown}
-              onSit={handleSeatClick}
             />
             {/* Phase 3 / Plan 03-03 (GAME-02, GAME-03): per-seat action-bubble layer. */}
             <ActionBubbleLayer
@@ -218,29 +200,6 @@ export const GameRoom: React.FC<GameRoomProps> = ({
             />
           </div>
         </div>
-
-        {/* Seat Confirmation Modal */}
-        {mySeat === null && selectedSeat !== null && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-            <div className="bg-white rounded-xl p-6 shadow-2xl w-full max-w-xs text-center animate-in fade-in zoom-in duration-200">
-              <p className="text-lg font-medium mb-6 text-gray-900">Take seat {selectedSeat + 1}?</p>
-              <div className="flex gap-3 justify-center">
-                <button
-                  className="flex-1 py-2 px-4 bg-green-600 text-white rounded-lg font-medium active:scale-95 transition-transform"
-                  onClick={handleJoinSeat}
-                >
-                  Yes
-                </button>
-                <button
-                  className="flex-1 py-2 px-4 bg-gray-200 text-gray-800 rounded-lg font-medium active:scale-95 transition-transform"
-                  onClick={handleCancelSeat}
-                >
-                  No
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
 
         {/* Game Controls — docked at bottom */}
         <div className="w-full z-20">

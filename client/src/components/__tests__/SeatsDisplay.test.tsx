@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { render, fireEvent } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import React from 'react';
 import SeatsDisplay from '../SeatsDisplay';
 import type { Player } from '../../../../types/index';
@@ -43,58 +43,24 @@ function makePlayer(overrides: Partial<Player> = {}): Player {
 }
 
 describe('SeatsDisplay', () => {
-  it('clicking an empty seat fires onSit with the seat index (D-04)', () => {
-    const onSit = vi.fn();
+  // exit-reconnect B10: seats are auto-assigned by design. An empty seat is scenery,
+  // never an invitation — it used to be a clickable "+ / Sit" tile, which is how a
+  // busted player picked their own seat and re-bought at minBuyIn on whatever table
+  // was free first. Sitting down is the buy-in picker, always with seat -1.
+  it('renders empty seats as inert scenery — no click handler, no Sit affordance', () => {
     const seats = [null, null, null, null, null, null];
     const { container } = render(
-      <SeatsDisplay
-        seats={seats as any}
-        mySeat={null}
-        tableWidth={600}
-        tableHeight={400}
-        onSit={onSit}
-      />
+      <SeatsDisplay seats={seats as any} mySeat={null} tableWidth={600} tableHeight={400} />
     );
     const tiles = container.querySelectorAll('div.absolute');
     expect(tiles.length).toBe(6);
-    fireEvent.click(tiles[2]);
-    expect(onSit).toHaveBeenCalledTimes(1);
-    expect(onSit).toHaveBeenCalledWith(2);
-  });
-
-  it('clicking an occupied seat does NOT fire onSit', () => {
-    const onSit = vi.fn();
-    const seats = [null, null, makePlayer({ id: 'occupant', seat: 2 }), null, null, null];
-    const { container } = render(
-      <SeatsDisplay
-        seats={seats as any}
-        mySeat={null}
-        tableWidth={600}
-        tableHeight={400}
-        onSit={onSit}
-      />
-    );
-    const tiles = container.querySelectorAll('div.absolute');
-    fireEvent.click(tiles[2]); // The occupied seat at index 2
-    expect(onSit).not.toHaveBeenCalled();
-  });
-
-  it('clicking any seat when mySeat is already set does NOT fire onSit', () => {
-    const onSit = vi.fn();
-    // mySeat=0 → canSit is false for all empty seats per component logic.
-    const seats = [makePlayer({ id: 'me', seat: 0 }), null, null, null, null, null];
-    const { container } = render(
-      <SeatsDisplay
-        seats={seats as any}
-        mySeat={0}
-        tableWidth={600}
-        tableHeight={400}
-        onSit={onSit}
-      />
-    );
-    const tiles = container.querySelectorAll('div.absolute');
-    fireEvent.click(tiles[3]); // An empty seat
-    expect(onSit).not.toHaveBeenCalled();
+    expect(screen.queryByText('Sit')).not.toBeInTheDocument();
+    expect(screen.queryByText('+')).not.toBeInTheDocument();
+    // Inert: hidden from the accessibility tree and not pointer-interactive.
+    tiles.forEach((tile) => {
+      expect(tile.getAttribute('aria-hidden')).toBe('true');
+      expect((tile.firstElementChild as HTMLElement).style.cursor).not.toBe('pointer');
+    });
   });
 
   it('renders six absolutely-positioned seat tiles (smoke)', () => {
@@ -104,7 +70,6 @@ describe('SeatsDisplay', () => {
         mySeat={null}
         tableWidth={600}
         tableHeight={400}
-        onSit={vi.fn()}
       />
     );
     expect(container.querySelectorAll('div.absolute').length).toBe(6);

@@ -6,6 +6,13 @@ interface BuyInModalProps {
   balance: number;
   onConfirm: (amount: number) => void;
   onCancel: () => void;
+  /**
+   * exit-reconnect B10: 'rebuy' is the same picker shown after busting out, where
+   * cancelling means leaving the table rather than just closing a sheet. Busting is
+   * a decision point, not an error — the old flow fired a system "your stack is 0"
+   * message and dropped the player into a seat map they could click.
+   */
+  variant?: 'join' | 'rebuy';
 }
 
 // crypto-payments-rake peg: 1 chip = $0.01.
@@ -17,7 +24,8 @@ const usd = (chips: number) => `$${(chips / 100).toFixed(2)}`;
  * capped by the player's balance so they can never request more than they hold;
  * if the balance is below minBuyIn, sitting is blocked with a hint to deposit.
  */
-const BuyInModal: React.FC<BuyInModalProps> = ({ table, balance, onConfirm, onCancel }) => {
+const BuyInModal: React.FC<BuyInModalProps> = ({ table, balance, onConfirm, onCancel, variant = 'join' }) => {
+  const isRebuy = variant === 'rebuy';
   const { minBuyIn, maxBuyIn, bigBlind } = table.config;
 
   // Effective ceiling is limited by what the player can afford.
@@ -51,6 +59,18 @@ const BuyInModal: React.FC<BuyInModalProps> = ({ table, balance, onConfirm, onCa
           boxShadow: '0 -8px 32px rgba(0,229,255,0.15)',
         }}
       >
+        {isRebuy && (
+          <div
+            data-testid="rebuy-heading"
+            style={{
+              color: '#ffab00', fontSize: 13, fontWeight: 800, marginBottom: 6,
+              textTransform: 'uppercase', letterSpacing: '0.06em',
+              textShadow: '0 0 8px rgba(255,171,0,0.4)',
+            }}
+          >
+            You're out of chips — top up to keep playing
+          </div>
+        )}
         <div style={{ color: '#fff', fontSize: 16, fontWeight: 700, marginBottom: 2 }}>
           {table.name}
         </div>
@@ -114,7 +134,7 @@ const BuyInModal: React.FC<BuyInModalProps> = ({ table, balance, onConfirm, onCa
           </>
         ) : (
           <div style={{ color: '#ff6d00', fontSize: 13, textAlign: 'center', margin: '8px 0 18px', lineHeight: 1.5 }}>
-            Not enough balance to sit here.<br />
+            {isRebuy ? 'Not enough balance to top up.' : 'Not enough balance to sit here.'}<br />
             You hold {balance.toLocaleString()} ({usd(balance)}); minimum buy-in is {minBuyIn.toLocaleString()} ({usd(minBuyIn)}).
           </div>
         )}
@@ -124,12 +144,14 @@ const BuyInModal: React.FC<BuyInModalProps> = ({ table, balance, onConfirm, onCa
             onClick={onCancel}
             style={{
               flex: 1, height: 48, borderRadius: 12, background: 'transparent',
-              border: '1.5px solid rgba(176,190,197,0.4)', color: '#b0bec5',
+              border: `1.5px solid ${isRebuy ? 'rgba(255,71,87,0.5)' : 'rgba(176,190,197,0.4)'}`,
+              color: isRebuy ? '#ff4757' : '#b0bec5',
               fontSize: 14, fontWeight: 600, cursor: 'pointer',
             }}
             className="active:scale-95"
           >
-            Cancel
+            {/* On a re-buy there is no "just close": you either top up or you leave. */}
+            {isRebuy ? 'Leave table' : 'Cancel'}
           </button>
           <button
             disabled={!canAfford}
@@ -144,7 +166,7 @@ const BuyInModal: React.FC<BuyInModalProps> = ({ table, balance, onConfirm, onCa
             }}
             className="active:scale-95"
           >
-            Sit down · {usd(amount)}
+            {isRebuy ? 'Top up' : 'Sit down'} · {usd(amount)}
           </button>
         </div>
       </div>

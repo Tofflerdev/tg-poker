@@ -244,7 +244,9 @@ const handleTableShowdown = (tableId: string, result: any) => {
     }
   });
 
-  // Check for players with zero chips
+  // Busted players (zero chips) become spectators and are offered a re-buy.
+  // Seats are ALWAYS auto-assigned, so this hands the client the table and lets it
+  // show the buy-in picker; it never invites the player to pick a seat.
   const state = table.getState();
   state.seats.forEach((player) => {
     if (player && player.chips === 0) {
@@ -253,7 +255,11 @@ const handleTableShowdown = (tableId: string, result: any) => {
       table.addSpectator(telegramId);
       const socketId = getSocketId(telegramId);
       if (socketId) {
-        io.to(socketId).emit("errorMessage", "Ваш стек равен 0. Вы покидаете стол.");
+        // Not an errorMessage: losing your stack is normal poker, not a failure,
+        // and the old copy ("Ваш стек равен 0. Вы покидаете стол.") both alarmed
+        // the player and lied — they had not left, they were sitting there with a
+        // seat map inviting them to click a new seat.
+        io.to(socketId).emit("bustedOut", { table: tableManager.getTableInfo(tableId)! });
       }
     }
   });
@@ -1082,83 +1088,17 @@ io.on("connection", (socket) => {
   socket.on("sitIn", () => handleGameAction('sitIn'));
 
   // Legacy "join" handler - auto-assigns to first available table
-  socket.on("join", async (seat: number) => {
-    const telegramId = socket.data.telegramId;
-    if (!telegramId) {
-      socket.emit("errorMessage", "Auth required");
-      return;
-    }
-
-    // Find first available table
-    const tables = tableManager.getAllTablesInfo();
-    const availableTable = tables.find(t => t.status !== 'full');
-
-    if (!availableTable) {
-      socket.emit("errorMessage", "No available tables");
-      return;
-    }
-
-    // Use joinTable logic
-    const currentTableId = tableManager.getPlayerTableId(telegramId);
-    if (currentTableId) {
-      socket.leave(currentTableId);
-      tableManager.leaveTable(telegramId);
-    }
-
-    // Check balance
-    const user = userStorage.getUser(telegramId);
-    if (!user) {
-      socket.emit("errorMessage", "Auth required");
-      return;
-    }
-    // Legacy quick-join: no amount picker, so buy in for the table minimum
-    // (cheapest safe default). Phase 3 range still applies via joinTable clamp.
-    if (user.balance < availableTable.config.minBuyIn) {
-      socket.emit("errorMessage", "Insufficient balance");
-      return;
-    }
-
-    const result = tableManager.joinTable(telegramId, availableTable.id, seat, availableTable.config.minBuyIn);
-
-    if (!result.success) {
-      socket.emit("errorMessage", result.error || "Failed to join table");
-      return;
-    }
-
-    // Phase 4 / Plan 04-06 / D-D2: same atomic buy-in pattern as joinTable.
-    // exit-reconnect B3: seat the session trio in the same transaction (see joinTable).
-    const seatedBuyIn2 = result.buyIn ?? availableTable.config.minBuyIn;
-    const ok2 = await UserRepository.tryDecrementBalance(
-      user.telegramId,
-      seatedBuyIn2,
-      { tableId: availableTable.id },
-      { tableId: availableTable.id, seat: result.seat! },
-    );
-    if (!ok2) {
-      socket.leave(availableTable.id);
-      tableManager.leaveTable(telegramId);
-      socket.emit("errorMessage", "Insufficient balance");
-      return;
-    }
-    const refreshed2 = await UserRepository.findByTelegramId(user.telegramId);
-    if (refreshed2) {
-      user.balance = refreshed2.balance;
-      socket.emit("balanceUpdate", refreshed2.balance);
-    }
-
-    socket.join(availableTable.id);
-
-    const table = tableManager.getTable(availableTable.id);
-    if (table) {
-      const state = table.getStateForPlayer(telegramId);
-      socket.emit("tableJoined", {
-        tableId: availableTable.id, seat: result.seat!, state,
-        reconnectWindowMs: GraceRegistry.RECONNECT_WINDOW_MS,
-      });
-      updateTableState(availableTable.id);
-      console.log(`[Table] telegramId=${telegramId} (socket ${socket.id}) auto-joined ${availableTable.id} at seat ${result.seat}`);
-    }
-  });
+  // exit-reconnect B10: the legacy "join" (pick-a-seat) handler is GONE.
+  //
+  // Seats have always been auto-assigned by design, but this handler let a client
+  // name one, and the client did: busting out dropped you to spectator, the seat map
+  // lit up as clickable and "Take seat N?" bought you in here. It carried three
+  // faults: it ignored which table you were at ("first available table"), it always
+  // bought in at minBuyIn, ignoring the phase-3 amount picker, and it dropped your
+  // in-memory seat via tableManager.leaveTable with NO refundCurrentChips — the same
+  // stack-destroying hole as B1, which was fixed in joinTable and missed here.
+  //
+  // Re-buying now goes through joinTable with seat -1 like every other sit-down.
 
   // ==========================================
   // Chat

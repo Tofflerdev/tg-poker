@@ -149,6 +149,20 @@ export class TableManager {
     }));
   }
 
+  /** Info for a single table, or undefined when the id is unknown. */
+  getTableInfo(tableId: string): TableInfo | undefined {
+    const table = this.tables.get(tableId);
+    if (!table) return undefined;
+    return {
+      id: table.id,
+      name: table.name,
+      config: table.config,
+      status: table.status,
+      playerCount: table.playerCount,
+      maxPlayers: table.config.maxPlayers,
+    };
+  }
+
   /**
    * Get tables filtered by category
    */

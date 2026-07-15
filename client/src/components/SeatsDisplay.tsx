@@ -12,7 +12,6 @@ interface SeatsDisplayProps {
   seatSize?: number;
   currentPlayer?: number | null;
   turnExpiresAt?: number | null;
-  onSit: (seat: number) => void;
   isMobile?: boolean;
 }
 
@@ -139,7 +138,6 @@ const SeatsDisplay: React.FC<SeatsDisplayProps> = ({
   tableHeight,
   currentPlayer,
   turnExpiresAt,
-  onSit,
   isMobile = false,
 }) => {
   const [now, setNow] = useState(Date.now());
@@ -210,15 +208,19 @@ const SeatsDisplay: React.FC<SeatsDisplayProps> = ({
         const displayName = player?.displayName || (player ? `Player ${player.id.slice(0, 4)}` : '');
 
         /* ═══════════════════════════════════════
-           EMPTY SEAT — unchanged.
-           (With auto-seating a player normally never sees this, but keep
-            the existing dashed "+/Sit" box so nothing regresses.)
+           EMPTY SEAT — decoration only.
+           exit-reconnect B10: seats are auto-assigned by design, so an empty seat is
+           never an invitation. It used to be clickable ("+ / Sit" → "Take seat N?"),
+           which is how a busted player ended up picking their own seat — and that
+           path bought in at minBuyIn on whichever table happened to be free first.
+           Sitting down is the buy-in picker in App.tsx, always with seat -1.
            ═══════════════════════════════════════ */
         if (isFree) {
           return (
             <div
               key={i}
               className="absolute"
+              aria-hidden="true"
               style={{
                 left: pos.left,
                 top: pos.top,
@@ -226,9 +228,7 @@ const SeatsDisplay: React.FC<SeatsDisplayProps> = ({
                 width: seatWidth,
                 height: seatHeight,
                 zIndex: 10,
-                transition: 'z-index 0.3s',
               }}
-              onClick={() => canSit && onSit(i)}
             >
               <div
                 style={{
@@ -237,58 +237,25 @@ const SeatsDisplay: React.FC<SeatsDisplayProps> = ({
                   height: '100%',
                   borderRadius: 14,
                   display: 'flex',
-                  flexDirection: 'column',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  textAlign: 'center',
                   padding: '4px 6px 8px',
-                  background: canSit ? alpha(N.sit.color, 4) : 'rgba(20,20,28,0.4)',
+                  background: 'rgba(20,20,28,0.4)',
                   backdropFilter: 'blur(12px)',
                   WebkitBackdropFilter: 'blur(12px)',
-                  border: canSit
-                    ? `1.5px dashed ${alpha(N.sit.color, 25)}`
-                    : '1.5px dashed rgba(176,190,197,0.15)',
-                  cursor: canSit ? 'pointer' : 'default',
-                  transition: 'box-shadow 0.3s ease, border-color 0.3s ease',
-                  ...(canSit ? { animation: 'empty-seat-breathe 3s ease-in-out infinite' } : {}),
-                }}
-                onMouseEnter={(e) => {
-                  if (canSit) {
-                    e.currentTarget.style.boxShadow = `0 0 16px ${N.sit.glow}, inset 0 0 8px ${N.sit.glow}`;
-                    e.currentTarget.style.borderColor = alpha(N.sit.color, 44);
-                  }
-                }}
-                onMouseLeave={(e) => {
-                  if (canSit) {
-                    e.currentTarget.style.boxShadow = 'none';
-                    e.currentTarget.style.borderColor = '';
-                  }
+                  border: '1.5px dashed rgba(176,190,197,0.15)',
                 }}
               >
                 <div style={{
-                  fontSize: 24,
-                  fontWeight: 300,
-                  color: canSit ? N.sit.color : N.neutral.color,
-                  opacity: canSit ? 0.8 : 0.25,
-                  lineHeight: 1,
-                  textShadow: canSit ? `0 0 10px ${N.sit.glow}` : 'none',
-                  transition: 'opacity 0.3s',
+                  fontSize: 9,
+                  fontWeight: 700,
+                  color: N.neutral.color,
+                  opacity: 0.3,
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.08em',
                 }}>
-                  +
+                  Empty
                 </div>
-                {canSit && (
-                  <div style={{
-                    fontSize: 8,
-                    fontWeight: 800,
-                    color: N.sit.color,
-                    textTransform: 'uppercase',
-                    letterSpacing: '0.08em',
-                    marginTop: 2,
-                    textShadow: `0 0 6px ${N.sit.glow}`,
-                  }}>
-                    Sit
-                  </div>
-                )}
               </div>
             </div>
           );
