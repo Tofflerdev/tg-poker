@@ -116,6 +116,28 @@ export default class Game {
     return this.stage !== 'waiting' && this.stage !== 'showdown';
   }
 
+  /**
+   * exit-reconnect B9: is a human present who wants to play?
+   *
+   * Deliberately IGNORES waitingForBB, and that is the whole point. Dealing is the
+   * only thing that runs activateWaitingPlayers, which is the only thing that ever
+   * clears the flag — so gating "may we deal?" on eligibility (which excludes
+   * waitingForBB) is circular and self-locking: the last human waiting for the big
+   * blind can never be activated, and the table is dead for good.
+   *
+   * Prod 2026-07-15 14:47:24: the second human left, leaving one human waiting for
+   * the BB plus two bots. table-funnel-1 never dealt again.
+   *
+   * Decision B ("never grind bot-only hands") is preserved in spirit: a human
+   * waiting for the blind IS at the table, watching, wanting in. sittingOut and
+   * busted players are still excluded — they are not waiting on anything.
+   */
+  hasPlayableHuman(): boolean {
+    return this.seats.some(
+      (p) => p !== null && !p.isBot && p.chips > 0 && !p.sittingOut
+    );
+  }
+
   addPlayer(telegramId: string, seat: number, chips: number = 1000, telegramIdNumeric?: number, displayName?: string, avatarUrl?: string, socketId?: string, avatarId?: string, isBot?: boolean): boolean {
     if (seat < 0 || seat >= this.seats.length) return false;
     if (this.seats[seat]) return false;

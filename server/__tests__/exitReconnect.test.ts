@@ -417,6 +417,73 @@ describe('an idle table cannot be bricked (exit-reconnect B8)', () => {
   });
 });
 
+/**
+ * exit-reconnect B9 — the deadlock B8 only half-closed.
+ *
+ * waitingForBB excludes a player from getEligiblePlayers(). canRunHands() asked for
+ * an ELIGIBLE human. Only dealing clears waitingForBB (activateWaitingPlayers runs
+ * solely inside startNextHand). So the last human waiting for the big blind could
+ * never be activated: prod 2026-07-15 14:47:24, the second human left and
+ * table-funnel-1 never dealt again.
+ */
+describe('the last human waiting for the BB cannot brick the table (exit-reconnect B9)', () => {
+  const cfg = (over: Partial<TableConfig> = {}): TableConfig => ({
+    smallBlind: 1, bigBlind: 2, maxPlayers: 6, turnTime: 30,
+    minBuyIn: 80, maxBuyIn: 200, category: 'cash', ...over,
+  });
+
+  /** One human legitimately waiting for the blind, plus bots. Table idle. */
+  function waitingHumanWithBots(): Table {
+    const t = new Table('w', 'W', cfg());
+    t.addPlayer('H', 0, 200);
+    t.addPlayer('-1', 1, 200, -1, 'B1', undefined, undefined, true);
+    t.addPlayer('-2', 2, 200, -2, 'B2', undefined, undefined, true);
+    const anyT = t as any;
+    if (anyT.nextHandTimer) { clearTimeout(anyT.nextHandTimer); anyT.nextHandTimer = null; }
+    (t.game as any).seats[0].waitingForBB = true;
+    (t.game as any).stage = 'waiting';
+    return t;
+  }
+
+  it('a human waiting for the blind still counts as a human at the table', () => {
+    const t = waitingHumanWithBots();
+    // The circularity in one line: not eligible, yet must keep the table alive.
+    expect(t.game.getEligiblePlayers().some((p: Player) => !p.isBot)).toBe(false);
+    expect(t.game.hasPlayableHuman()).toBe(true);
+  });
+
+  it('keeps dealing so the waiting human can be activated', () => {
+    vi.useFakeTimers();
+    const t = waitingHumanWithBots();
+    t.tryStartNextHand();
+    expect((t as any).nextHandTimer).not.toBeNull();
+    vi.useRealTimers();
+  });
+
+  it('actually activates the waiting human — the table heals itself', () => {
+    const t = waitingHumanWithBots();
+    // Deal until the big blind reaches seat 0. With 3 seats this takes a few hands;
+    // the point is that it terminates rather than sitting dead forever.
+    for (let i = 0; i < 6 && (t.game as any).seats[0].waitingForBB; i++) {
+      (t.game as any).startNextHand();
+      (t.game as any).stage = 'waiting';
+    }
+    expect((t.game as any).seats[0].waitingForBB).toBe(false);
+    expect(t.game.getEligiblePlayers().some((p: Player) => p.id === 'H')).toBe(true);
+  });
+
+  it('a sat-out or busted human does NOT keep the table dealing', () => {
+    // They are not waiting on anything — decision B still applies.
+    const t = waitingHumanWithBots();
+    t.sitOut('H');
+    expect(t.game.hasPlayableHuman()).toBe(false);
+
+    const t2 = waitingHumanWithBots();
+    (t2.game as any).seats[0].chips = 0;
+    expect(t2.game.hasPlayableHuman()).toBe(false);
+  });
+});
+
 describe('PendingExits registry (exit-reconnect A)', () => {
   beforeEach(() => PendingExits.__resetForTests());
 

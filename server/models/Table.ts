@@ -156,11 +156,17 @@ export class Table {
   }
 
   /** At least one human can play the next hand. */
+  /**
+   * exit-reconnect B9: a human who wants to play, waitingForBB included.
+   *
+   * Was `getEligiblePlayers().some(p => !p.isBot)`, which excludes waitingForBB —
+   * circular, because only dealing clears that flag. See Game.hasPlayableHuman.
+   */
   private hasEligibleHuman(): boolean {
-    return this.game.getEligiblePlayers().some((p) => !p.isBot);
+    return this.game.hasPlayableHuman();
   }
 
-  /** Decision B: hands may run only with an eligible human, or when bots-continue is on. */
+  /** Decision B: hands may run only with a human present, or when bots-continue is on. */
   private canRunHands(): boolean {
     return this.botsContinue || this.hasEligibleHuman();
   }
