@@ -17,13 +17,25 @@
  * Pattern source: server/GraceRegistry.ts (singleton-as-module + __resetForTests).
  */
 
-/** telegramId → tableId the exit was requested from. */
-const pending = new Map<string, string>();
+/**
+ * Why the exit was deferred. Drives the wording the player eventually sees:
+ * 'left' — they pressed leave; 'disconnected' — their reconnect window expired
+ * while the hand they dropped in was still running.
+ */
+export type ExitReason = 'left' | 'disconnected';
+
+export interface PendingExit {
+  tableId: string;
+  reason: ExitReason;
+}
+
+const pending = new Map<string /* telegramId */, PendingExit>();
 
 /** Mark an exit as awaiting the next hand boundary. Idempotent. */
-export function mark(telegramId: string, tableId: string): void {
-  pending.set(telegramId, tableId);
-  console.info('[Exit] deferred telegramId=%s tableId=%s — settles at hand end', telegramId, tableId);
+export function mark(telegramId: string, tableId: string, reason: ExitReason = 'left'): void {
+  pending.set(telegramId, { tableId, reason });
+  console.info('[Exit] deferred telegramId=%s tableId=%s reason=%s — settles at hand end',
+    telegramId, tableId, reason);
 }
 
 /** Is an exit in flight for this player? Used to refuse a re-seat mid-settle. */
@@ -31,14 +43,21 @@ export function isPending(telegramId: string): boolean {
   return pending.has(telegramId);
 }
 
+/** The in-flight exit for this player, if any. */
+export function get(telegramId: string): PendingExit | undefined {
+  return pending.get(telegramId);
+}
+
 /** The table an in-flight exit belongs to, if any. */
 export function tableOf(telegramId: string): string | undefined {
-  return pending.get(telegramId);
+  return pending.get(telegramId)?.tableId;
 }
 
 /** Every telegramId with an exit pending on this table. */
 export function forTable(tableId: string): string[] {
-  return [...pending.entries()].filter(([, tid]) => tid === tableId).map(([id]) => id);
+  return [...pending.entries()]
+    .filter(([, exit]) => exit.tableId === tableId)
+    .map(([id]) => id);
 }
 
 /** Remove the entry (call once the refund has been settled). Idempotent. */

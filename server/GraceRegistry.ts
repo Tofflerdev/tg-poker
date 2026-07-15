@@ -1,33 +1,46 @@
 import { tableManager } from './TableManager.js';
 import { UserRepository } from './db/UserRepository.js';
+import * as PendingExits from './PendingExits.js';
+import * as ExitNotices from './ExitNotices.js';
 import prisma from './db/prisma.js';
 
 /**
- * Plan 04-02 / RESILIENCE-05 / D-B1..D-B3:
- * Singleton-as-module grace-timer registry for disconnect-resume.
+ * exit-reconnect D: single-window disconnect grace.
  *
- * - On disconnect, the auth handler (Plan 04-06) calls arm(tid, stage, tableId).
- * - On reconnect, the auth handler calls clear(tid).
- * - On hand-end, the setOnHandComplete listener (Plan 04-06) calls reArmIfMidHand(tid)
- *   for every still-disconnected seated player so a mid-hand 30 s timer doesn't
- *   spuriously vacate a player AFTER the hand they disconnected from has ended
- *   (Pitfall 1 from RESEARCH.md).
+ * Supersedes the two-stage design (30 s mid-hand / 120 s between-hands). Stage no
+ * longer changes the deadline because chips are protected by SITTING THE PLAYER OUT
+ * as soon as the hand they dropped in ends — not by keeping the window short. The
+ * window is now a pure seat-holding policy, so one number does.
  *
- * Pattern source: server/HandHistoryQueue.ts (singleton-as-module + __resetForTests).
+ * Timeline of a disconnect:
+ *   1. arm() — seat held, window starts.
+ *   2. The hand in progress plays on; the turn timer still runs at FULL length,
+ *      because the player may reconnect inside it and act themselves.
+ *   3. onHandBoundary() — the hand ends → sit them out. Dealt out, no blinds, the
+ *      bleed stops. Seat still held for the rest of the window.
+ *   4. onExpire() — vacate + refund. They are sat out by now, so they are not in a
+ *      hand and the checkpoint refundCurrentChips reads is fresh and true.
+ *
+ * Never vacates mid-hand: refundCurrentChips pays out the hand-boundary checkpoint,
+ * which mid-hand still holds the PRE-hand stack (see plans/exit-reconnect-fix-plan.md
+ * B2). If the hand outlives the window, expiry hands over to the deferred-exit path
+ * (PendingExits) and the boundary settles it.
+ *
+ * The old mid-hand-expiry branch sat the player out, deleted the registry entry and
+ * armed nothing — seat and chips were then held forever with no timer at all.
+ * Observed in prod on 2026-07-15: "[Grace] expired mid-hand — sat out, seat held"
+ * and no further event. The single window closes that.
  *
  * Test seams:
  *   __resetForTests() — between-cases cleanup
  *   __getInternalsForTests() — registry inspection
  */
 
-const MID_HAND_GRACE_MS = 30_000;        // D-B2
-const BETWEEN_HANDS_GRACE_MS = 120_000;  // D-B2
-
-export type GraceStage = 'mid-hand' | 'between-hands';
+/** Seat-holding window after a disconnect. Pure policy — chips are safe regardless. */
+export const RECONNECT_WINDOW_MS = 120_000;
 
 interface GraceEntry {
   timer: NodeJS.Timeout;
-  stage: GraceStage;
   expiresAt: number;
   tableId: string;
 }
@@ -35,25 +48,21 @@ interface GraceEntry {
 const registry = new Map<string /* telegramId */, GraceEntry>();
 
 /**
- * Arm (or replace) the grace timer for a telegramId.
- * Idempotent: a second call for the same tid clears the prior timer first
- * — no leak even under churn (Assumption A4 / Pitfall 4).
+ * Arm (or replace) the reconnect window for a telegramId.
+ * Idempotent: a second call for the same tid clears the prior timer first.
  */
-export function arm(telegramId: string, stage: GraceStage, tableId: string): void {
+export function arm(telegramId: string, tableId: string): void {
   clear(telegramId);
-  const ms = stage === 'mid-hand' ? MID_HAND_GRACE_MS : BETWEEN_HANDS_GRACE_MS;
   const timer = setTimeout(() => {
-    void onExpire(telegramId, stage);
-  }, ms);
-  registry.set(telegramId, { timer, stage, expiresAt: Date.now() + ms, tableId });
-  console.info('[Grace] armed telegramId=%s stage=%s tableId=%s ms=%d', telegramId, stage, tableId, ms);
+    void onExpire(telegramId);
+  }, RECONNECT_WINDOW_MS);
+  registry.set(telegramId, { timer, expiresAt: Date.now() + RECONNECT_WINDOW_MS, tableId });
+  console.info('[Grace] armed telegramId=%s tableId=%s ms=%d', telegramId, tableId, RECONNECT_WINDOW_MS);
 }
 
 /**
- * Cancel the grace timer for a telegramId. Idempotent (no-op if not armed).
- * Called from:
- *   - Auth handler on successful reconnect (D-B intent: reconnect = stop the clock)
- *   - Internally from arm() to replace prior entry
+ * Cancel the window. Idempotent (no-op if not armed).
+ * Called from the auth handler on a successful reconnect — coming back stops the clock.
  */
 export function clear(telegramId: string): void {
   const entry = registry.get(telegramId);
@@ -63,62 +72,74 @@ export function clear(telegramId: string): void {
   console.info('[Grace] cleared telegramId=%s', telegramId);
 }
 
-/**
- * Read-only inspection of the current stage for a telegramId.
- * Used by the disconnect handler (Plan 04-06) to log / decide.
- */
-export function getStage(telegramId: string): GraceStage | undefined {
-  return registry.get(telegramId)?.stage;
+/** Is this player inside a reconnect window right now? */
+export function isDisconnected(telegramId: string): boolean {
+  return registry.has(telegramId);
+}
+
+/** Absolute deadline of the in-flight window, if any. */
+export function expiresAt(telegramId: string): number | undefined {
+  return registry.get(telegramId)?.expiresAt;
 }
 
 /**
- * Re-arm hook called from setOnHandComplete (Plan 04-06).
- * If a mid-hand 30 s timer is still running when the hand ends, swap to a fresh
- * 120 s between-hands timer — preserves the player's seat for the next hand
- * instead of vacating them mid-grace AFTER the hand they disconnected from
- * already ended (Pitfall 1).
+ * Hand-boundary hook (called from setOnHandComplete).
  *
- * No-op when:
- *   - no entry exists (player not in grace)
- *   - entry is already 'between-hands' (already counted; don't reset the clock)
+ * Sits out every player who is still inside a reconnect window, so that from the
+ * next hand on they are dealt out and post no blinds. This is the whole reason the
+ * window no longer needs to be short: a disconnected player stops bleeding chips
+ * after at most one hand, however long they stay away.
+ *
+ * Deliberately does NOT touch disconnectedAt — they are still gone; the column is
+ * cleared when they either return (auth) or are vacated (onExpire).
  */
-export function reArmIfMidHand(telegramId: string): void {
-  const entry = registry.get(telegramId);
-  if (!entry) return;
-  if (entry.stage !== 'mid-hand') return;
-  arm(telegramId, 'between-hands', entry.tableId);
+export function onHandBoundary(telegramIds: string[]): void {
+  for (const telegramId of telegramIds) {
+    if (!registry.has(telegramId)) continue;
+    const table = tableManager.getPlayerTable(telegramId);
+    if (!table) continue;
+    if (table.sitOut(telegramId)) {
+      console.info('[Grace] sat out telegramId=%s — disconnected, seat held', telegramId);
+    }
+  }
 }
 
-async function onExpire(telegramId: string, stage: GraceStage): Promise<void> {
+async function onExpire(telegramId: string): Promise<void> {
   registry.delete(telegramId);
   const seatedTable = tableManager.getPlayerTable(telegramId);
   if (!seatedTable) {
-    // Player already left (e.g., another tab triggered leaveTable, or admin kick).
-    // Race-safe per Pitfall 6 — onExpire never recreates state.
+    // Already gone (leaveTable from another tab, admin kick). Never recreate state.
     return;
   }
 
-  if (stage === 'mid-hand') {
-    // D-B3: KEEP seat. Set sittingOut. Clear disconnectedAt. Don't touch chips.
-    seatedTable.sitOut(telegramId);
-    try {
-      await prisma.user.update({
-        where: { telegramId: BigInt(Number(telegramId)) },
-        data: { disconnectedAt: null }
-      });
-    } catch (err) {
-      console.error('[Grace] failed to clear disconnectedAt:', err);
-    }
-    console.info('[Grace] expired mid-hand telegramId=%s — sat out, seat held', telegramId);
-  } else {
-    // D-B3: VACATE seat. Refund chips atomically (Plan 04-01).
-    tableManager.leaveTable(telegramId);
-    try {
-      const result = await UserRepository.refundCurrentChips(telegramId);
-      console.info('[Grace] expired between-hands telegramId=%s — refunded %d', telegramId, result?.refunded ?? 0);
-    } catch (err) {
-      console.error('[Grace] refund failed for telegramId=%s:', telegramId, err);
-    }
+  // The hand they dropped in outlived the whole window (step 3 never ran). Vacating
+  // now would refund the stale pre-hand checkpoint, so hand over to the deferred-exit
+  // path instead and let the boundary settle it against a true checkpoint.
+  if (seatedTable.isInHand(telegramId)) {
+    seatedTable.markLeaving(telegramId);
+    PendingExits.mark(telegramId, seatedTable.id, 'disconnected');
+    console.info('[Grace] expired telegramId=%s mid-hand — deferred to hand boundary', telegramId);
+    return;
+  }
+
+  const tableId = seatedTable.id;
+  tableManager.leaveTable(telegramId);
+  try {
+    const result = await UserRepository.refundCurrentChips(telegramId);
+    const refunded = result?.refunded ?? 0;
+    // They are not connected (that is what expiry means), so park the notice for auth.
+    ExitNotices.record(telegramId, { tableId, refunded });
+    console.info('[Grace] expired telegramId=%s — vacated, refunded %d', telegramId, refunded);
+  } catch (err) {
+    console.error('[Grace] refund failed for telegramId=%s:', telegramId, err);
+  }
+  try {
+    await prisma.user.update({
+      where: { telegramId: BigInt(Number(telegramId)) },
+      data: { disconnectedAt: null }
+    });
+  } catch (err) {
+    console.error('[Grace] failed to clear disconnectedAt:', err);
   }
 }
 

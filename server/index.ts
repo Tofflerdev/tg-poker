@@ -22,6 +22,7 @@ import { HandHistoryRepository } from "./db/HandHistoryRepository.js";
 import { checkpointSeatedPlayers } from "./checkpointSeatedPlayers.js";
 import * as GraceRegistry from "./GraceRegistry.js";
 import * as PendingExits from "./PendingExits.js";
+import * as ExitNotices from "./ExitNotices.js";
 import * as SessionRecovery from "./SessionRecovery.js";
 import prisma from "./db/prisma.js";
 import * as Sentry from '@sentry/node';
@@ -170,9 +171,11 @@ const settlePendingExits = async (tableId: string): Promise<void> => {
   if (leaving.length === 0) return;
 
   for (const telegramId of leaving) {
+    const reason = PendingExits.get(telegramId)?.reason ?? 'left';
     try {
       tableManager.leaveTable(telegramId);
       const result = await UserRepository.refundCurrentChips(telegramId);
+      const refunded = result?.refunded ?? 0;
       const user = userStorage.getUser(telegramId);
       let balance: number | undefined;
       if (user) {
@@ -185,13 +188,13 @@ const settlePendingExits = async (tableId: string): Promise<void> => {
       const socketId = getSocketId(telegramId);
       if (socketId && balance !== undefined) {
         io.to(socketId).emit("balanceUpdate", balance);
-        io.to(socketId).emit("exitCompleted", {
-          tableId,
-          refunded: result?.refunded ?? 0,
-          balance,
-        });
+        io.to(socketId).emit("exitCompleted", { tableId, refunded, balance, reason });
+      } else {
+        // Nobody to tell right now (they dropped, or expiry vacated them while away).
+        // Park it so auth delivers the news instead of the balance just changing.
+        ExitNotices.record(telegramId, { tableId, refunded });
       }
-      console.log(`[Exit] settled telegramId=${telegramId} tableId=${tableId} refunded=${result?.refunded ?? 0}`);
+      console.log(`[Exit] settled telegramId=${telegramId} tableId=${tableId} reason=${reason} refunded=${refunded}`);
     } catch (err) {
       console.error('[Exit] settle failed for telegramId=%s:', telegramId, err);
     } finally {
@@ -384,13 +387,11 @@ const setupTableEvents = (tableId: string) => {
             .filter((p) => Number(p.telegramId) > 0 && p.holeCards.length > 0)
             .map((p) => UserRepository.updateStats(Number(p.telegramId), p.won, p.netDelta))
         );
-        // Phase 4 / Plan 04-06 / Pitfall 1: every per-player entry that is still in
-        // mid-hand grace must be promoted to between-hands grace, so the 30 s
-        // mid-hand timer doesn't spuriously fire AFTER the hand they disconnected
-        // from has ended. reArmIfMidHand is a no-op when no entry exists.
-        evt.perPlayer.forEach((p) => {
-          GraceRegistry.reArmIfMidHand(p.telegramId);
-        });
+        // (3) exit-reconnect D: sit out everyone still inside a reconnect window now
+        // that their hand has ended. From here they are dealt out and post no blinds,
+        // so a long absence can no longer bleed their stack — which is what lets the
+        // window be a single seat-holding policy instead of a stage-aware race.
+        GraceRegistry.onHandBoundary(evt.perPlayer.map((p) => p.telegramId));
       } catch (err) {
         console.error('[onHandComplete] checkpoint or enqueue error:', err);
       }
@@ -495,7 +496,10 @@ io.on("connection", (socket) => {
         seatedTable.updatePlayerSocketId(telegramId, socket.id);
         const state = seatedTable.getStateForPlayer(telegramId);
         const seatIdx = state.seats.findIndex(p => p?.id === telegramId);
-        socket.emit("tableJoined", { tableId: seatedTable.id, seat: seatIdx, state });
+        socket.emit("tableJoined", {
+          tableId: seatedTable.id, seat: seatIdx, state,
+          reconnectWindowMs: GraceRegistry.RECONNECT_WINDOW_MS,
+        });
         updateTableState(seatedTable.id);
         // D-B clear: a successful auth means the player is back; cancel any in-flight grace timer.
         GraceRegistry.clear(telegramId);
@@ -506,6 +510,20 @@ io.on("connection", (socket) => {
       // is never sent to PostHog. The field is additive; existing client logic ignores it.
       const userWithAnalytics = { ...user, analyticsId: toAnalyticsId(user.telegramId) };
       socket.emit("authSuccess", userWithAnalytics);
+
+      // exit-reconnect D/F: they were vacated by a window expiry (or an exit settled)
+      // while disconnected, so nobody could tell them. Deliver it now — a balance that
+      // silently changed under the player is exactly what breeds "the app ate my chips".
+      // Emitted AFTER authSuccess so the client has already left its loading state.
+      const notice = ExitNotices.take(telegramId);
+      if (notice) {
+        socket.emit("exitCompleted", {
+          tableId: notice.tableId,
+          refunded: notice.refunded,
+          balance: user.balance,
+          reason: 'disconnected',
+        });
+      }
       console.log("[Auth] Success for:", user.username || user.displayName || user.telegramId,
         payload.devId ? `(dev mode, devId=${payload.devId})` : '');
     } catch (error) {
@@ -786,7 +804,10 @@ io.on("connection", (socket) => {
       tableInfo.updatePlayerSocketId(telegramId, socket.id);
       const state = tableInfo.getStateForPlayer(telegramId);
       const seatIdx = state.seats.findIndex((p) => p?.id === telegramId);
-      socket.emit("tableJoined", { tableId, seat: seatIdx, state });
+      socket.emit("tableJoined", {
+        tableId, seat: seatIdx, state,
+        reconnectWindowMs: GraceRegistry.RECONNECT_WINDOW_MS,
+      });
       updateTableState(tableId);
       console.log(`[Table] telegramId=${telegramId} (socket ${socket.id}) resumed ${tableId} at seat ${seatIdx}`);
       return;
@@ -878,7 +899,10 @@ io.on("connection", (socket) => {
     const table = tableManager.getTable(tableId);
     if (table) {
       const state = table.getStateForPlayer(telegramId);
-      socket.emit("tableJoined", { tableId, seat: result.seat!, state });
+      socket.emit("tableJoined", {
+        tableId, seat: result.seat!, state,
+        reconnectWindowMs: GraceRegistry.RECONNECT_WINDOW_MS,
+      });
       updateTableState(tableId);
       console.log(`[Table] telegramId=${telegramId} (socket ${socket.id}) joined ${tableId} at seat ${result.seat}`);
     }
@@ -935,7 +959,12 @@ io.on("connection", (socket) => {
           if (refreshed) {
             user.balance = refreshed.balance;
             socket.emit("balanceUpdate", refreshed.balance);
-            socket.emit("exitCompleted", { tableId, refunded: result.refunded, balance: refreshed.balance });
+            socket.emit("exitCompleted", {
+              tableId,
+              refunded: result.refunded,
+              balance: refreshed.balance,
+              reason: 'left',
+            });
           }
         }
       }
@@ -1122,7 +1151,10 @@ io.on("connection", (socket) => {
     const table = tableManager.getTable(availableTable.id);
     if (table) {
       const state = table.getStateForPlayer(telegramId);
-      socket.emit("tableJoined", { tableId: availableTable.id, seat: result.seat!, state });
+      socket.emit("tableJoined", {
+        tableId: availableTable.id, seat: result.seat!, state,
+        reconnectWindowMs: GraceRegistry.RECONNECT_WINDOW_MS,
+      });
       updateTableState(availableTable.id);
       console.log(`[Table] telegramId=${telegramId} (socket ${socket.id}) auto-joined ${availableTable.id} at seat ${result.seat}`);
     }
@@ -1203,14 +1235,12 @@ io.on("connection", (socket) => {
     if (seatedTable) {
       seatedTable.updatePlayerSocketId(telegramId, undefined);
 
-      // D-B1, D-B2: stage-aware grace arming. NO immediate leave, NO immediate refund.
-      // The existing Game.TURN_TIME_LIMIT auto-fold continues independently.
-      // Table.getState() returns the full unpersonalized GameState — stage field
-      // is identical to getStateForPlayer().stage and does not leak hole cards.
-      const stage = seatedTable.getState().stage;
-      const graceStage: 'mid-hand' | 'between-hands' =
-        (stage === 'waiting' || stage === 'showdown') ? 'between-hands' : 'mid-hand';
-
+      // exit-reconnect D: one window, no stage. NO immediate leave, NO immediate
+      // refund. The turn timer keeps its FULL length for a disconnected player —
+      // they may reconnect inside it and act themselves. What protects their chips
+      // is not a short window but GraceRegistry.onHandBoundary sitting them out as
+      // soon as the current hand ends (dealt out, no blinds).
+      //
       // Mark disconnectedAt + lastSeenAt for ops/debug visibility.
       try {
         await prisma.user.update({
@@ -1221,7 +1251,7 @@ io.on("connection", (socket) => {
         console.error('[Disconnect] failed to mark disconnectedAt:', err);
       }
 
-      GraceRegistry.arm(telegramId, graceStage, seatedTable.id);
+      GraceRegistry.arm(telegramId, seatedTable.id);
       updateTableState(seatedTable.id);
     }
 
