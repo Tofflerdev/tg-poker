@@ -261,6 +261,15 @@ const App: React.FC = () => {
     socket.on("tableJoined", (payload) => {
       setCurrentTableId(payload.tableId);
       setGameState(payload.state);
+      // exit-reconnect B6: take the seat from the payload — the server computed it
+      // authoritatively. mySeat used to be derived ONLY in the "state" handler, which
+      // needs currentUser, which is still null here (tableJoined is sent BEFORE
+      // authSuccess). On a resume that left mySeat null until somebody else acted:
+      // seats rendered unrotated ("I can see myself from the outside") and, because
+      // GameRoom gates every control on `mySeat !== null && currentPlayer === mySeat`,
+      // it was never your turn — so if the table was waiting on YOU, nothing could
+      // move until the turn timer auto-folded you. seat is -1 for a spectator.
+      setMySeat(payload.seat >= 0 ? payload.seat : null);
       setView('game');
       // exit-reconnect D: the seat-holding window comes from the server so the
       // overlay stops guessing it (and stops hardcoding the old 30/120 stages).
@@ -323,10 +332,13 @@ const App: React.FC = () => {
 
       // RESILIENCE-03: server stores player.id = telegramId (durable key),
       // not socket.id. Match on stringified telegramId of the authenticated user.
+      // exit-reconnect B6: bail out rather than null the seat when we cannot identify
+      // ourselves yet. The resume path emits tableJoined (which carries the seat) and
+      // then broadcasts state — both BEFORE authSuccess sets currentUser — so nulling
+      // here would immediately clobber the seat tableJoined just gave us.
       const meId = currentUser ? String(currentUser.telegramId) : null;
-      const meInSeats = meId
-        ? newState.seats.findIndex(p => p && p.id === meId)
-        : -1;
+      if (!meId) return;
+      const meInSeats = newState.seats.findIndex(p => p && p.id === meId);
       setMySeat(meInSeats !== -1 ? meInSeats : null);
     });
 

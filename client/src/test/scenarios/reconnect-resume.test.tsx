@@ -55,6 +55,19 @@ const authOk = {
   tosAcceptedAt: new Date().toISOString(), tosVersion: '1.0',
 };
 
+/** Six seats with the authenticated player seated at `seat` and one opponent. */
+const seatsWithMeAt = (seat: number) => {
+  const mk = (id: string, s: number) => ({
+    id, seat: s, displayName: id, hand: ['As', 'Kd'], chips: 80, bet: 0, totalBet: 0,
+    folded: false, allIn: false, acted: false, showCards: false,
+    waitingForBB: false, sittingOut: false,
+  });
+  const seats: any[] = Array(6).fill(null);
+  seats[seat] = mk(String(authOk.telegramId), seat);
+  seats[0] = mk('-1', 0);
+  return seats;
+};
+
 const gameState = {
   seats: Array(6).fill(null), spectators: [], communityCards: [], pots: [],
   totalPot: 0, currentBet: 0, currentPlayer: null, dealerPosition: 0,
@@ -104,6 +117,31 @@ describe('reconnect resume (exit-reconnect B1/B4)', () => {
     await waitFor(() => {
       expect(tableShown()).toBeInTheDocument();
       expect(menuShown()).not.toBeInTheDocument();
+    });
+  });
+
+  // B6, reported from prod: "I reopened the app, landed at the table but saw myself
+  // from the outside, and when it was my turn I could do nothing until the timer
+  // auto-folded me."
+  it('takes mySeat from the tableJoined payload so a resumed player can act', async () => {
+    render(<App />);
+
+    // Exact server order on resume: snapshot first, state broadcast, THEN authSuccess.
+    // It is seat 5's turn — i.e. the table is waiting on us.
+    const myTurnState = { ...gameState, stage: 'preflop', currentPlayer: 5, seats: seatsWithMeAt(5) };
+    act(() => {
+      socketMock._trigger('tableJoined', {
+        tableId: 'table-funnel-1', seat: 5, state: myTurnState, reconnectWindowMs: 120_000,
+      });
+    });
+    act(() => { socketMock._trigger('state', myTurnState); });
+    act(() => { socketMock._trigger('authSuccess', authOk); });
+
+    // Controls live only when mySeat is known: GameRoom gates them on
+    // `mySeat !== null && currentPlayer === mySeat`. With mySeat null nothing renders
+    // and nothing can break the deadlock, because no one else is due to act.
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /fold/i })).toBeInTheDocument();
     });
   });
 

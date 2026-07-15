@@ -33,11 +33,23 @@ import prisma from '../db/prisma.js';
 
 /** Minimal Table double — only what GraceRegistry touches. */
 function mockTable(over: Partial<Record<string, unknown>> = {}) {
+  const seats: any[] = [{ id: '42', sittingOut: false }];
   return {
     id: 'table-funnel-1',
-    sitOut: vi.fn(() => true),
+    getState: vi.fn(() => ({ seats })),
+    sitOut: vi.fn((id: string) => {
+      const p = seats.find((s) => s?.id === id);
+      if (p) p.sittingOut = true;
+      return true;
+    }),
+    sitIn: vi.fn((id: string) => {
+      const p = seats.find((s) => s?.id === id);
+      if (p) p.sittingOut = false;
+      return true;
+    }),
     isInHand: vi.fn(() => false),
     markLeaving: vi.fn(() => true),
+    _seats: seats,
     ...over,
   };
 }
@@ -74,6 +86,49 @@ describe('GraceRegistry — single reconnect window (exit-reconnect D)', () => {
 
     vi.advanceTimersByTime(GraceRegistry.RECONNECT_WINDOW_MS * 2);
     expect(tableManager.leaveTable).not.toHaveBeenCalled();
+  });
+
+  // exit-reconnect B6b. onHandBoundary sits a disconnected player out to stop the
+  // blind bleed — they never chose that, so coming back has to undo it. Without this
+  // they sit at the table dealt out of every hand with no way back: the client has no
+  // sit-in button, so the only escape would be leaving.
+  it('clear() sits a disconnected player back in', () => {
+    const table = mockTable();
+    vi.mocked(tableManager.getPlayerTable).mockReturnValue(table as never);
+
+    GraceRegistry.arm('42', 'table-funnel-1');
+    GraceRegistry.onHandBoundary(['42']);
+    expect(table._seats[0].sittingOut).toBe(true);
+
+    GraceRegistry.clear('42');
+
+    expect(table.sitIn).toHaveBeenCalledWith('42');
+    expect(table._seats[0].sittingOut).toBe(false);
+  });
+
+  it('clear() does NOT touch a player who was never sat out (fast reconnect)', () => {
+    // Game.sitIn also sets waitingForBB, so calling it here would make a player who
+    // reconnected inside one hand sit out the blind for nothing.
+    const table = mockTable();
+    vi.mocked(tableManager.getPlayerTable).mockReturnValue(table as never);
+
+    GraceRegistry.arm('42', 'table-funnel-1');
+    GraceRegistry.clear('42');
+
+    expect(table.sitIn).not.toHaveBeenCalled();
+  });
+
+  it('clear() does NOT sit in a player whose exit is settling', () => {
+    const table = mockTable();
+    vi.mocked(tableManager.getPlayerTable).mockReturnValue(table as never);
+    GraceRegistry.arm('42', 'table-funnel-1');
+    GraceRegistry.onHandBoundary(['42']);
+    PendingExits.mark('42', 'table-funnel-1', 'left');
+
+    GraceRegistry.clear('42');
+
+    // markLeaving set sittingOut on purpose; the boundary is about to cash them out.
+    expect(table.sitIn).not.toHaveBeenCalled();
   });
 
   it('arm() twice replaces the prior timer — no leak under churn', () => {

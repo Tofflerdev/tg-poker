@@ -61,14 +61,40 @@ export function arm(telegramId: string, tableId: string): void {
 }
 
 /**
- * Cancel the window. Idempotent (no-op if not armed).
- * Called from the auth handler on a successful reconnect — coming back stops the clock.
+ * Cancel the window and undo the disconnect sit-out. Idempotent (no-op if not armed).
+ * Called from the auth handler and the joinTable resume branch — coming back stops
+ * the clock AND puts the player back in the game.
+ *
+ * The sit-in is not optional. onHandBoundary sits a disconnected player out to stop
+ * the blind bleed, but they never chose that, so returning has to undo it. Without
+ * it they sit at the table dealt out of every hand with no way back — the client has
+ * no sit-in button (the socket events exist, nothing emits them), so the only escape
+ * would be leaving the table.
+ *
+ * Deliberately unconditional: today a sit-out can ONLY come from a disconnect, so
+ * there is no player intent to preserve. A manual sit-out button (plan §G) would
+ * change that and must bring a "sat out by choice" flag with it.
  */
 export function clear(telegramId: string): void {
   const entry = registry.get(telegramId);
   if (!entry) return;
   clearTimeout(entry.timer);
   registry.delete(telegramId);
+
+  const table = tableManager.getPlayerTable(telegramId);
+  // Not for a player on their way out: markLeaving set sittingOut on purpose there,
+  // and the boundary is about to cash them out.
+  if (table && !PendingExits.isPending(telegramId)) {
+    // Only undo an actual sit-out. Game.sitIn also sets waitingForBB, so calling it
+    // on a fast reconnect that never crossed a hand boundary would make the player
+    // sit out the blind for no reason.
+    const seated = table.getState().seats.find((p) => p?.id === telegramId);
+    if (seated?.sittingOut) {
+      table.sitIn(telegramId);
+      console.info('[Grace] cleared telegramId=%s — sat back in', telegramId);
+      return;
+    }
+  }
   console.info('[Grace] cleared telegramId=%s', telegramId);
 }
 
