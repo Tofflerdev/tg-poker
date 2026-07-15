@@ -141,6 +141,24 @@ describe('UserRepository atomic helpers', () => {
       expect(txClient.transaction.create).not.toHaveBeenCalled();
     });
 
+    // A bust-out leaves currentChips = 0, and every bust ends in "leave table" or a
+    // re-buy — so this fired constantly and littered the ledger with 0-value cashouts.
+    it('clears the session but writes NO ledger row when there is nothing to refund', async () => {
+      txClient.user.findUnique.mockResolvedValue({ id: 7, currentChips: 0, currentTableId: 't1' });
+      txClient.user.updateMany.mockResolvedValue({ count: 1 });
+
+      const result = await UserRepository.refundCurrentChips('1001');
+
+      expect(result).toEqual({ refunded: 0 });
+      expect(txClient.transaction.create).not.toHaveBeenCalled();
+      // The columns must still be cleared, or the boot sweep would keep finding them.
+      expect(txClient.user.updateMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ currentChips: null, currentTableId: null }),
+        })
+      );
+    });
+
     it('returns null and writes NO ledger row on idempotent second call (count: 0)', async () => {
       txClient.user.findUnique.mockResolvedValue({ id: 7, currentChips: 500, currentTableId: 't1' });
       txClient.user.updateMany.mockResolvedValue({ count: 0 });

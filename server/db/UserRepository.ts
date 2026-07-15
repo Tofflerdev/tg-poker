@@ -228,6 +228,12 @@ export class UserRepository {
       // No balance change happened here, so we write no ledger row and bail.
       if (result.count === 0) return null;
 
+      // A busted player has currentChips = 0: the session columns above still need
+      // clearing, but there is no money to record. A zero-amount cashout is pure
+      // noise in an append-only money ledger — and it was frequent, since every
+      // bust-out ends in either "leave table" or a re-buy, each writing one.
+      if (chipsToRefund === 0) return { refunded: 0 };
+
       const fresh = await tx.user.findUnique({
         where: { telegramId: BigInt(Number(telegramId)) },
         select: { balance: true }
