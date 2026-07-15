@@ -274,7 +274,10 @@ export async function removeBots(adminUser: string, tableId: string): Promise<{ 
   await runWithAudit(
     { adminUser, action: 'removeBots', targetType: 'table', targetId: tableId, beforeJson: { botCount: botIds.length }, afterJson: { removed: botIds.length } },
     async () => {
-      botIds.forEach((id) => table.removePlayer(id));
+      // exit-reconnect A: mid-hand this defers to the next boundary instead of
+      // force-folding the bots out of a live hand (which would hand away an all-in
+      // bot's pot and break the session recorder's chip conservation for that hand).
+      table.requestBotRemoval();
     }
   );
   return { removed: botIds.length };

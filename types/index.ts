@@ -21,6 +21,7 @@ export interface Player {
   showCards: boolean;
   waitingForBB: boolean;  // NEW: игрок присоединился во время игры, ждет большого блайнда
   sittingOut: boolean;    // NEW: игрок добровольно отсиделся
+  leaving?: boolean;      // exit-reconnect: выход запрошен, доигрывает руку на автодействии
   isBot?: boolean;        // playtest bot — server-side Player driven by BotDriver (no socket)
 }
 
@@ -234,9 +235,24 @@ export interface Table {
 // Extended ServerEvents for multi-table
 export interface ExtendedServerEvents extends ServerEvents {
   tablesList: (tables: TableInfo[]) => void;
-  tableJoined: (payload: { tableId: string; seat: number; state: GameState }) => void;
+  // exit-reconnect D: reconnectWindowMs is how long the seat is held after a drop.
+  // Sent as a DURATION, not a deadline: the client starts counting at its own
+  // 'disconnect' event (the only moment it knows about) and needs no clock sync.
+  tableJoined: (payload: { tableId: string; seat: number; state: GameState; reconnectWindowMs?: number }) => void;
   tableLeft: () => void;
   tableError: (msg: string) => void;
+  // exit-reconnect F: an exit requested mid-hand settles only at the hand boundary,
+  // so the refund is asynchronous. The player is told both that it is coming and,
+  // once the hand ends, exactly how much came back.
+  exitPending: (payload: { tableId: string }) => void;
+  // reason distinguishes "you pressed leave" from "your reconnect window ran out and
+  // we cashed you out while you were away" — the client must word those differently.
+  exitCompleted: (payload: {
+    tableId: string;
+    refunded: number;
+    balance: number;
+    reason: 'left' | 'disconnected';
+  }) => void;
   // Chat events
   chatMessage: (message: ChatMessage) => void;
   systemMessage: (text: string) => void;

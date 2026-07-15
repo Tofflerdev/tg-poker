@@ -12,6 +12,7 @@ import { ToS } from "./pages/legal/ToS";
 import { Privacy } from "./pages/legal/Privacy";
 import { ResponsibleGaming } from "./pages/legal/ResponsibleGaming";
 import { ReconnectOverlay } from "./components/ReconnectOverlay";
+import { ExitToast } from "./components/ExitToast";
 import BuyInModal from "./components/BuyInModal";
 import "./styles/telegram.css";
 import "./styles/neon.css";
@@ -47,6 +48,14 @@ const IS_ADMIN_PATH = window.location.pathname.startsWith('/admin');
 const socket: Socket<ExtendedServerEvents, ExtendedClientEvents> = IS_ADMIN_PATH
   ? (null as unknown as Socket<ExtendedServerEvents, ExtendedClientEvents>) // never accessed when IS_ADMIN_PATH is true
   : io(window.location.origin);
+
+// exit-reconnect F: the exit toast. 'pending' — you left mid-hand and the refund
+// lands when the hand ends; 'done' — it landed (or the reconnect window expired and
+// you were cashed out while away).
+type ExitNotice =
+  | null
+  | { kind: 'pending' }
+  | { kind: 'done'; refunded: number; reason: 'left' | 'disconnected' };
 
 // AppView union — Plan 02-04 added 'deposit' (D-17, DEPOSIT-02).
 // Plan 02-08 extends with:
@@ -157,6 +166,10 @@ const App: React.FC = () => {
   const [showdown, setShowdown] = useState<ShowdownResult | null>(null);
   const [mySeat, setMySeat] = useState<number | null>(null);
 
+  // exit-reconnect D/F: seat-holding window (server-provided) + the exit toast.
+  const [reconnectWindowMs, setReconnectWindowMs] = useState<number | null>(null);
+  const [exitNotice, setExitNotice] = useState<ExitNotice>(null);
+
   // Initialize Telegram UI
   useEffect(() => {
     if (isReady) {
@@ -180,29 +193,45 @@ const App: React.FC = () => {
   useEffect(() => {
     if (!isReady) return;
 
-    // Try to authenticate with Telegram initData
-    if (initData) {
-      socket.emit("auth", { initData });
-    } else if (import.meta.env.DEV) {
-      // Dev mode: use stable player ID from URL params or sessionStorage
-      const devId = getDevPlayerId();
-      console.log(`🔧 Dev mode: Authenticating as Player ${devId}` +
-        (devId >= 100001 && devId <= 100006 ? ` (?player=${devId - 100000})` : ' (random)'));
-      
-      // Create a mock initData string that passes the basic check in auth.ts
-      const mockInitData = `query_id=AAHdF6kUAAAAAN0XqRT&user=%7B%22id%22%3A${devId}%2C%22first_name%22%3A%22Dev%22%2C%22last_name%22%3A%22Player%20${devId}%22%2C%22username%22%3A%22dev_player_${devId}%22%2C%22language_code%22%3A%22en%22%7D&auth_date=${Math.floor(Date.now() / 1000)}&hash=mock_hash_for_dev`;
-      
-      socket.emit("auth", { initData: mockInitData, devId });
-    } else {
-      // Not in Telegram and not in dev mode — show auth error
-      setAuthError('Authentication failed');
-      setView('auth');
-    }
+    const authenticate = () => {
+      // Try to authenticate with Telegram initData
+      if (initData) {
+        socket.emit("auth", { initData });
+      } else if (import.meta.env.DEV) {
+        // Dev mode: use stable player ID from URL params or sessionStorage
+        const devId = getDevPlayerId();
+        console.log(`🔧 Dev mode: Authenticating as Player ${devId}` +
+          (devId >= 100001 && devId <= 100006 ? ` (?player=${devId - 100000})` : ' (random)'));
+
+        // Create a mock initData string that passes the basic check in auth.ts
+        const mockInitData = `query_id=AAHdF6kUAAAAAN0XqRT&user=%7B%22id%22%3A${devId}%2C%22first_name%22%3A%22Dev%22%2C%22last_name%22%3A%22Player%20${devId}%22%2C%22username%22%3A%22dev_player_${devId}%22%2C%22language_code%22%3A%22en%22%7D&auth_date=${Math.floor(Date.now() / 1000)}&hash=mock_hash_for_dev`;
+
+        socket.emit("auth", { initData: mockInitData, devId });
+      } else {
+        // Not in Telegram and not in dev mode — show auth error
+        setAuthError('Authentication failed');
+        setView('auth');
+      }
+    };
+
+    // exit-reconnect B4: RE-AUTHENTICATE ON EVERY CONNECT, not just on mount.
+    // socket.io reconnects the transport by opening a NEW server socket, which has
+    // no socket.data.telegramId until it is authenticated. Authing only on mount
+    // left every reconnect connected-but-unauthenticated: the overlay dismissed
+    // itself (the socket is up!) while every action came back authError, and the
+    // only way out was closing and reopening the app. Re-authing is also what
+    // triggers the server's resume snapshot, so the seat comes back by itself.
+    if (socket.connected) authenticate();
+    socket.on('connect', authenticate);
 
     // Listen for auth responses
     socket.on("authSuccess", (userData) => {
       setCurrentUser(userData);
-      setView('menu');
+      // exit-reconnect B1: do NOT clobber a restored table. The server pushes the
+      // tableJoined resume snapshot BEFORE authSuccess, so forcing 'menu' here threw
+      // the seat away and dropped the player at the main menu — where pressing
+      // "join" bought a fresh stack and destroyed the held one.
+      setView((prev) => (prev === 'game' ? prev : 'menu'));
       hapticFeedback?.notificationOccurred('success');
       if (userData.analyticsId) identifyAnalytics(userData.analyticsId);
     });
@@ -215,6 +244,7 @@ const App: React.FC = () => {
     });
 
     return () => {
+      socket.off('connect', authenticate);
       socket.off("authSuccess");
       socket.off("authError");
     };
@@ -232,6 +262,9 @@ const App: React.FC = () => {
       setCurrentTableId(payload.tableId);
       setGameState(payload.state);
       setView('game');
+      // exit-reconnect D: the seat-holding window comes from the server so the
+      // overlay stops guessing it (and stops hardcoding the old 30/120 stages).
+      if (payload.reconnectWindowMs) setReconnectWindowMs(payload.reconnectWindowMs);
       hapticFeedback?.notificationOccurred('success');
     });
 
@@ -240,6 +273,21 @@ const App: React.FC = () => {
       setCurrentTableId(null);
       setMySeat(null);
       setView('menu');
+    });
+
+    // exit-reconnect F: leaving mid-hand cannot pay out until the hand ends (the
+    // refund reads the hand-boundary checkpoint), so the exit is asynchronous. Say
+    // so, rather than letting the balance sit visibly wrong for a few seconds.
+    socket.on("exitPending", () => {
+      setExitNotice({ kind: 'pending' });
+    });
+
+    // exit-reconnect F: the refund landed. 'disconnected' means the reconnect window
+    // ran out while the player was away and the seat was cashed out without them.
+    socket.on("exitCompleted", (payload) => {
+      setExitNotice({ kind: 'done', refunded: payload.refunded, reason: payload.reason });
+      setCurrentUser((prev) => (prev ? { ...prev, balance: payload.balance } : prev));
+      hapticFeedback?.notificationOccurred('success');
     });
 
     // Table error
@@ -430,15 +478,18 @@ const App: React.FC = () => {
   // every view so it overlays whatever the user is looking at when the
   // socket drops.
   const overlay = (
-    <ReconnectOverlay
-      socket={socket}
-      lastStage={gameState.stage}
-      onDismissExpired={() => {
-        setView('menu');
-        setCurrentTableId(null);
-        setMySeat(null);
-      }}
-    />
+    <>
+      <ReconnectOverlay
+        socket={socket}
+        reconnectWindowMs={reconnectWindowMs}
+        onDismissExpired={() => {
+          setView('menu');
+          setCurrentTableId(null);
+          setMySeat(null);
+        }}
+      />
+      {exitNotice && <ExitToast state={exitNotice} onDismiss={() => setExitNotice(null)} />}
+    </>
   );
 
   // crypto-payments-rake phase 3: buy-in amount picker, shown over the menu /

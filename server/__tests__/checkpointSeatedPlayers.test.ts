@@ -24,6 +24,25 @@ describe('checkpointSeatedPlayers', () => {
     vi.mocked(UserRepository.checkpointSeat).mockResolvedValue(undefined);
   });
 
+  // exit-reconnect B5. Bots never buy in — addBots seats them straight through
+  // table.addPlayer with no debit and no ledger row — but they were checkpointed
+  // like everyone else, leaving currentTableId set on their User rows. The boot
+  // sweep then found them (WHERE currentTableId IS NOT NULL), credited their balance
+  // with chips they never paid for and wrote a cashout ledger row each. Prod had
+  // minted 4145 chips over 10 such rows before this filter existed.
+  it('NEVER checkpoints bots — they have no ledger to recover into', async () => {
+    const evt = mkEvt([
+      { telegramId: '158394554', seat: 0, holeCards: ['As', 'Ks'], finalChips: 141, netDelta: 41, won: true, showedDown: true },
+      { telegramId: '-1', seat: 1, holeCards: ['Qc', 'Qd'], finalChips: 193, netDelta: -7, won: false, showedDown: true },
+      { telegramId: '-2', seat: 2, holeCards: ['7h', '2d'], finalChips: 200, netDelta: 0, won: false, showedDown: false },
+    ]);
+
+    await checkpointSeatedPlayers(evt);
+
+    expect(UserRepository.checkpointSeat).toHaveBeenCalledTimes(1);
+    expect(UserRepository.checkpointSeat).toHaveBeenCalledWith('158394554', expect.anything());
+  });
+
   it('calls checkpointSeat once per perPlayer entry with correct trio', async () => {
     const evt = mkEvt([
       { telegramId: '1001', seat: 0, holeCards: ['As', 'Ks'], finalChips: 1500, netDelta: 500, won: true, showedDown: true },

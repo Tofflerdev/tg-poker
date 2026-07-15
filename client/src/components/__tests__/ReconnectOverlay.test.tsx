@@ -41,8 +41,7 @@ function makeMockSocket() {
 import {
   ReconnectOverlay,
   RECONNECT_OVERLAY_DEBOUNCE_MS,
-  GRACE_MID_HAND_MS,
-  GRACE_BETWEEN_HANDS_MS,
+  DEFAULT_RECONNECT_WINDOW_MS,
 } from '../ReconnectOverlay';
 
 describe('ReconnectOverlay', () => {
@@ -53,21 +52,20 @@ describe('ReconnectOverlay', () => {
     vi.useRealTimers();
   });
 
-  it('exports debounce + grace constants matching D-B4 (1500 / 30000 / 120000 ms)', () => {
+  it('exports the debounce and a fallback window (exit-reconnect D: one window, no stages)', () => {
     expect(RECONNECT_OVERLAY_DEBOUNCE_MS).toBe(1500);
-    expect(GRACE_MID_HAND_MS).toBe(30_000);
-    expect(GRACE_BETWEEN_HANDS_MS).toBe(120_000);
+    expect(DEFAULT_RECONNECT_WINDOW_MS).toBe(120_000);
   });
 
   it('does NOT render when socket has not disconnected', () => {
     const sock = makeMockSocket();
-    render(<ReconnectOverlay socket={sock as any} lastStage="flop" />);
+    render(<ReconnectOverlay socket={sock as any} reconnectWindowMs={120_000} />);
     expect(screen.queryByTestId('reconnect-overlay')).not.toBeInTheDocument();
   });
 
   it('does NOT render when reconnect lands within 1500 ms (debounce)', () => {
     const sock = makeMockSocket();
-    render(<ReconnectOverlay socket={sock as any} lastStage="flop" />);
+    render(<ReconnectOverlay socket={sock as any} reconnectWindowMs={120_000} />);
     act(() => { sock._trigger('disconnect'); });
     act(() => { vi.advanceTimersByTime(1000); });
     act(() => { sock._trigger('connect'); });
@@ -77,34 +75,41 @@ describe('ReconnectOverlay', () => {
 
   it('renders 1500 ms after disconnect with countdown text (D-B4)', () => {
     const sock = makeMockSocket();
-    render(<ReconnectOverlay socket={sock as any} lastStage="flop" />);
+    render(<ReconnectOverlay socket={sock as any} reconnectWindowMs={120_000} />);
     act(() => { sock._trigger('disconnect'); });
     act(() => { vi.advanceTimersByTime(1500); });
     expect(screen.getByTestId('reconnect-overlay')).toBeInTheDocument();
   });
 
-  it('countdown infers mid-hand (30 s) when lastStage is preflop/flop/turn/river (D-B4)', () => {
+  it('counts down the window the SERVER sent, not a hardcoded stage guess', () => {
     const sock = makeMockSocket();
-    const { rerender } = render(<ReconnectOverlay socket={sock as any} lastStage="flop" />);
+    render(<ReconnectOverlay socket={sock as any} reconnectWindowMs={90_000} />);
     act(() => { sock._trigger('disconnect'); });
     act(() => { vi.advanceTimersByTime(1500); });
-    const overlay = screen.getByTestId('reconnect-overlay');
-    // Initial countdown should reflect ~30 s remaining (mid-hand)
-    expect(overlay.textContent).toMatch(/30|29|28/);
+    // 90 s because that is what tableJoined carried — the old build would have shown
+    // 30 s here (stage=flop) while the server actually held the seat far longer.
+    expect(screen.getByTestId('reconnect-overlay').textContent).toMatch(/90|89|88/);
   });
 
-  it('countdown infers between-hands (120 s) when lastStage is waiting/showdown', () => {
+  it('falls back to the default window when the server has not said (not seated yet)', () => {
     const sock = makeMockSocket();
-    render(<ReconnectOverlay socket={sock as any} lastStage="waiting" />);
+    render(<ReconnectOverlay socket={sock as any} reconnectWindowMs={null} />);
     act(() => { sock._trigger('disconnect'); });
     act(() => { vi.advanceTimersByTime(1500); });
-    const overlay = screen.getByTestId('reconnect-overlay');
-    expect(overlay.textContent).toMatch(/120|119|118/);
+    expect(screen.getByTestId('reconnect-overlay').textContent).toMatch(/120|119|118/);
+  });
+
+  it('offers a manual reload while reconnecting', () => {
+    const sock = makeMockSocket();
+    render(<ReconnectOverlay socket={sock as any} reconnectWindowMs={120_000} />);
+    act(() => { sock._trigger('disconnect'); });
+    act(() => { vi.advanceTimersByTime(1500); });
+    expect(screen.getByTestId('reconnect-reload')).toBeInTheDocument();
   });
 
   it('dismisses on tableJoined event', () => {
     const sock = makeMockSocket();
-    render(<ReconnectOverlay socket={sock as any} lastStage="flop" />);
+    render(<ReconnectOverlay socket={sock as any} reconnectWindowMs={120_000} />);
     act(() => { sock._trigger('disconnect'); });
     act(() => { vi.advanceTimersByTime(1500); });
     expect(screen.getByTestId('reconnect-overlay')).toBeInTheDocument();
@@ -112,32 +117,35 @@ describe('ReconnectOverlay', () => {
     expect(screen.queryByTestId('reconnect-overlay')).not.toBeInTheDocument();
   });
 
-  it('renders sat-out sub-view after 30 s mid-hand expiry (D-B4 expired state)', () => {
+  it('renders the vacated sub-view once the window expires', () => {
     const sock = makeMockSocket();
-    render(<ReconnectOverlay socket={sock as any} lastStage="flop" />);
-    act(() => { sock._trigger('disconnect'); });
-    act(() => { vi.advanceTimersByTime(1500 + 30_000 + 100); });
-    expect(screen.getByTestId('reconnect-overlay-sat-out')).toBeInTheDocument();
-  });
-
-  it('renders vacated sub-view after 120 s between-hands expiry', () => {
-    const sock = makeMockSocket();
-    render(<ReconnectOverlay socket={sock as any} lastStage="waiting" />);
+    render(<ReconnectOverlay socket={sock as any} reconnectWindowMs={120_000} />);
     act(() => { sock._trigger('disconnect'); });
     act(() => { vi.advanceTimersByTime(1500 + 120_000 + 100); });
     expect(screen.getByTestId('reconnect-overlay-vacated')).toBeInTheDocument();
   });
 
+  it('has no sat-out dead end — returning inside the window just re-seats the player', () => {
+    const sock = makeMockSocket();
+    render(<ReconnectOverlay socket={sock as any} reconnectWindowMs={120_000} />);
+    act(() => { sock._trigger('disconnect'); });
+    act(() => { vi.advanceTimersByTime(1500 + 30_000 + 100); });
+    // The old build showed a terminal "You were sat out / Back to Tables" screen at
+    // 30 s. Sitting out is now an invisible chip-protection step, not a dead end.
+    expect(screen.queryByTestId('reconnect-overlay-sat-out')).not.toBeInTheDocument();
+    expect(screen.getByTestId('reconnect-overlay')).toBeInTheDocument();
+  });
+
   it('renders "logged in elsewhere" sub-view on replacedBySession event (D-A3)', () => {
     const sock = makeMockSocket();
-    render(<ReconnectOverlay socket={sock as any} lastStage="flop" />);
+    render(<ReconnectOverlay socket={sock as any} reconnectWindowMs={120_000} />);
     act(() => { sock._trigger('replacedBySession'); });
     expect(screen.getByTestId('reconnect-overlay-replaced')).toBeInTheDocument();
   });
 
   it('rapid disconnect → connect → disconnect cycle within 1500 ms never shows overlay (debounce reset)', () => {
     const sock = makeMockSocket();
-    render(<ReconnectOverlay socket={sock as any} lastStage="flop" />);
+    render(<ReconnectOverlay socket={sock as any} reconnectWindowMs={120_000} />);
     act(() => { sock._trigger('disconnect'); });
     act(() => { vi.advanceTimersByTime(200); });
     act(() => { sock._trigger('connect'); });

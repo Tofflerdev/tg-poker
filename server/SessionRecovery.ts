@@ -35,7 +35,13 @@ export async function recoverPersistedSessions(): Promise<{ recovered: number }>
   const knownTableIds = new Set(PREDEFINED_TABLES.map((t) => t.id));
 
   const rows = await prisma.user.findMany({
-    where: { currentTableId: { not: null } },
+    // exit-reconnect B5: bots are excluded. They never buy in (addBots seats them
+    // through table.addPlayer with no debit and no ledger row), so "refunding" them
+    // mints chips into a bot balance and writes a phantom cashout — prod had already
+    // accumulated 4145 chips across 10 such rows before checkpointSeatedPlayers was
+    // taught to skip bots. That fix stops new rows being marked; this one stops the
+    // sweep acting on the stale rows already sitting in the database.
+    where: { currentTableId: { not: null }, isBot: false },
     select: { telegramId: true, currentTableId: true, currentChips: true },
   });
 

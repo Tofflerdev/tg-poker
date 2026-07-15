@@ -20,12 +20,25 @@ import type { HandCompleteEvent } from '../types/index.js';
  */
 export async function checkpointSeatedPlayers(evt: HandCompleteEvent): Promise<void> {
   await Promise.all(
-    evt.perPlayer.map((p) =>
-      UserRepository.checkpointSeat(p.telegramId, {
-        currentChips: p.finalChips,
-        currentTableId: evt.tableId,
-        currentSeat: p.seat,
-      })
-    )
+    evt.perPlayer
+      // exit-reconnect B5: NEVER checkpoint bots (reserved negative telegramId range).
+      // The checkpoint exists solely so refundCurrentChips can pay a human back after
+      // a crash. Bots never buy in — addBots seats them straight through
+      // table.addPlayer with no balance debit and no ledger row — but they were being
+      // checkpointed anyway, which left currentTableId set on their User rows. The
+      // boot sweep then found them (WHERE currentTableId IS NOT NULL), "refunded"
+      // chips they never paid for into their balance and wrote a cashout ledger row
+      // for each. Prod had already minted 4145 chips across 10 such rows this way,
+      // breaking the plan's §E invariant (deposits − withdrawals = Σ balances + chips
+      // in play). Bots are re-seated fresh at maxBuyIn on every spawn, so they have
+      // nothing to recover. Mirrors the bot filter on the stats path in index.ts.
+      .filter((p) => Number(p.telegramId) > 0)
+      .map((p) =>
+        UserRepository.checkpointSeat(p.telegramId, {
+          currentChips: p.finalChips,
+          currentTableId: evt.tableId,
+          currentSeat: p.seat,
+        })
+      )
   );
 }
