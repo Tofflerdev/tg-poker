@@ -97,6 +97,25 @@ export default class Game {
 
   // Добавление игрока (разрешаем в любое время)
   // telegramId (stringified) is the durable identity key stored in player.id (RESILIENCE-03)
+  /**
+   * exit-reconnect B8: is a hand actually being played right now?
+   *
+   * 'waiting' and 'showdown' are both BETWEEN hands — the disconnect handler and
+   * isInHand() have always agreed on that. addPlayer/sitIn disagreed and tested only
+   * `stage !== 'waiting'`, so anyone arriving during showdown was flagged
+   * waitingForBB, which excludes them from getEligiblePlayers().
+   *
+   * That could brick a table for good: with the last eligible human sat out (which
+   * onHandBoundary now does routinely on a disconnect), canRunHands() is false, so no
+   * hand is scheduled; waitingForBB is only ever cleared by activateWaitingPlayers,
+   * which only runs inside startNextHand — which never runs. Every human who then sat
+   * down was flagged in turn and the table stayed dead. Prod 2026-07-15: table-funnel-1
+   * dealt nothing from 14:31:18 onwards while players sat down, waited and left.
+   */
+  private isHandActive(): boolean {
+    return this.stage !== 'waiting' && this.stage !== 'showdown';
+  }
+
   addPlayer(telegramId: string, seat: number, chips: number = 1000, telegramIdNumeric?: number, displayName?: string, avatarUrl?: string, socketId?: string, avatarId?: string, isBot?: boolean): boolean {
     if (seat < 0 || seat >= this.seats.length) return false;
     if (this.seats[seat]) return false;
@@ -109,7 +128,9 @@ export default class Game {
     const eligiblePlayers = this.seats.filter((p): p is Player =>
       p !== null && p.chips > 0 && !p.waitingForBB && !p.sittingOut
     );
-    const waitingForBB = this.stage !== 'waiting' && eligiblePlayers.length > 0;
+    // exit-reconnect B8: 'showdown' is BETWEEN hands, not during one — there is no
+    // blind in flight to wait for. See isHandActive().
+    const waitingForBB = this.isHandActive() && eligiblePlayers.length > 0;
 
     const player: Player = {
       id: telegramId,      // player.id holds telegramId (durable key)
@@ -174,7 +195,7 @@ export default class Game {
       return true;
     }
 
-    const handActive = this.stage !== 'waiting' && this.stage !== 'showdown';
+    const handActive = this.isHandActive();
 
     // Если игрок в текущей раздаче (есть карты и не сфолдил)
     const isInHand = handActive && player.hand.length > 0 && !player.folded;
@@ -241,7 +262,7 @@ export default class Game {
   isInHand(playerId: string): boolean {
     const player = this.seats.find(p => p?.id === playerId);
     if (!player) return false;
-    const handActive = this.stage !== 'waiting' && this.stage !== 'showdown';
+    const handActive = this.isHandActive();
     return handActive && player.hand.length > 0 && !player.folded;
   }
 
@@ -258,7 +279,11 @@ export default class Game {
     const player = this.seats.find(p => p?.id === playerId);
     if (!player) return false;
     player.sittingOut = false;
-    player.waitingForBB = this.stage !== 'waiting';
+    // exit-reconnect B8: same predicate as addPlayer — no hand running, nothing to
+    // wait for. Marking a player waitingForBB at showdown made them ineligible, and
+    // if they were the last eligible human the table could never deal again (see
+    // isHandActive), so the flag could never be cleared either.
+    player.waitingForBB = this.isHandActive();
     return true;
   }
 

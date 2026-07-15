@@ -362,6 +362,61 @@ describe('a dealt-out player is never asked to act (exit-reconnect B7)', () => {
   });
 });
 
+/**
+ * exit-reconnect B8 — a table must never become unplayable.
+ *
+ * Prod 2026-07-15: table-funnel-1 dealt nothing from 14:31:18 onwards. Players sat
+ * down, waited 30-40 s showing "Wait BB", and left. Three times.
+ */
+describe('an idle table cannot be bricked (exit-reconnect B8)', () => {
+  const cfg = (over: Partial<TableConfig> = {}): TableConfig => ({
+    smallBlind: 1, bigBlind: 2, maxPlayers: 6, turnTime: 30,
+    minBuyIn: 80, maxBuyIn: 200, category: 'cash', ...over,
+  });
+
+  /** Hand over, stage still 'showdown', the only human sat out by the grace handler. */
+  function idleTableAtShowdown(): Table {
+    const t = new Table('b', 'B', cfg());
+    t.addPlayer('H', 0, 200);
+    t.addPlayer('-1', 1, 200, -1, 'B1', undefined, undefined, true);
+    t.addPlayer('-2', 2, 200, -2, 'B2', undefined, undefined, true);
+    (t.game as any).stage = 'showdown';
+    t.sitOut('H');
+    return t;
+  }
+
+  it('a human joining between hands is dealt in, not parked on Wait BB', () => {
+    const t = idleTableAtShowdown();
+    t.addPlayer('H2', 3, 200);
+
+    // showdown is BETWEEN hands: there is no blind in flight to wait for. Flagging
+    // H2 here made them ineligible, and with no eligible human canRunHands() stays
+    // false, so startNextHand never runs — and only startNextHand ever clears the
+    // flag. The table was dead for good, and so was every human who sat down next.
+    expect(t.getState().seats[3]!.waitingForBB).toBe(false);
+    expect(t.game.getEligiblePlayers().some((p: Player) => p.id === 'H2')).toBe(true);
+  });
+
+  it('sitting back in between hands does not park the player either', () => {
+    const t = idleTableAtShowdown();
+    t.sitIn('H');
+    expect(t.getState().seats[0]!.waitingForBB).toBe(false);
+    expect(t.game.getEligiblePlayers().some((p: Player) => p.id === 'H')).toBe(true);
+  });
+
+  it('still waits for the big blind when a hand really is running', () => {
+    // The rule itself must survive: joining mid-hand cannot dodge the blinds.
+    const t = new Table('b2', 'B2', cfg());
+    t.addPlayer('H', 0, 200);
+    t.addPlayer('-1', 1, 200, -1, 'B1', undefined, undefined, true);
+    (t.game as any).startNextHand();
+    expect(t.getState().stage).toBe('preflop');
+
+    t.addPlayer('H2', 3, 200);
+    expect(t.getState().seats[3]!.waitingForBB).toBe(true);
+  });
+});
+
 describe('PendingExits registry (exit-reconnect A)', () => {
   beforeEach(() => PendingExits.__resetForTests());
 
