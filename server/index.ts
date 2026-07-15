@@ -21,6 +21,7 @@ import * as HandHistoryQueue from "./HandHistoryQueue.js";
 import { HandHistoryRepository } from "./db/HandHistoryRepository.js";
 import { checkpointSeatedPlayers } from "./checkpointSeatedPlayers.js";
 import * as GraceRegistry from "./GraceRegistry.js";
+import * as PendingExits from "./PendingExits.js";
 import * as SessionRecovery from "./SessionRecovery.js";
 import prisma from "./db/prisma.js";
 import * as Sentry from '@sentry/node';
@@ -152,6 +153,52 @@ app.get("/api/tables", (_req, res) => {
  */
 const getSocketId = (telegramId: string): string | undefined => {
   return tableManager.getSocketIdForTelegram(telegramId);
+};
+
+/**
+ * exit-reconnect A: settle every exit deferred from mid-hand on this table.
+ *
+ * Called from setOnHandComplete AFTER checkpointSeatedPlayers has committed, so the
+ * currentChips that refundCurrentChips pays out is the player's true final stack —
+ * including any pot they won while auto-checking their way out.
+ *
+ * Failures are logged per player and never re-thrown: one bad refund must not stop
+ * the others or the hand-complete pipeline.
+ */
+const settlePendingExits = async (tableId: string): Promise<void> => {
+  const leaving = PendingExits.forTable(tableId);
+  if (leaving.length === 0) return;
+
+  for (const telegramId of leaving) {
+    try {
+      tableManager.leaveTable(telegramId);
+      const result = await UserRepository.refundCurrentChips(telegramId);
+      const user = userStorage.getUser(telegramId);
+      let balance: number | undefined;
+      if (user) {
+        const refreshed = await UserRepository.findByTelegramId(user.telegramId);
+        if (refreshed) {
+          user.balance = refreshed.balance;
+          balance = refreshed.balance;
+        }
+      }
+      const socketId = getSocketId(telegramId);
+      if (socketId && balance !== undefined) {
+        io.to(socketId).emit("balanceUpdate", balance);
+        io.to(socketId).emit("exitCompleted", {
+          tableId,
+          refunded: result?.refunded ?? 0,
+          balance,
+        });
+      }
+      console.log(`[Exit] settled telegramId=${telegramId} tableId=${tableId} refunded=${result?.refunded ?? 0}`);
+    } catch (err) {
+      console.error('[Exit] settle failed for telegramId=%s:', telegramId, err);
+    } finally {
+      PendingExits.clear(telegramId);
+    }
+  }
+  updateTableState(tableId);
 };
 
 /**
@@ -325,6 +372,11 @@ const setupTableEvents = (tableId: string) => {
         }
         // (2) Authoritative chip/seat checkpoint — separate awaited path (D-14).
         await checkpointSeatedPlayers(evt);
+        // (2a) exit-reconnect A: settle exits deferred from mid-hand. MUST run after
+        // the checkpoint above — that write is what makes currentChips the player's
+        // true final stack, which is exactly what the refund pays out. On a checkpoint
+        // failure we fall into catch and skip settling rather than refund a stale value.
+        await settlePendingExits(evt.tableId);
         // (2b) Profile stats (audit #12). Skip bots (negative telegramId) and
         // players not dealt into this hand (no hole cards). winnings = netDelta.
         await Promise.all(
@@ -433,7 +485,12 @@ io.on("connection", (socket) => {
       // refresh other seats. Reuses existing events — no new event type.
       // getStateForPlayer(telegramId) is used here (NOT getState()) so the snapshot
       // contains only this player's own hole cards — same privacy path as regular state push.
-      const seatedTable = tableManager.getPlayerTable(telegramId);
+      // exit-reconnect F: a leaving player is still seated until the boundary refund,
+      // so skip the resume snapshot for them — restoring them into a table they are
+      // in the middle of leaving would only strand them there until the settle fires.
+      const seatedTable = PendingExits.isPending(telegramId)
+        ? undefined
+        : tableManager.getPlayerTable(telegramId);
       if (seatedTable) {
         seatedTable.updatePlayerSocketId(telegramId, socket.id);
         const state = seatedTable.getStateForPlayer(telegramId);
@@ -705,10 +762,39 @@ io.on("connection", (socket) => {
       return;
     }
 
+    const tableInfo = tableManager.getTable(tableId);
+
+    // exit-reconnect F: an exit is still settling. This MUST be checked before the
+    // resume branch below: a leaving player is deliberately still seated (the seat is
+    // held until the boundary refund), so isSeated() is true for them and they would
+    // be resumed here — only to be yanked out and cashed out a moment later.
+    if (PendingExits.isPending(telegramId)) {
+      socket.emit("tableError", "Finishing your last hand — your chips are on the way back. Try again in a moment.");
+      return;
+    }
+
+    // exit-reconnect E / B1: RESUME, never re-seat. A player already sitting at this
+    // table who emits joinTable again (reconnect, second tab, stale client) must get
+    // their existing seat back — not a fresh buy-in. The old code fell through to the
+    // "leave current table" branch below, which drops the in-memory player WITHOUT
+    // refundCurrentChips: the held stack was destroyed and the balance debited again.
+    // Checked against the live seats, not playerToTable — a busted player stays mapped
+    // to the table as a spectator and must still be able to re-buy.
+    if (tableInfo && tableInfo.isSeated(telegramId)) {
+      socket.join(tableId);
+      GraceRegistry.clear(telegramId);
+      tableInfo.updatePlayerSocketId(telegramId, socket.id);
+      const state = tableInfo.getStateForPlayer(telegramId);
+      const seatIdx = state.seats.findIndex((p) => p?.id === telegramId);
+      socket.emit("tableJoined", { tableId, seat: seatIdx, state });
+      updateTableState(tableId);
+      console.log(`[Table] telegramId=${telegramId} (socket ${socket.id}) resumed ${tableId} at seat ${seatIdx}`);
+      return;
+    }
+
     // crypto-payments-rake phase 3: buy-in is a range. Clamp the requested amount
     // to [minBuyIn, maxBuyIn] (defaulting to maxBuyIn) and check the balance
     // against that. The authoritative seated amount comes back from joinTable.
-    const tableInfo = tableManager.getTable(tableId);
     if (tableInfo) {
       const cfg = tableInfo.config;
       const effectiveBuyIn = clampBuyIn(buyInAmount, cfg);
@@ -718,11 +804,39 @@ io.on("connection", (socket) => {
       }
     }
 
-    // Leave current table if at one
+    // exit-reconnect B1: leaving for a DIFFERENT table must cash the old seat out.
+    // tableManager.leaveTable alone only drops the in-memory player — the stack would
+    // vanish with no cashout row and the balance would be debited again for the new seat.
     const currentTableId = tableManager.getPlayerTableId(telegramId);
     if (currentTableId) {
       socket.leave(currentTableId);
+      const oldTable = tableManager.getTable(currentTableId);
+      if (oldTable && oldTable.isInHand(telegramId)) {
+        // Mid-hand: defer exactly as a plain leave would, and refuse the new seat for
+        // now — the refund lands at the boundary and the player can join then.
+        oldTable.markLeaving(telegramId);
+        PendingExits.mark(telegramId, currentTableId);
+        updateTableState(currentTableId);
+        socket.emit("exitPending", { tableId: currentTableId });
+        socket.emit("tableError", "Finishing your last hand at your current table — try again in a moment.");
+        return;
+      }
       tableManager.leaveTable(telegramId);
+      updateTableState(currentTableId);
+      try {
+        const refund = await UserRepository.refundCurrentChips(telegramId);
+        if (refund) {
+          const refreshed = await UserRepository.findByTelegramId(user.telegramId);
+          if (refreshed) {
+            user.balance = refreshed.balance;
+            socket.emit("balanceUpdate", refreshed.balance);
+          }
+        }
+      } catch (err) {
+        console.error('[Table] refund on table switch failed:', err);
+        socket.emit("tableError", "Could not cash out your current table. Try again.");
+        return;
+      }
     }
 
     // Join new table (seats with the clamped buy-in; returns the exact chips seated)
@@ -737,7 +851,13 @@ io.on("connection", (socket) => {
     // Deduct EXACTLY the chips that were seated (result.buyIn) so balance and
     // in-play chips stay in lock-step. Closes Concern #5 (double-spend race).
     const seatedBuyIn = result.buyIn ?? tableInfo!.config.maxBuyIn;
-    const ok = await UserRepository.tryDecrementBalance(user.telegramId, seatedBuyIn, { tableId });
+    // exit-reconnect B3: the session trio is written in the same transaction as the
+    // debit, so currentChips is never NULL/stale between sitting down and the first
+    // hand-boundary checkpoint (a leave in that window used to refund nothing).
+    const ok = await UserRepository.tryDecrementBalance(user.telegramId, seatedBuyIn, { tableId }, {
+      tableId,
+      seat: result.seat!,
+    });
     if (!ok) {
       // Roll back the in-memory join (player was added by tableManager.joinTable above).
       socket.leave(tableId);
@@ -773,33 +893,54 @@ io.on("connection", (socket) => {
     }
 
     const tableId = tableManager.getPlayerTableId(telegramId);
-    if (tableId) {
+    if (!tableId) return;
+
+    // exit-reconnect A / B2: a mid-hand exit NEVER vacates now. refundCurrentChips
+    // pays out the hand-boundary checkpoint, i.e. the stack from BEFORE this hand's
+    // bets — while Game.removePlayer leaves those bets in the pot for the winner.
+    // Refunding both mints chips. Hold the seat, auto-act for them (Game.markLeaving
+    // sets `leaving`, so startTurnTimer acts instantly), and settle at the boundary
+    // once the checkpoint reflects their true final stack.
+    const table = tableManager.getTable(tableId);
+    if (table && table.isInHand(telegramId)) {
+      table.markLeaving(telegramId);
+      PendingExits.mark(telegramId, tableId);
+      GraceRegistry.clear(telegramId);
       socket.leave(tableId);
-      tableManager.leaveTable(telegramId);
+      socket.emit("exitPending", { tableId });
       socket.emit("tableLeft");
       updateTableState(tableId);
-      console.log(`[Table] telegramId=${telegramId} (socket ${socket.id}) left ${tableId}`);
+      console.log(`[Table] telegramId=${telegramId} (socket ${socket.id}) leaving ${tableId} — settles at hand end`);
+      return;
+    }
 
-      // Phase 4 / Plan 04-06 / D-D2: atomic + idempotent refund. Reads currentChips
-      // from the User row (NOT in-memory player state — the row was checkpointed at
-      // the last hand boundary by Phase 3's onHandComplete). Clears all session columns.
-      // Cancel any in-flight grace timer (the player chose to leave, not got disconnected).
-      GraceRegistry.clear(telegramId);
-      try {
-        const result = await UserRepository.refundCurrentChips(telegramId);
-        if (result) {
-          const user = userStorage.getUser(telegramId);
-          if (user) {
-            const refreshed = await UserRepository.findByTelegramId(user.telegramId);
-            if (refreshed) {
-              user.balance = refreshed.balance;
-              socket.emit("balanceUpdate", refreshed.balance);
-            }
+    // Between hands there is nothing to play out and the checkpoint is already
+    // authoritative, so the exit settles immediately.
+    socket.leave(tableId);
+    tableManager.leaveTable(telegramId);
+    socket.emit("tableLeft");
+    updateTableState(tableId);
+    console.log(`[Table] telegramId=${telegramId} (socket ${socket.id}) left ${tableId}`);
+
+    // Phase 4 / Plan 04-06 / D-D2: atomic + idempotent refund. Reads currentChips
+    // from the User row (NOT in-memory player state). Clears all session columns.
+    // Cancel any in-flight grace timer (the player chose to leave, not got disconnected).
+    GraceRegistry.clear(telegramId);
+    try {
+      const result = await UserRepository.refundCurrentChips(telegramId);
+      if (result) {
+        const user = userStorage.getUser(telegramId);
+        if (user) {
+          const refreshed = await UserRepository.findByTelegramId(user.telegramId);
+          if (refreshed) {
+            user.balance = refreshed.balance;
+            socket.emit("balanceUpdate", refreshed.balance);
+            socket.emit("exitCompleted", { tableId, refunded: result.refunded, balance: refreshed.balance });
           }
         }
-      } catch (error) {
-        console.error("Failed to refund chips:", error);
       }
+    } catch (error) {
+      console.error("Failed to refund chips:", error);
     }
   });
 
@@ -956,8 +1097,14 @@ io.on("connection", (socket) => {
     }
 
     // Phase 4 / Plan 04-06 / D-D2: same atomic buy-in pattern as joinTable.
+    // exit-reconnect B3: seat the session trio in the same transaction (see joinTable).
     const seatedBuyIn2 = result.buyIn ?? availableTable.config.minBuyIn;
-    const ok2 = await UserRepository.tryDecrementBalance(user.telegramId, seatedBuyIn2, { tableId: availableTable.id });
+    const ok2 = await UserRepository.tryDecrementBalance(
+      user.telegramId,
+      seatedBuyIn2,
+      { tableId: availableTable.id },
+      { tableId: availableTable.id, seat: result.seat! },
+    );
     if (!ok2) {
       socket.leave(availableTable.id);
       tableManager.leaveTable(telegramId);

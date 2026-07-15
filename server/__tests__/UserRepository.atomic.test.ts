@@ -69,6 +69,38 @@ describe('UserRepository atomic helpers', () => {
       expect(ok).toBe(false);
       expect(txClient.transaction.create).not.toHaveBeenCalled();
     });
+
+    // exit-reconnect B3: currentChips is the sole refund source of truth but used to be
+    // written only at hand boundaries, so a leave before the first hand ended refunded
+    // NULL (first sit-down) or 0 (re-buy after busting) and destroyed the buy-in.
+    it('seats the session trio in the SAME update as the debit when session is given', async () => {
+      txClient.user.updateMany.mockResolvedValue({ count: 1 });
+      txClient.user.findUnique.mockResolvedValue({ id: 7, balance: 920 });
+      const ok = await UserRepository.tryDecrementBalance(1001, 80, { tableId: 'table-funnel-1' }, {
+        tableId: 'table-funnel-1',
+        seat: 3,
+      });
+      expect(ok).toBe(true);
+      expect(txClient.user.updateMany).toHaveBeenCalledWith({
+        where: { telegramId: BigInt(1001), balance: { gte: 80 } },
+        data: {
+          balance: { decrement: 80 },
+          currentChips: 80,
+          currentTableId: 'table-funnel-1',
+          currentSeat: 3,
+        },
+      });
+    });
+
+    it('leaves the session columns untouched when no session is given', async () => {
+      txClient.user.updateMany.mockResolvedValue({ count: 1 });
+      txClient.user.findUnique.mockResolvedValue({ id: 7, balance: 500 });
+      await UserRepository.tryDecrementBalance(1001, 500, { tableId: 't1' });
+      expect(txClient.user.updateMany).toHaveBeenCalledWith({
+        where: { telegramId: BigInt(1001), balance: { gte: 500 } },
+        data: { balance: { decrement: 500 } },
+      });
+    });
   });
 
   describe('refundCurrentChips (D-D2)', () => {

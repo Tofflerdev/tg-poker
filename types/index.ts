@@ -21,6 +21,7 @@ export interface Player {
   showCards: boolean;
   waitingForBB: boolean;  // NEW: игрок присоединился во время игры, ждет большого блайнда
   sittingOut: boolean;    // NEW: игрок добровольно отсиделся
+  leaving?: boolean;      // exit-reconnect: выход запрошен, доигрывает руку на автодействии
   isBot?: boolean;        // playtest bot — server-side Player driven by BotDriver (no socket)
 }
 
@@ -237,6 +238,11 @@ export interface ExtendedServerEvents extends ServerEvents {
   tableJoined: (payload: { tableId: string; seat: number; state: GameState }) => void;
   tableLeft: () => void;
   tableError: (msg: string) => void;
+  // exit-reconnect F: an exit requested mid-hand settles only at the hand boundary,
+  // so the refund is asynchronous. The player is told both that it is coming and,
+  // once the hand ends, exactly how much came back.
+  exitPending: (payload: { tableId: string }) => void;
+  exitCompleted: (payload: { tableId: string; refunded: number; balance: number }) => void;
   // Chat events
   chatMessage: (message: ChatMessage) => void;
   systemMessage: (text: string) => void;

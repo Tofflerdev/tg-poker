@@ -207,6 +207,44 @@ export default class Game {
     return true;
   }
 
+  /**
+   * exit-reconnect A: mark a player as leaving without removing them.
+   *
+   * The seat is HELD until the hand-boundary checkpoint has captured the player's
+   * true finalChips (checkpointSeatedPlayers runs over evt.perPlayer = occupied
+   * seats only). Removing mid-hand instead would refund the stale pre-hand
+   * checkpoint while the committed chips are paid to the winner — minting chips.
+   *
+   * `sittingOut` deals them out of the NEXT hand, so the settle-at-boundary path
+   * can't race the 5 s NEXT_HAND_DELAY and deal a leaving player back in.
+   */
+  markLeaving(playerId: string): boolean {
+    const player = this.seats.find(p => p?.id === playerId);
+    if (!player) return false;
+    player.leaving = true;
+    player.sittingOut = true;
+    return true;
+  }
+
+  /**
+   * exit-reconnect E: is this player occupying a seat right now?
+   *
+   * Distinct from TableManager.playerToTable, which also maps busted players who
+   * were moved to spectators (index.ts zero-chip sweep) and must still be able to
+   * re-buy. Only a live seat means "resume", never "re-seat".
+   */
+  isSeated(playerId: string): boolean {
+    return this.seats.some(p => p?.id === playerId);
+  }
+
+  /** exit-reconnect: is this player mid-hand right now (has cards, hasn't folded)? */
+  isInHand(playerId: string): boolean {
+    const player = this.seats.find(p => p?.id === playerId);
+    if (!player) return false;
+    const handActive = this.stage !== 'waiting' && this.stage !== 'showdown';
+    return handActive && player.hand.length > 0 && !player.folded;
+  }
+
   // Добровольный сит-аут
   sitOut(playerId: string): boolean {
     const player = this.seats.find(p => p?.id === playerId);
@@ -1026,21 +1064,36 @@ export default class Game {
     this.stopTurnTimer();
     if (this.currentPlayer === null) return;
 
-    this.turnExpiresAt = Date.now() + this.turnTimeLimit;
-
-    const currentPlayerId = this.seats[this.currentPlayer]?.id;
+    const seated = this.seats[this.currentPlayer];
+    const currentPlayerId = seated?.id;
     if (!currentPlayerId) return;
 
+    // exit-reconnect A: a player who asked to leave has nothing to wait for — act at
+    // once instead of stalling the table for the full turn limit on every street. A
+    // merely DISCONNECTED player keeps the full timer: they may still reconnect
+    // inside it and act themselves (the client promises "your turn is held").
+    const delay = seated?.leaving ? 0 : this.turnTimeLimit;
+    this.turnExpiresAt = Date.now() + delay;
+
     this.turnTimer = setTimeout(() => {
-      console.log(`Time out for player ${currentPlayerId}`);
       // Если игрок все еще текущий (на всякий случай проверка)
-      if (this.seats[this.currentPlayer!]?.id === currentPlayerId) {
+      if (this.seats[this.currentPlayer!]?.id !== currentPlayerId) return;
+
+      // exit-reconnect A: check when checking is free; fold only when facing a bet.
+      // Auto-folding a free hand throws away equity the player is entitled to —
+      // a leaving player who checks down may legitimately win the pot.
+      const player = this.seats[this.currentPlayer!]!;
+      const toCall = this.currentBet - player.bet;
+      if (toCall <= 0 && this.check(currentPlayerId)) {
+        console.log(`Turn timeout for player ${currentPlayerId} — auto-check`);
+      } else {
+        console.log(`Turn timeout for player ${currentPlayerId} — auto-fold`);
         this.fold(currentPlayerId);
-        if (this.onTurnTimeout) {
-          this.onTurnTimeout();
-        }
       }
-    }, this.turnTimeLimit);
+      if (this.onTurnTimeout) {
+        this.onTurnTimeout();
+      }
+    }, delay);
   }
 
   private stopTurnTimer() {

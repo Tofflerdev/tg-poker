@@ -135,12 +135,28 @@ export class UserRepository {
   static async tryDecrementBalance(
     telegramId: number,
     amount: number,
-    meta?: Record<string, unknown>
+    meta?: Record<string, unknown>,
+    session?: { tableId: string; seat: number }
   ): Promise<boolean> {
     return prisma.$transaction(async (tx) => {
       const result = await tx.user.updateMany({
         where: { telegramId: BigInt(telegramId), balance: { gte: amount } },
-        data:  { balance: { decrement: amount } }
+        data:  {
+          balance: { decrement: amount },
+          // exit-reconnect B3: seat the player in the SAME transaction as the debit.
+          // currentChips is the sole refund source of truth (refundCurrentChips), but
+          // it was previously only written at hand boundaries by checkpointSeatedPlayers.
+          // That left a window between buy-in and the first hand end where it held NULL
+          // (first ever sit-down) or 0 (re-buy after busting) — leaving in that window
+          // refunded nothing and destroyed the whole buy-in.
+          ...(session
+            ? {
+                currentChips: amount,
+                currentTableId: session.tableId,
+                currentSeat: session.seat,
+              }
+            : {}),
+        }
       });
       if (result.count !== 1) return false;
 

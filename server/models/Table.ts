@@ -365,6 +365,28 @@ export class Table {
   }
 
   /**
+   * exit-reconnect A: mark a player as leaving; the seat is held until the hand
+   * boundary settles the exit (see server/PendingExits.ts).
+   */
+  markLeaving(telegramId: string): boolean {
+    const result = this.game.markLeaving(telegramId);
+    if (result) {
+      this.notifyStateChange();
+    }
+    return result;
+  }
+
+  /** exit-reconnect A: is this player mid-hand right now (has cards, hasn't folded)? */
+  isInHand(telegramId: string): boolean {
+    return this.game.isInHand(telegramId);
+  }
+
+  /** exit-reconnect E: is this player occupying a seat (not a spectator)? */
+  isSeated(telegramId: string): boolean {
+    return this.game.isSeated(telegramId);
+  }
+
+  /**
    * Sit out - player voluntarily sits out
    */
   sitOut(telegramId: string): boolean {
