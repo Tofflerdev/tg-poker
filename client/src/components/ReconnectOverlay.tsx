@@ -1,65 +1,69 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import type { Socket } from 'socket.io-client';
-import type {
-  ExtendedServerEvents,
-  ExtendedClientEvents,
-  GameStage,
-} from '../../../types/index';
+import type { ExtendedServerEvents, ExtendedClientEvents } from '../../../types/index';
 
 /**
- * Plan 04-05 / RESILIENCE-05 / D-B4:
- * Full-screen Neon Strip "Reconnecting…" overlay with 1500 ms debounce, stage-aware
- * countdown (30 s mid-hand / 120 s between-hands), and three terminal sub-views
- * (sat-out, vacated, replaced).
+ * exit-reconnect D: full-screen Neon Strip "Reconnecting…" overlay.
  *
- * The component is a pure consumer of socket lifecycle events:
- *   - 'disconnect' → start debounce timer
- *   - 'connect' → cancel debounce / dismiss active overlay
- *   - 'tableJoined' → dismiss (server pushed snapshot — D-A2)
- *   - 'replacedBySession' → instantly show replaced sub-view (D-A3)
+ * Reworked from the two-stage design (30 s mid-hand / 120 s between-hands inferred
+ * from the last known GameStage). The server now holds the seat for ONE window and
+ * ships its length in tableJoined, so the client no longer guesses either the
+ * duration or the stage — it just counts the server's number down from its own
+ * 'disconnect' event. A duration, not a deadline: nothing to clock-sync.
  *
- * Pitfall 5 (rapid disconnect/connect flicker) is closed by tracking the
- * debounce timer in a useRef and clearing on every 'connect' event.
+ * Sub-views:
+ *   - reconnecting  — counting down, with a manual reload as the escape hatch
+ *   - vacated       — window ran out; the seat was cashed out while away
+ *   - replaced      — logged in elsewhere (D-A3, instantaneous, bypasses debounce)
  *
- * Exports timing constants for the Wave-0 test (Plan 04-00) and for App.tsx
- * to reuse if it ever needs to compute the same numbers.
+ * The old 'sat-out' terminal view is gone: returning inside the window puts the
+ * player straight back at the table (the server re-seats them on auth), so there is
+ * nothing to dismiss. Sitting out is now an invisible chip-protection step, not a
+ * dead end the player has to click out of.
+ *
+ * Pure consumer of socket lifecycle events:
+ *   'disconnect' → debounce, then show     'connect' → dismiss
+ *   'tableJoined' → dismiss (server pushed a snapshot — D-A2)
+ *   'replacedBySession' → replaced view
+ *
+ * Pitfall 5 (rapid disconnect/connect flicker) is closed by the debounce ref.
  */
 
 export const RECONNECT_OVERLAY_DEBOUNCE_MS = 1500;
-export const GRACE_MID_HAND_MS = 30_000;
-export const GRACE_BETWEEN_HANDS_MS = 120_000;
+/** Fallback when the server hasn't told us yet (not seated → seat-holding is moot). */
+export const DEFAULT_RECONNECT_WINDOW_MS = 120_000;
 
 export interface ReconnectOverlayProps {
   socket: Socket<ExtendedServerEvents, ExtendedClientEvents>;
-  /** Last-known game stage at disconnect — used to infer mid-hand vs between-hands grace duration. */
-  lastStage: GameStage;
-  /** Optional callback for the "Back to Tables" button in expired sub-views. */
+  /** Seat-holding window from the server's tableJoined; null until seated. */
+  reconnectWindowMs?: number | null;
+  /** Callback for the "Back to Tables" button in the vacated sub-view. */
   onDismissExpired?: () => void;
 }
 
 type OverlayState =
   | { kind: 'hidden' }
-  | { kind: 'reconnecting'; stage: 'mid-hand' | 'between-hands'; expiresAt: number }
-  | { kind: 'sat-out' }
+  | { kind: 'reconnecting'; expiresAt: number }
   | { kind: 'vacated' }
   | { kind: 'replaced' };
 
-const stageFor = (lastStage: GameStage): 'mid-hand' | 'between-hands' =>
-  lastStage === 'waiting' || lastStage === 'showdown' ? 'between-hands' : 'mid-hand';
-
-export function ReconnectOverlay({ socket, lastStage, onDismissExpired }: ReconnectOverlayProps): JSX.Element | null {
+export function ReconnectOverlay({
+  socket,
+  reconnectWindowMs,
+  onDismissExpired,
+}: ReconnectOverlayProps): JSX.Element | null {
   const [overlayState, setOverlayState] = useState<OverlayState>({ kind: 'hidden' });
   const [tickNow, setTickNow] = useState<number>(Date.now());
 
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const graceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const tickRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const lastStageRef = useRef<GameStage>(lastStage);
+  // Read the freshest window from the closure-captured disconnect callback.
+  const windowRef = useRef<number>(reconnectWindowMs ?? DEFAULT_RECONNECT_WINDOW_MS);
 
-  // Track lastStage in a ref so the debounce callback (closure-captured) reads the freshest value.
   useEffect(() => {
-    lastStageRef.current = lastStage;
-  }, [lastStage]);
+    windowRef.current = reconnectWindowMs ?? DEFAULT_RECONNECT_WINDOW_MS;
+  }, [reconnectWindowMs]);
 
   const clearAllTimers = useCallback(() => {
     if (debounceRef.current) {
@@ -85,31 +89,27 @@ export function ReconnectOverlay({ socket, lastStage, onDismissExpired }: Reconn
       }
       debounceRef.current = setTimeout(() => {
         debounceRef.current = null;
-        const stage = stageFor(lastStageRef.current);
-        const graceMs = stage === 'mid-hand' ? GRACE_MID_HAND_MS : GRACE_BETWEEN_HANDS_MS;
+        const graceMs = windowRef.current;
         const startedAt = Date.now();
-        const expiresAt = startedAt + graceMs;
-        // Sync tickNow to the moment the overlay opens so the first render shows
-        // the full graceMs (otherwise stale tickNow from initial mount makes the
-        // countdown read graceMs+1500 ms — visible as "32" instead of "30").
+        // Sync tickNow to the moment the overlay opens so the first render shows the
+        // full graceMs (a stale tickNow reads graceMs+1500 — "122" instead of "120").
         setTickNow(startedAt);
-        setOverlayState({ kind: 'reconnecting', stage, expiresAt });
-        // Start the grace expiry timer.
+        setOverlayState({ kind: 'reconnecting', expiresAt: startedAt + graceMs });
+
         if (graceRef.current) clearTimeout(graceRef.current);
         graceRef.current = setTimeout(() => {
           graceRef.current = null;
-          setOverlayState(stage === 'mid-hand' ? { kind: 'sat-out' } : { kind: 'vacated' });
+          setOverlayState({ kind: 'vacated' });
         }, graceMs);
-        // Start the per-second tick for the visible countdown.
+
         if (tickRef.current) clearInterval(tickRef.current);
-        tickRef.current = setInterval(() => {
-          setTickNow(Date.now());
-        }, 1000);
+        tickRef.current = setInterval(() => setTickNow(Date.now()), 1000);
       }, RECONNECT_OVERLAY_DEBOUNCE_MS);
     };
 
     const onConnect = () => {
-      // Cancel debounce + grace + tick. Hide overlay if reconnecting.
+      // The transport is back. App.tsx re-authenticates on this same event, which is
+      // what actually restores the session and the seat.
       clearAllTimers();
       setOverlayState((prev) => (prev.kind === 'reconnecting' ? { kind: 'hidden' } : prev));
     };
@@ -139,7 +139,6 @@ export function ReconnectOverlay({ socket, lastStage, onDismissExpired }: Reconn
     };
   }, [socket, clearAllTimers]);
 
-  // Render
   if (overlayState.kind === 'hidden') return null;
 
   const backdropStyle: React.CSSProperties = {
@@ -158,9 +157,19 @@ export function ReconnectOverlay({ socket, lastStage, onDismissExpired }: Reconn
     textAlign: 'center',
   };
 
+  const buttonStyle: React.CSSProperties = {
+    background: 'transparent',
+    border: '1.5px solid var(--color-active)',
+    color: 'var(--color-active)',
+    padding: '12px 24px',
+    borderRadius: 12,
+    minHeight: 44,
+    cursor: 'pointer',
+    boxShadow: '0 0 8px var(--glow-call)',
+  };
+
   if (overlayState.kind === 'reconnecting') {
-    const remainingMs = Math.max(0, overlayState.expiresAt - tickNow);
-    const remainingSec = Math.ceil(remainingMs / 1000);
+    const remainingSec = Math.ceil(Math.max(0, overlayState.expiresAt - tickNow) / 1000);
     return (
       <div data-testid="reconnect-overlay" style={backdropStyle}>
         <div
@@ -185,36 +194,17 @@ export function ReconnectOverlay({ socket, lastStage, onDismissExpired }: Reconn
         >
           {remainingSec}
         </div>
-        <div style={{ color: 'var(--color-neutral)', fontSize: 14, marginTop: 8 }}>
-          {overlayState.stage === 'mid-hand' ? 'seconds — your turn is held' : 'seconds — your seat is held'}
-        </div>
-      </div>
-    );
-  }
-
-  if (overlayState.kind === 'sat-out') {
-    return (
-      <div data-testid="reconnect-overlay-sat-out" style={backdropStyle}>
-        <div style={{ color: 'var(--color-active)', textShadow: '0 0 12px var(--glow-call)', fontSize: 22, marginBottom: 8 }}>
-          You were sat out
-        </div>
-        <div style={{ color: 'var(--color-neutral)', fontSize: 14, marginBottom: 24 }}>
-          Your seat is held — sit in to resume.
+        <div style={{ color: 'var(--color-neutral)', fontSize: 14, marginTop: 8, marginBottom: 24 }}>
+          seconds — your seat is held
         </div>
         <button
           type="button"
-          onClick={onDismissExpired}
-          style={{
-            background: 'transparent',
-            border: '1.5px solid var(--color-active)',
-            color: 'var(--color-active)',
-            padding: '12px 24px',
-            borderRadius: 12,
-            cursor: 'pointer',
-            boxShadow: '0 0 8px var(--glow-call)',
-          }}
+          data-testid="reconnect-reload"
+          onClick={() => window.location.reload()}
+          style={buttonStyle}
+          className="active:scale-95"
         >
-          Back to Tables
+          Reload now
         </button>
       </div>
     );
@@ -229,19 +219,7 @@ export function ReconnectOverlay({ socket, lastStage, onDismissExpired }: Reconn
         <div style={{ color: 'var(--color-neutral)', fontSize: 14, marginBottom: 24 }}>
           Chips returned to balance.
         </div>
-        <button
-          type="button"
-          onClick={onDismissExpired}
-          style={{
-            background: 'transparent',
-            border: '1.5px solid var(--color-active)',
-            color: 'var(--color-active)',
-            padding: '12px 24px',
-            borderRadius: 12,
-            cursor: 'pointer',
-            boxShadow: '0 0 8px var(--glow-call)',
-          }}
-        >
+        <button type="button" onClick={onDismissExpired} style={buttonStyle} className="active:scale-95">
           Back to Tables
         </button>
       </div>

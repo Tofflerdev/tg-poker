@@ -1,6 +1,16 @@
 import '@testing-library/jest-dom/vitest';
 import { vi } from 'vitest';
 
+// jsdom has no ResizeObserver; the table layout observes its container. Any test
+// that renders the game view needs this stub to get past commit.
+if (typeof globalThis !== 'undefined' && !(globalThis as any).ResizeObserver) {
+  (globalThis as any).ResizeObserver = class {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  };
+}
+
 // motion/react's useReducedMotion reads window.matchMedia. jsdom does not
 // implement it. Mock to a non-reduced default for tests; individual tests
 // can override via vi.stubGlobal.
