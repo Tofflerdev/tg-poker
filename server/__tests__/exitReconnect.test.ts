@@ -249,6 +249,63 @@ describe('deferred exit settles on the true post-hand stack (exit-reconnect B2)'
   });
 });
 
+/**
+ * exit-reconnect A/B5 — bot removal. Bots hold no money, so none of this is about
+ * refunds: it is about not corrupting a live hand, and about bots never touching the
+ * money-recovery machinery at all.
+ */
+describe('bot removal defers to the hand boundary (exit-reconnect A)', () => {
+  const cfg = (over: Partial<TableConfig> = {}): TableConfig => ({
+    smallBlind: 5, bigBlind: 10, maxPlayers: 6, turnTime: 20,
+    minBuyIn: 400, maxBuyIn: 1000, category: 'cash', ...over,
+  });
+
+  function tableWithBots(): Table {
+    const t = new Table('bt', 'BT', cfg());
+    t.addPlayer('A', 0, 1000);                                       // human
+    t.addPlayer('-1', 1, 1000, -1, 'Bot One', undefined, undefined, true);
+    t.addPlayer('-2', 2, 1000, -2, 'Bot Two', undefined, undefined, true);
+    return t;
+  }
+
+  it('removes bots immediately when the table is between hands', () => {
+    const t = tableWithBots();
+    expect(t.requestBotRemoval()).toBe(2);
+    expect(t.isSeated('-1')).toBe(false);
+    expect(t.isSeated('-2')).toBe(false);
+    expect(t.isSeated('A')).toBe(true);
+  });
+
+  it('holds the seats mid-hand and marks the bots leaving instead', () => {
+    const t = tableWithBots();
+    (t.game as any).startNextHand();
+
+    expect(t.requestBotRemoval()).toBe(2);
+
+    // Still seated: yanking them out now would force-fold an all-in bot out of a pot
+    // it was entitled to, and drop it from evt.perPlayer so the session recorder's
+    // chip conservation stops balancing for this hand.
+    expect(t.isSeated('-1')).toBe(true);
+    expect(t.isSeated('-2')).toBe(true);
+    expect((t.game as any).seats[1].leaving).toBe(true);
+    expect((t.game as any).seats[1].sittingOut).toBe(true);
+  });
+
+  it('drops the deferred bots at the next between-hands boundary', () => {
+    const t = tableWithBots();
+    (t.game as any).startNextHand();
+    t.requestBotRemoval();
+
+    // scheduleNextHand() is the between-hands boundary; it runs maybeCleanupBots.
+    (t.game as any).stage = 'waiting';
+    t.scheduleNextHand();
+
+    expect(t.isSeated('-1')).toBe(false);
+    expect(t.isSeated('-2')).toBe(false);
+    expect(t.isSeated('A')).toBe(true);
+  });
+});
+
 describe('PendingExits registry (exit-reconnect A)', () => {
   beforeEach(() => PendingExits.__resetForTests());
 

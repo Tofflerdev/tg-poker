@@ -34,6 +34,18 @@ function makeFakeTable(occupied: { seat: number; isBot: boolean; id?: string }[]
       const i = seats.findIndex((s) => s?.id === id);
       if (i >= 0) seats[i] = null;
     }),
+    // exit-reconnect A: removeBots now goes through requestBotRemoval, which drops
+    // the bots at once between hands and defers to the boundary mid-hand. This
+    // double stands in for the between-hands case; the deferral itself is covered
+    // against the real Table in exitReconnect.test.ts.
+    requestBotRemoval: vi.fn(() => {
+      const botIds = seats.filter((s) => s?.isBot).map((s) => s!.id);
+      botIds.forEach((id) => {
+        const i = seats.findIndex((s) => s?.id === id);
+        if (i >= 0) seats[i] = null;
+      });
+      return botIds.length;
+    }),
   };
 }
 
@@ -109,8 +121,8 @@ describe('removeBots', () => {
     const { removed } = await removeBots('admin', 't');
 
     expect(removed).toBe(2);
-    expect(table.removePlayer).toHaveBeenCalledWith('-1');
-    expect(table.removePlayer).toHaveBeenCalledWith('-2');
+    // Goes through requestBotRemoval, not a raw mid-hand removePlayer per bot.
+    expect(table.requestBotRemoval).toHaveBeenCalledTimes(1);
     expect(table.seats.filter((s) => s !== null).map((s) => s!.id)).toEqual(['human']);
   });
 
@@ -119,6 +131,6 @@ describe('removeBots', () => {
     wire(table);
     const { removed } = await removeBots('admin', 't');
     expect(removed).toBe(0);
-    expect(table.removePlayer).not.toHaveBeenCalled();
+    expect(table.seats.filter((s) => s !== null).map((s) => s!.id)).toEqual(['human']);
   });
 });

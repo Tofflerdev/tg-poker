@@ -20,6 +20,10 @@ export class Table {
   // true, bots keep playing among themselves to accumulate data without a human.
   botsContinue = false;
 
+  // exit-reconnect A: admin asked to remove the bots while a hand was running; the
+  // next between-hands boundary does it (see requestBotRemoval).
+  private botRemovalRequested = false;
+
   // Auto-start timer
   private nextHandTimer: NodeJS.Timeout | null = null;
   private readonly NEXT_HAND_DELAY = 5000; // 5 секунд между раздачами
@@ -179,10 +183,52 @@ export class Table {
   }
 
   /**
+   * exit-reconnect A: admin "Remove Bots", deferred to the hand boundary.
+   *
+   * Bots hold no money, so this is not about refunds — it is about not corrupting
+   * the hand the table is in the middle of. removePlayer force-folds a bot that
+   * still has cards, which hands a pot it was entitled to (an all-in bot has no
+   * decision left to make) to the other players, and drops it out of
+   * evt.perPlayer so the session recorder's chip-conservation check no longer
+   * balances for that hand. Since bot hands are how the rake gets verified,
+   * corrupting them corrupts the measurement.
+   *
+   * Between hands this removes at once. Mid-hand it marks the bots leaving — they
+   * auto-act instantly and are dealt out — and scheduleNextHand() does the removal.
+   */
+  requestBotRemoval(): number {
+    const botIds = this.game.getState().seats
+      .filter((p): p is NonNullable<typeof p> => !!p?.isBot)
+      .map((p) => p.id);
+    if (botIds.length === 0) return 0;
+
+    const stage = this.game.getState().stage;
+    if (stage === 'waiting' || stage === 'showdown') {
+      this.removeAllBots();
+      this.notifyStateChange();
+      return botIds.length;
+    }
+
+    this.botRemovalRequested = true;
+    botIds.forEach((id) => this.game.markLeaving(id));
+    this.notifyStateChange();
+    return botIds.length;
+  }
+
+  /**
    * Decision D: drop idle bots when no humans remain and bots-continue is off.
    * Deferred while a hand is in progress (acts only between hands).
    */
   private maybeCleanupBots(): void {
+    // exit-reconnect A: an admin removal request is honoured at the first boundary
+    // regardless of botsContinue / seated humans — it was an explicit instruction.
+    if (this.botRemovalRequested) {
+      const stage = this.game.getState().stage;
+      if (stage !== 'waiting' && stage !== 'showdown') return; // still mid-hand
+      this.botRemovalRequested = false;
+      this.removeAllBots();
+      return;
+    }
     if (this.botsContinue) return;
     if (this.hasSeatedHuman()) return;
     const stage = this.game.getState().stage;
