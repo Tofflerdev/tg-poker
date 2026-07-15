@@ -963,15 +963,21 @@ export default class Game {
   private getCurrentPlayerIfValid(playerId: string): Player | null {
     if (this.currentPlayer === null) return null;
     const player = this.seats[this.currentPlayer];
-    if (!player || player.id !== playerId || player.folded || player.allIn || player.waitingForBB) {
+    // exit-reconnect B7: no cards, no action — belt and braces behind getNextPlayer.
+    // Without the card check a dealt-out player who was handed the turn could call
+    // and raise in a hand they were never in.
+    if (!player || player.id !== playerId || player.hand.length === 0 ||
+        player.folded || player.allIn || player.waitingForBB) {
       return null;
     }
     return player;
   }
 
   private getActivePlayers(): Player[] {
+    // exit-reconnect B7: drives betting-round completion, win-by-fold and showdown.
+    // A dealt-out phantom counted here keeps the hand from ever ending.
     return this.seats.filter((p): p is Player =>
-      p !== null && !p.folded && !p.waitingForBB
+      p !== null && p.hand.length > 0 && !p.folded && !p.waitingForBB
     );
   }
 
@@ -981,7 +987,15 @@ export default class Game {
     
     while (attempts < this.seats.length) {
       const player = this.seats[seat];
-      if (player && !player.folded && !player.allIn && player.chips > 0 && !player.waitingForBB) {
+      // exit-reconnect B7: holding cards is what "in this hand" MEANS. The flag list
+      // used to stand in for it and missed sittingOut entirely, so a player who was
+      // dealt out (canPlayerPlayInCurrentHand excludes sittingOut) could still be made
+      // the current player — a phantom with no cards. Worse, if anything then set
+      // waitingForBB on them (a returning player being sat back in), the turn timer's
+      // fold() would be refused by getCurrentPlayerIfValid, currentPlayer would never
+      // advance and the timer would never re-arm: the table died. Seen in prod
+      // 2026-07-15 14:09:51 → the table never dealt another hand.
+      if (player && player.hand.length > 0 && !player.folded && !player.allIn && player.chips > 0 && !player.waitingForBB) {
         return seat;
       }
       seat = this.getNextSeat(seat);

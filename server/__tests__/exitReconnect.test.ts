@@ -306,6 +306,62 @@ describe('bot removal defers to the hand boundary (exit-reconnect A)', () => {
   });
 });
 
+/**
+ * exit-reconnect B7 — "in this hand" means holding cards, not a set of flags.
+ *
+ * Found on prod 2026-07-15: a player sat out by the disconnect handler was dealt out
+ * of the next hand (canPlayerPlayInCurrentHand excludes sittingOut) but getNextPlayer
+ * — which checked only folded/allIn/chips/waitingForBB — still handed them the turn.
+ */
+describe('a dealt-out player is never asked to act (exit-reconnect B7)', () => {
+  const cfg = (over: Partial<TableConfig> = {}): TableConfig => ({
+    smallBlind: 1, bigBlind: 2, maxPlayers: 6, turnTime: 30,
+    minBuyIn: 80, maxBuyIn: 200, category: 'cash', ...over,
+  });
+
+  function tableWithSatOutB(): Table {
+    const t = new Table('p', 'P', cfg());
+    t.addPlayer('A', 0, 200);
+    t.addPlayer('B', 1, 200);
+    t.addPlayer('C', 2, 200);
+    t.sitOut('B'); // what GraceRegistry.onHandBoundary does to a disconnected player
+    (t.game as any).startNextHand();
+    return t;
+  }
+
+  it('never makes a cardless player the current player', () => {
+    const t = tableWithSatOutB();
+    const st = t.getState();
+    expect(st.seats[1]!.hand.length).toBe(0); // B was dealt out, as intended
+    const actor = st.currentPlayer !== null ? st.seats[st.currentPlayer] : null;
+    expect(actor).not.toBeNull();
+    expect(actor!.hand.length).toBeGreaterThan(0);
+    expect(actor!.id).not.toBe('B');
+  });
+
+  it('refuses an action from a player holding no cards', () => {
+    const t = tableWithSatOutB();
+    // Even if something hands B the turn, they cannot act in a hand they are not in.
+    (t.game as any).currentPlayer = 1;
+    expect(t.call('B')).toBe(false);
+    expect(t.fold('B')).toBe(false);
+  });
+
+  it('the table survives a sit-in landing on a dealt-out player mid-hand', () => {
+    // The exact prod sequence: sat out at the boundary, dealt out of the next hand,
+    // reconnects mid-hand and is sat back in (which sets waitingForBB). Previously B
+    // was already currentPlayer here, so the turn timer's fold() was refused,
+    // currentPlayer never advanced, the timer never re-armed and the table died.
+    const t = tableWithSatOutB();
+    t.sitIn('B');
+
+    const st = t.getState();
+    const actor = st.currentPlayer !== null ? st.seats[st.currentPlayer] : null;
+    expect(actor!.id).not.toBe('B');
+    expect(actor!.hand.length).toBeGreaterThan(0);
+  });
+});
+
 describe('PendingExits registry (exit-reconnect A)', () => {
   beforeEach(() => PendingExits.__resetForTests());
 
