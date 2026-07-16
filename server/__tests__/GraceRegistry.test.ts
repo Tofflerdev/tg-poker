@@ -107,7 +107,7 @@ describe('GraceRegistry — single reconnect window (exit-reconnect D)', () => {
   });
 
   it('clear() does NOT touch a player who was never sat out (fast reconnect)', () => {
-    // Game.sitIn also sets waitingForBB, so calling it here would make a player who
+    // Game.sitIn also sets owesBlind, so calling it here would make a player who
     // reconnected inside one hand sit out the blind for nothing.
     const table = mockTable();
     vi.mocked(tableManager.getPlayerTable).mockReturnValue(table as never);

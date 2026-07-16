@@ -21,7 +21,7 @@ function makePlayer(overrides: Partial<Player> = {}): Player {
     acted: false,
     showCards: false,
     sittingOut: false,
-    waitingForBB: false,
+    owesBlind: false,
     ...overrides,
   } as Player;
 }

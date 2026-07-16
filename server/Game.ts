@@ -73,6 +73,15 @@ export default class Game {
     return seatTotal + deadTotal;
   }
 
+  // Мёртвые вклады игрока за эту раздачу (пост долга блайнда). Входит в
+  // HandCompleteEvent.contributed: иначе оракл potsAccounting (Σ pots == Σ contributed)
+  // расходится ровно на пост, а раздача рейка по вкладам занижает долю должника.
+  private deadContributionOf(playerId: string): number {
+    return this.deadContributions.reduce(
+      (sum, d) => (d.playerId === playerId ? sum + d.amount : sum), 0
+    );
+  }
+
   /**
    * crypto-payments-rake phase 2 — rake for the just-finished hand. Must be
    * called AFTER `this.pots` is populated (calculatePots) and BEFORE pots are
@@ -98,44 +107,23 @@ export default class Game {
   // Добавление игрока (разрешаем в любое время)
   // telegramId (stringified) is the durable identity key stored in player.id (RESILIENCE-03)
   /**
-   * exit-reconnect B8: is a hand actually being played right now?
-   *
-   * 'waiting' and 'showdown' are both BETWEEN hands — the disconnect handler and
-   * isInHand() have always agreed on that. addPlayer/sitIn disagreed and tested only
-   * `stage !== 'waiting'`, so anyone arriving during showdown was flagged
-   * waitingForBB, which excludes them from getEligiblePlayers().
-   *
-   * That could brick a table for good: with the last eligible human sat out (which
-   * onHandBoundary now does routinely on a disconnect), canRunHands() is false, so no
-   * hand is scheduled; waitingForBB is only ever cleared by activateWaitingPlayers,
-   * which only runs inside startNextHand — which never runs. Every human who then sat
-   * down was flagged in turn and the table stayed dead. Prod 2026-07-15: table-funnel-1
-   * dealt nothing from 14:31:18 onwards while players sat down, waited and left.
+   * Is a hand actually being played right now? 'waiting' and 'showdown' are both
+   * BETWEEN hands — the disconnect handler and isInHand() agree on that (B8).
+   * Note: blind DEBT uses the wider `stage !== 'waiting'` predicate instead — during
+   * the showdown pause the rotation is still moving, so a blind can still be dodged.
    */
   private isHandActive(): boolean {
     return this.stage !== 'waiting' && this.stage !== 'showdown';
   }
 
   /**
-   * exit-reconnect B9: is a human present who wants to play?
-   *
-   * Deliberately IGNORES waitingForBB, and that is the whole point. Dealing is the
-   * only thing that runs activateWaitingPlayers, which is the only thing that ever
-   * clears the flag — so gating "may we deal?" on eligibility (which excludes
-   * waitingForBB) is circular and self-locking: the last human waiting for the big
-   * blind can never be activated, and the table is dead for good.
-   *
-   * Prod 2026-07-15 14:47:24: the second human left, leaving one human waiting for
-   * the BB plus two bots. table-funnel-1 never dealt again.
-   *
-   * Decision B ("never grind bot-only hands") is preserved in spirit: a human
-   * waiting for the blind IS at the table, watching, wanting in. sittingOut and
-   * busted players are still excluded — they are not waiting on anything.
+   * Is a human present who can play the next hand? Since owesBlind (unlike the old
+   * waitingForBB) does not affect eligibility — debt is settled by posting inside
+   * startNextHand, never by waiting — gating "may we deal?" on eligibility is safe
+   * again (the B9 self-lock is structurally gone).
    */
   hasPlayableHuman(): boolean {
-    return this.seats.some(
-      (p) => p !== null && !p.isBot && p.chips > 0 && !p.sittingOut
-    );
+    return this.getEligiblePlayers().some((p) => !p.isBot);
   }
 
   addPlayer(telegramId: string, seat: number, chips: number = 1000, telegramIdNumeric?: number, displayName?: string, avatarUrl?: string, socketId?: string, avatarId?: string, isBot?: boolean): boolean {
@@ -144,15 +132,11 @@ export default class Game {
 
     this.spectators = this.spectators.filter((p) => p.id !== telegramId);
 
-    // Определяем, нужно ли ждать большой блайнд
-    // Если стол в waiting ИЛИ нет eligible игроков (стол фактически пуст) - не ждем
-    // Иначе ждем ББ
-    const eligiblePlayers = this.seats.filter((p): p is Player =>
-      p !== null && p.chips > 0 && !p.waitingForBB && !p.sittingOut
-    );
-    // exit-reconnect B8: 'showdown' is BETWEEN hands, not during one — there is no
-    // blind in flight to wait for. See isHandActive().
-    const waitingForBB = this.isHandActive() && eligiblePlayers.length > 0;
+    // blind-debt: joining while the rotation is alive (anything but 'waiting',
+    // showdown pause included — the blinds keep moving through it) creates a debt
+    // of one BB, settled by posting in settleBlindDebts(). 'waiting' = the table
+    // is idle, no blinds are rotating, there is nothing to dodge.
+    const owesBlind = this.stage !== 'waiting';
 
     const player: Player = {
       id: telegramId,      // player.id holds telegramId (durable key)
@@ -170,7 +154,7 @@ export default class Game {
       allIn: false,
       acted: false,
       showCards: false,
-      waitingForBB,  // NEW: ждем ББ если игра уже идет
+      owesBlind,  // blind-debt: гасится постом в settleBlindDebts()
       sittingOut: false,  // NEW: изначально не отсидиваемся
       isBot: isBot ?? false,  // playtest bot flag (BotDriver acts on this seat)
     };
@@ -186,19 +170,20 @@ export default class Game {
     }
   }
 
-  // Получить список игроков, которые могут участвовать в СЛЕДУЮЩЕЙ раздаче
+  // Получить список игроков, которые могут участвовать в СЛЕДУЮЩЕЙ раздаче.
+  // blind-debt: должники ВХОДЯТ в eligible — они будут сданы, заплатив пост.
+  // Eligibility на долг не смотрит, поэтому тупик B8/B9 структурно невозможен.
   getEligiblePlayers(): Player[] {
     return this.seats.filter((p): p is Player =>
       p !== null &&
       p.chips > 0 &&
-      !p.waitingForBB &&
       !p.sittingOut
     );
   }
 
   // Проверка, может ли игрок играть в текущей раздаче
   private canPlayerPlayInCurrentHand(player: Player): boolean {
-    return player.chips > 0 && !player.waitingForBB && !player.sittingOut;
+    return player.chips > 0 && !player.sittingOut;
   }
 
   addSpectator(id: string): boolean {
@@ -296,16 +281,16 @@ export default class Game {
     return true;
   }
 
-  // Вернуться за стол (будет ждать ББ)
+  // Вернуться за стол (со следующей раздачи, заплатив пост при долге)
   sitIn(playerId: string): boolean {
     const player = this.seats.find(p => p?.id === playerId);
     if (!player) return false;
     player.sittingOut = false;
-    // exit-reconnect B8: same predicate as addPlayer — no hand running, nothing to
-    // wait for. Marking a player waitingForBB at showdown made them ineligible, and
-    // if they were the last eligible human the table could never deal again (see
-    // isHandActive), so the flag could never be cleared either.
-    player.waitingForBB = this.isHandActive();
+    // blind-debt: строго OR, не присваивание. Долг гасится ровно в двух местах —
+    // settleBlindDebts() или уход с места. Присваивание стирало бы существующий
+    // долг всякий раз, когда стол в 'waiting' (должник отсиделся → стол опустел →
+    // сит-ин бесплатно обнуляет долг → орбита даром, когда стол оживёт).
+    player.owesBlind = player.owesBlind || this.stage !== 'waiting';
     return true;
   }
 
@@ -332,7 +317,7 @@ export default class Game {
         p.allIn = false;
         p.acted = false;
         p.showCards = false;
-        // НЕ сбрасываем waitingForBB и sittingOut - они сохраняются между раздачами
+        // НЕ сбрасываем owesBlind и sittingOut - они сохраняются между раздачами
       }
     });
   }
@@ -347,17 +332,18 @@ export default class Game {
     // Передвигаем дилера перед стартом новой раздачи
     this.dealerPosition = this.getNextSeatForDealer(this.dealerPosition);
 
-    // Активируем игроков, у которых наступил ББ
-    this.activateWaitingPlayers();
-
     const eligiblePlayers = this.getEligiblePlayers();
 
+    // ДО settleBlindDebts: долг списывается только если раздача реально стартует.
+    // Иначе пост ушёл бы в банк, который никогда не разыграется, — фишки сгорели бы.
     if (eligiblePlayers.length < 2) {
       this.stage = 'waiting';
       return false;
     }
 
     this.currentHandId = crypto.randomUUID();
+    // Снапшот ДО settleBlindDebts: netDelta в HandCompleteEvent обязан включать
+    // мёртвый пост, иначе инвариант Σ netDelta == 0 ломается на сумму поста.
     this.handStartChips = {};
     for (const p of this.seats) if (p) this.handStartChips[p.seat] = p.chips;
 
@@ -365,6 +351,13 @@ export default class Game {
     this.deck = new Deck();
     this.deck.shuffle();
     this.stage = 'preflop';
+
+    // Позиции блайндов считаем один раз и передаём и в settle, и в postBlinds:
+    // два независимых вычисления — приглашение к рассинхрону.
+    const sbPos = this.getSmallBlindPosition();
+    const bbPos = this.getBigBlindPosition();
+
+    this.settleBlindDebts(sbPos, bbPos);
 
     // Раздача карт только eligible игрокам
     this.seats.forEach((p) => {
@@ -374,27 +367,63 @@ export default class Game {
     });
 
     // Установка блайндов
-    this.postBlinds();
-    
+    this.postBlinds(sbPos, bbPos);
+
     // Первый игрок после большого блайнда
-    this.currentPlayer = this.getNextPlayer(this.getBigBlindPosition());
+    this.currentPlayer = this.getNextPlayer(bbPos);
     this.startTurnTimer();
-    
+
     return true;
   }
 
-  // Активировать игроков, которые ждали ББ
-  private activateWaitingPlayers(): void {
-    const bbPosition = this.getNextSeatForDealer(this.getNextSeatForDealer(this.dealerPosition));
-    
-    this.seats.forEach((p) => {
-      if (p && p.waitingForBB) {
-        // Если ББ достиг позиции игрока - активируем
-        if (p.seat === bbPosition) {
-          p.waitingForBB = false;
-        }
+  /**
+   * blind-debt: погасить долги блайндов постами. Вызывается строго после reset()
+   * (он чистит deadContributions/bet/totalBet) и до раздачи карт.
+   *
+   * Принцип: погашение стоит РОВНО один ББ на любой позиции. Любое правило дешевле
+   * открывает тайминг-дожинг — позиции следующей раздачи детерминированы, и момент
+   * сит-ина выбирает игрок (пропустил свой ББ → следующей раздачей ты ровно SB).
+   *
+   * Пост мёртвый (deadContributions), не живой: живой пост (bet === currentBet) на
+   * месте после ББ дал бы право чека — бесплатный лук из поздней позиции.
+   */
+  private settleBlindDebts(sbPos: number, bbPos: number): void {
+    for (const p of this.seats) {
+      if (!p || !p.owesBlind || !this.canPlayerPlayInCurrentHand(p)) continue;
+
+      // Стек ≤ 1ББ: долг прощаем и СНИМАЕМ флаг («прощён = прощён», иначе долг
+      // воскресает после дабл-апа). Мёртвый олл-ин пост отдал бы весь стек с
+      // нулевым эквити — неотличимо от кражи; дожить таким стеком нечего.
+      if (p.chips <= this.bigBlind) {
+        p.owesBlind = false;
+        continue;
       }
-    });
+
+      if (p.seat === bbPos) {
+        // Живой ББ этой раздачи покрывает долг целиком.
+        p.owesBlind = false;
+        continue;
+      }
+
+      if (p.seat === sbPos) {
+        // Живой SB покрывает только часть: доплата мёртвым остатком до полного ББ.
+        // «SB гасит долг сам» было бы дырой: сит-ин ровно на SB стоил бы 0.5ББ
+        // живыми против 1.5ББ честной орбиты. chips > bigBlind (проверка выше)
+        // гарантирует, что после остатка на живой SB хватает.
+        const remainder = this.bigBlind - this.smallBlind;
+        if (remainder > 0) {
+          p.chips -= remainder;
+          this.deadContributions.push({ playerId: p.id, amount: remainder });
+        }
+        p.owesBlind = false;
+        continue;
+      }
+
+      // Любое другое место: мёртвый пост размером ББ, игрок играет с нуля.
+      p.chips -= this.bigBlind;
+      this.deadContributions.push({ playerId: p.id, amount: this.bigBlind });
+      p.owesBlind = false;
+    }
   }
 
   // Получить следующее место для дилера (пропускаем пустые и отсидивающиеся)
@@ -414,10 +443,7 @@ export default class Game {
     return fromSeat;
   }
 
-  private postBlinds() {
-    const sbPos = this.getSmallBlindPosition();
-    const bbPos = this.getBigBlindPosition();
-
+  private postBlinds(sbPos: number, bbPos: number) {
     const sbPlayer = this.seats[sbPos];
     const bbPlayer = this.seats[bbPos];
 
@@ -784,7 +810,7 @@ export default class Game {
             netDelta: p.chips - (this.handStartChips[p.seat] ?? p.chips),
             won: p.id === winner.id,
             showedDown: false,
-            contributed: p.totalBet,
+            contributed: p.totalBet + this.deadContributionOf(p.id),
           })),
           pots: potsSnapshot,
           rake: rake.total,
@@ -994,7 +1020,7 @@ export default class Game {
           netDelta: p.chips - (this.handStartChips[p.seat] ?? p.chips),
           won: winnerIds.has(p.id),
           showedDown: p.showCards || (!p.folded),
-          contributed: p.totalBet,
+          contributed: p.totalBet + this.deadContributionOf(p.id),
         })),
         pots: potsSnapshot,
         rake: rake.total,
@@ -1014,7 +1040,7 @@ export default class Game {
     // Without the card check a dealt-out player who was handed the turn could call
     // and raise in a hand they were never in.
     if (!player || player.id !== playerId || player.hand.length === 0 ||
-        player.folded || player.allIn || player.waitingForBB) {
+        player.folded || player.allIn) {
       return null;
     }
     return player;
@@ -1024,7 +1050,7 @@ export default class Game {
     // exit-reconnect B7: drives betting-round completion, win-by-fold and showdown.
     // A dealt-out phantom counted here keeps the hand from ever ending.
     return this.seats.filter((p): p is Player =>
-      p !== null && p.hand.length > 0 && !p.folded && !p.waitingForBB
+      p !== null && p.hand.length > 0 && !p.folded
     );
   }
 
@@ -1037,12 +1063,9 @@ export default class Game {
       // exit-reconnect B7: holding cards is what "in this hand" MEANS. The flag list
       // used to stand in for it and missed sittingOut entirely, so a player who was
       // dealt out (canPlayerPlayInCurrentHand excludes sittingOut) could still be made
-      // the current player — a phantom with no cards. Worse, if anything then set
-      // waitingForBB on them (a returning player being sat back in), the turn timer's
-      // fold() would be refused by getCurrentPlayerIfValid, currentPlayer would never
-      // advance and the timer would never re-arm: the table died. Seen in prod
-      // 2026-07-15 14:09:51 → the table never dealt another hand.
-      if (player && player.hand.length > 0 && !player.folded && !player.allIn && player.chips > 0 && !player.waitingForBB) {
+      // the current player — a phantom with no cards, and the table died. Seen in
+      // prod 2026-07-15 14:09:51 → the table never dealt another hand.
+      if (player && player.hand.length > 0 && !player.folded && !player.allIn && player.chips > 0) {
         return seat;
       }
       seat = this.getNextSeat(seat);
@@ -1068,7 +1091,7 @@ export default class Game {
   }
 
   // Следующее место с игроком, который РЕАЛЬНО играет эту раздачу (не пустое,
-  // не sit-out, не waitingForBB, есть фишки). Используется для позиций блайндов,
+  // не sit-out, есть фишки). Используется для позиций блайндов,
   // чтобы блайнд не назначался отсиживающемуся/ждущему ББ игроку (audit #7).
   private getNextEligibleSeat(fromSeat: number): number {
     let seat = (fromSeat + 1) % this.seats.length;

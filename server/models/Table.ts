@@ -155,12 +155,11 @@ export class Table {
     return this.game.getState().seats.some((p) => p !== null && !p.isBot);
   }
 
-  /** At least one human can play the next hand. */
   /**
-   * exit-reconnect B9: a human who wants to play, waitingForBB included.
-   *
-   * Was `getEligiblePlayers().some(p => !p.isBot)`, which excludes waitingForBB —
-   * circular, because only dealing clears that flag. See Game.hasPlayableHuman.
+   * At least one human can play the next hand. blind-debt: owesBlind does not
+   * affect eligibility (debt is settled by posting inside startNextHand), so the
+   * old B9 self-lock — gating dealing on a flag only dealing could clear — is
+   * structurally gone. See Game.hasPlayableHuman.
    */
   private hasEligibleHuman(): boolean {
     return this.game.hasPlayableHuman();

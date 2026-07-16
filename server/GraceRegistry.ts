@@ -85,9 +85,9 @@ export function clear(telegramId: string): void {
   // Not for a player on their way out: markLeaving set sittingOut on purpose there,
   // and the boundary is about to cash them out.
   if (table && !PendingExits.isPending(telegramId)) {
-    // Only undo an actual sit-out. Game.sitIn also sets waitingForBB, so calling it
-    // on a fast reconnect that never crossed a hand boundary would make the player
-    // sit out the blind for no reason.
+    // Only undo an actual sit-out. Game.sitIn also sets owesBlind (blind-debt), so
+    // calling it on a fast reconnect that never crossed a hand boundary would charge
+    // the player a dead post for no reason.
     const seated = table.getState().seats.find((p) => p?.id === telegramId);
     if (seated?.sittingOut) {
       table.sitIn(telegramId);

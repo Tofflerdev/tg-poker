@@ -60,7 +60,7 @@ const seatsWithMeAt = (seat: number) => {
   const mk = (id: string, s: number) => ({
     id, seat: s, displayName: id, hand: ['As', 'Kd'], chips: 80, bet: 0, totalBet: 0,
     folded: false, allIn: false, acted: false, showCards: false,
-    waitingForBB: false, sittingOut: false,
+    owesBlind: false, sittingOut: false,
   });
   const seats: any[] = Array(6).fill(null);
   seats[seat] = mk(String(authOk.telegramId), seat);

@@ -90,7 +90,7 @@ const Avatar: React.FC<{
   </div>
 );
 
-/* ── StatusOverlay — contrast badge centered over a seat (Fold / All-in / Sit out / Wait BB) ── */
+/* ── StatusOverlay — contrast badge centered over a seat (Fold / All-in / Sit out / Post BB) ── */
 const StatusOverlay: React.FC<{ label: string; color: string; glow: string }> = ({
   label, color, glow,
 }) => (
@@ -127,7 +127,9 @@ const getStatus = (p: Player): { label: string; color: string; glow: string } | 
   if (p.folded)       return { label: 'Fold',    color: N.fold.color,   glow: N.fold.glow };
   if (p.allIn)        return { label: 'All-in',  color: N.allin.color,  glow: N.allin.glow };
   if (p.sittingOut)   return { label: 'Sit out', color: N.sitout.color, glow: N.sitout.glow };
-  if (p.waitingForBB) return { label: 'Wait BB', color: N.waitbb.color, glow: N.waitbb.glow };
+  // blind-debt: badge shows whenever the debt is unpaid — between hands AND while
+  // the player sits cardless through someone else's hand (explains the missing cards).
+  if (p.owesBlind)    return { label: 'Post BB', color: N.waitbb.color, glow: N.waitbb.glow };
   return null;
 };
 
@@ -408,7 +410,7 @@ const SeatsDisplay: React.FC<SeatsDisplayProps> = ({
               </div>
             </div>
 
-            {/* Status overlay — contrast badge (Fold / All-in / Sit out / Wait BB) */}
+            {/* Status overlay — contrast badge (Fold / All-in / Sit out / Post BB) */}
             {status && (
               <StatusOverlay label={status.label} color={status.color} glow={status.glow} />
             )}

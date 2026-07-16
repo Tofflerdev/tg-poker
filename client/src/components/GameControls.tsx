@@ -104,7 +104,7 @@ const GameControls: React.FC<Props> = ({ socket, gameState, mySeat }) => {
     const activePlayers = gameState.seats.filter(p => p && !p.folded);
     const isWinByFold = gameState.stage === 'showdown' && activePlayers.length === 1;
     const amIWinner = isWinByFold && myPlayer && !myPlayer.folded;
-    const eligiblePlayers = gameState.seats.filter(p => p && p.chips > 0 && !p.waitingForBB).length;
+    const eligiblePlayers = gameState.seats.filter(p => p && p.chips > 0).length;
 
     return (
       <div
@@ -132,9 +132,9 @@ const GameControls: React.FC<Props> = ({ socket, gameState, mySeat }) => {
           </div>
         )}
 
-        {myPlayer?.waitingForBB && (
+        {myPlayer?.owesBlind && (
           <div className="mb-2 text-sm" style={{ color: TOKEN.raise.color }}>
-            Waiting for Big Blind...
+            Posting a blind next hand
           </div>
         )}
 

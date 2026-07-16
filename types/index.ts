@@ -19,7 +19,7 @@ export interface Player {
   allIn: boolean;
   acted: boolean;
   showCards: boolean;
-  waitingForBB: boolean;  // NEW: игрок присоединился во время игры, ждет большого блайнда
+  owesBlind: boolean;     // blind-debt: сел/вернулся при живой ротации — должен пост ББ, гасится в settleBlindDebts()
   sittingOut: boolean;    // NEW: игрок добровольно отсиделся
   leaving?: boolean;      // exit-reconnect: выход запрошен, доигрывает руку на автодействии
   isBot?: boolean;        // playtest bot — server-side Player driven by BotDriver (no socket)

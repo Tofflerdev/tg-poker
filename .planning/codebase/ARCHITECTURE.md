@@ -66,7 +66,7 @@
 
 **Join flow:**
 1. Client `joinTable({tableId, seat})` → server checks balance vs `config.buyIn`, leaves any current table, calls `tableManager.joinTable`, deducts buy-in via `UserRepository.updateBalance(-buyIn)`, emits `balanceUpdate` + `tableJoined`, then `updateTableState`.
-2. `Table.addPlayer` → `Game.addPlayer` (sets `waitingForBB` if a hand is already in progress) → `tryStartNextHand` kicks off the auto-start loop if the table was idle.
+2. `Table.addPlayer` → `Game.addPlayer` (sets `owesBlind` if the rotation is alive — the player posts a dead BB in the next `startNextHand`) → `tryStartNextHand` kicks off the auto-start loop if the table was idle.
 
 **Leave / disconnect:**
 - Both `leaveTable` and `disconnect` call `tableManager.leaveTable` / `handleDisconnect`, read the player's current `chips` from game state, and credit that amount back to `User.balance`. In-hand leaves trigger `Game.removePlayer`'s auto-fold branch (advances `currentPlayer` if the leaver was on the button).
@@ -87,7 +87,7 @@
 - `{ amount, eligiblePlayers: string[], name }`. An array of these is recomputed at every `nextStage()` and at final `showdown()`.
 
 **`Player`** (shared type):
-- Includes `bet` (current round), `totalBet` (full hand — used for side-pot math), flags `folded / allIn / acted / showCards / waitingForBB / sittingOut`.
+- Includes `bet` (current round), `totalBet` (full hand — used for side-pot math), flags `folded / allIn / acted / showCards / owesBlind / sittingOut`.
 
 ## Entry Points
 

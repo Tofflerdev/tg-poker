@@ -6,7 +6,7 @@ function mkPlayer(seat: number, id: string, isBot: boolean, over: Partial<Player
   return {
     id, seat, hand: ['Ts', 'Td'], chips: 1000, bet: 0, totalBet: 0,
     folded: false, allIn: false, acted: false, showCards: false,
-    waitingForBB: false, sittingOut: false, isBot, ...over,
+    owesBlind: false, sittingOut: false, isBot, ...over,
   };
 }
 

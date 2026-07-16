@@ -33,7 +33,7 @@ function makePlayer(overrides: Partial<Player> = {}): Player {
     allIn: false,
     acted: false,
     showCards: false,
-    waitingForBB: false,
+    owesBlind: false,
     sittingOut: false,
     seat: 0,
     hand: [],

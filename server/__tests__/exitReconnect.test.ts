@@ -17,7 +17,7 @@ function mkPlayer(seat: number, id: string, over: Partial<Player> = {}): Player 
   return {
     id, seat, hand: ['Ts', 'Td'], chips: 1000, bet: 0, totalBet: 0,
     folded: false, allIn: false, acted: false, showCards: false,
-    waitingForBB: false, sittingOut: false, isBot: false, ...over,
+    owesBlind: false, sittingOut: false, isBot: false, ...over,
   };
 }
 
@@ -311,7 +311,7 @@ describe('bot removal defers to the hand boundary (exit-reconnect A)', () => {
  *
  * Found on prod 2026-07-15: a player sat out by the disconnect handler was dealt out
  * of the next hand (canPlayerPlayInCurrentHand excludes sittingOut) but getNextPlayer
- * — which checked only folded/allIn/chips/waitingForBB — still handed them the turn.
+ * — which checked only folded/allIn/chips and flags — still handed them the turn.
  */
 describe('a dealt-out player is never asked to act (exit-reconnect B7)', () => {
   const cfg = (over: Partial<TableConfig> = {}): TableConfig => ({
@@ -349,7 +349,7 @@ describe('a dealt-out player is never asked to act (exit-reconnect B7)', () => {
 
   it('the table survives a sit-in landing on a dealt-out player mid-hand', () => {
     // The exact prod sequence: sat out at the boundary, dealt out of the next hand,
-    // reconnects mid-hand and is sat back in (which sets waitingForBB). Previously B
+    // reconnects mid-hand and is sat back in (which now sets owesBlind). Previously B
     // was already currentPlayer here, so the turn timer's fold() was refused,
     // currentPlayer never advanced, the timer never re-armed and the table died.
     const t = tableWithSatOutB();
@@ -363,12 +363,16 @@ describe('a dealt-out player is never asked to act (exit-reconnect B7)', () => {
 });
 
 /**
- * exit-reconnect B8 — a table must never become unplayable.
+ * exit-reconnect B8/B9, rewritten for blind-debt — a table must never become
+ * unplayable, and the mechanism is now structural: owesBlind does not affect
+ * eligibility at all. A debtor is dealt in and pays a dead post inside
+ * startNextHand, so the old self-lock (a flag only dealing could clear, gating
+ * dealing itself) has nothing to latch onto.
  *
- * Prod 2026-07-15: table-funnel-1 dealt nothing from 14:31:18 onwards. Players sat
- * down, waited 30-40 s showing "Wait BB", and left. Three times.
+ * History: prod 2026-07-15, table-funnel-1 dealt nothing from 14:31:18 onwards
+ * while players sat down, saw "Wait BB" and left.
  */
-describe('an idle table cannot be bricked (exit-reconnect B8)', () => {
+describe('blind debt never affects eligibility (exit-reconnect B8/B9 rewritten)', () => {
   const cfg = (over: Partial<TableConfig> = {}): TableConfig => ({
     smallBlind: 1, bigBlind: 2, maxPlayers: 6, turnTime: 30,
     minBuyIn: 80, maxBuyIn: 200, category: 'cash', ...over,
@@ -385,27 +389,32 @@ describe('an idle table cannot be bricked (exit-reconnect B8)', () => {
     return t;
   }
 
-  it('a human joining between hands is dealt in, not parked on Wait BB', () => {
+  it('a human joining at the showdown pause owes a blind but stays eligible', () => {
     const t = idleTableAtShowdown();
     t.addPlayer('H2', 3, 200);
 
-    // showdown is BETWEEN hands: there is no blind in flight to wait for. Flagging
-    // H2 here made them ineligible, and with no eligible human canRunHands() stays
-    // false, so startNextHand never runs — and only startNextHand ever clears the
-    // flag. The table was dead for good, and so was every human who sat down next.
-    expect(t.getState().seats[3]!.waitingForBB).toBe(false);
+    // The rotation keeps moving through the showdown pause, so the debt is real
+    // (this closes the window B8 opened: sit down right after your BB passed and
+    // get a free orbit). But the debt cannot brick anything — eligibility does
+    // not look at it, the post is charged inside startNextHand.
+    expect(t.getState().seats[3]!.owesBlind).toBe(true);
     expect(t.game.getEligiblePlayers().some((p: Player) => p.id === 'H2')).toBe(true);
   });
 
-  it('sitting back in between hands does not park the player either', () => {
+  it('sitting back in at the showdown pause owes a blind but stays eligible', () => {
     const t = idleTableAtShowdown();
     t.sitIn('H');
-    expect(t.getState().seats[0]!.waitingForBB).toBe(false);
+    expect(t.getState().seats[0]!.owesBlind).toBe(true);
     expect(t.game.getEligiblePlayers().some((p: Player) => p.id === 'H')).toBe(true);
   });
 
-  it('still waits for the big blind when a hand really is running', () => {
-    // The rule itself must survive: joining mid-hand cannot dodge the blinds.
+  it('joining a truly idle table (stage waiting) owes nothing', () => {
+    const t = new Table('b3', 'B3', cfg());
+    t.addPlayer('H', 0, 200);
+    expect(t.getState().seats[0]!.owesBlind).toBe(false);
+  });
+
+  it('joining mid-hand creates the debt — the anti-dodge rule survives', () => {
     const t = new Table('b2', 'B2', cfg());
     t.addPlayer('H', 0, 200);
     t.addPlayer('-1', 1, 200, -1, 'B1', undefined, undefined, true);
@@ -413,72 +422,53 @@ describe('an idle table cannot be bricked (exit-reconnect B8)', () => {
     expect(t.getState().stage).toBe('preflop');
 
     t.addPlayer('H2', 3, 200);
-    expect(t.getState().seats[3]!.waitingForBB).toBe(true);
-  });
-});
-
-/**
- * exit-reconnect B9 — the deadlock B8 only half-closed.
- *
- * waitingForBB excludes a player from getEligiblePlayers(). canRunHands() asked for
- * an ELIGIBLE human. Only dealing clears waitingForBB (activateWaitingPlayers runs
- * solely inside startNextHand). So the last human waiting for the big blind could
- * never be activated: prod 2026-07-15 14:47:24, the second human left and
- * table-funnel-1 never dealt again.
- */
-describe('the last human waiting for the BB cannot brick the table (exit-reconnect B9)', () => {
-  const cfg = (over: Partial<TableConfig> = {}): TableConfig => ({
-    smallBlind: 1, bigBlind: 2, maxPlayers: 6, turnTime: 30,
-    minBuyIn: 80, maxBuyIn: 200, category: 'cash', ...over,
+    expect(t.getState().seats[3]!.owesBlind).toBe(true);
   });
 
-  /** One human legitimately waiting for the blind, plus bots. Table idle. */
-  function waitingHumanWithBots(): Table {
+  /** One human owing a blind, plus bots. Table idle. */
+  function debtorHumanWithBots(): Table {
     const t = new Table('w', 'W', cfg());
     t.addPlayer('H', 0, 200);
     t.addPlayer('-1', 1, 200, -1, 'B1', undefined, undefined, true);
     t.addPlayer('-2', 2, 200, -2, 'B2', undefined, undefined, true);
     const anyT = t as any;
     if (anyT.nextHandTimer) { clearTimeout(anyT.nextHandTimer); anyT.nextHandTimer = null; }
-    (t.game as any).seats[0].waitingForBB = true;
+    (t.game as any).seats[0].owesBlind = true;
     (t.game as any).stage = 'waiting';
     return t;
   }
 
-  it('a human waiting for the blind still counts as a human at the table', () => {
-    const t = waitingHumanWithBots();
-    // The circularity in one line: not eligible, yet must keep the table alive.
-    expect(t.game.getEligiblePlayers().some((p: Player) => !p.isBot)).toBe(false);
+  it('a human owing a blind counts as a playable human (no B9 circularity left)', () => {
+    const t = debtorHumanWithBots();
+    // With debt out of eligibility, the plain eligibility check IS the human check.
+    expect(t.game.getEligiblePlayers().some((p: Player) => !p.isBot)).toBe(true);
     expect(t.game.hasPlayableHuman()).toBe(true);
   });
 
-  it('keeps dealing so the waiting human can be activated', () => {
+  it('keeps dealing with only a debtor human at the table', () => {
     vi.useFakeTimers();
-    const t = waitingHumanWithBots();
+    const t = debtorHumanWithBots();
     t.tryStartNextHand();
     expect((t as any).nextHandTimer).not.toBeNull();
     vi.useRealTimers();
   });
 
-  it('actually activates the waiting human — the table heals itself', () => {
-    const t = waitingHumanWithBots();
-    // Deal until the big blind reaches seat 0. With 3 seats this takes a few hands;
-    // the point is that it terminates rather than sitting dead forever.
-    for (let i = 0; i < 6 && (t.game as any).seats[0].waitingForBB; i++) {
-      (t.game as any).startNextHand();
-      (t.game as any).stage = 'waiting';
-    }
-    expect((t.game as any).seats[0].waitingForBB).toBe(false);
-    expect(t.game.getEligiblePlayers().some((p: Player) => p.id === 'H')).toBe(true);
+  it('one hand settles the debt — no waiting for the blind to come around', () => {
+    const t = debtorHumanWithBots();
+    (t.game as any).startNextHand();
+    // Dealt in immediately; the debt is gone after a single startNextHand,
+    // not after up to a full orbit like waitingForBB.
+    expect((t.game as any).seats[0].owesBlind).toBe(false);
+    expect((t.game as any).seats[0].hand.length).toBe(2);
   });
 
   it('a sat-out or busted human does NOT keep the table dealing', () => {
     // They are not waiting on anything — decision B still applies.
-    const t = waitingHumanWithBots();
+    const t = debtorHumanWithBots();
     t.sitOut('H');
     expect(t.game.hasPlayableHuman()).toBe(false);
 
-    const t2 = waitingHumanWithBots();
+    const t2 = debtorHumanWithBots();
     (t2.game as any).seats[0].chips = 0;
     expect(t2.game.hasPlayableHuman()).toBe(false);
   });
