@@ -106,6 +106,23 @@ describe('GraceRegistry — single reconnect window (exit-reconnect D)', () => {
     expect(table._seats[0].sittingOut).toBe(false);
   });
 
+  it('clear() leaves a wait-for-BB debtor parked (blind-debt phase 2)', () => {
+    // Sitting them in here would silently convert a free wait into a paid post.
+    const table = mockTable();
+    table._seats[0].owesBlind = true;
+    table._seats[0].blindMode = 'wait';
+    vi.mocked(tableManager.getPlayerTable).mockReturnValue(table as never);
+
+    GraceRegistry.arm('42', 'table-funnel-1');
+    GraceRegistry.onHandBoundary(['42']);
+    expect(table._seats[0].sittingOut).toBe(true);
+
+    GraceRegistry.clear('42');
+
+    expect(table.sitIn).not.toHaveBeenCalled();
+    expect(table._seats[0].sittingOut).toBe(true);
+  });
+
   it('clear() does NOT touch a player who was never sat out (fast reconnect)', () => {
     // Game.sitIn also sets owesBlind, so calling it here would make a player who
     // reconnected inside one hand sit out the blind for nothing.

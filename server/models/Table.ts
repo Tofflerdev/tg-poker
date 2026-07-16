@@ -461,6 +461,19 @@ export class Table {
   }
 
   /**
+   * blind-debt phase 2: post now / wait for BB. Switching to 'post' is a sit-in,
+   * so the auto-start loop may need a kick (same as sitIn).
+   */
+  setBlindMode(telegramId: string, mode: 'post' | 'wait'): boolean {
+    const result = this.game.setBlindMode(telegramId, mode);
+    if (result) {
+      if (mode === 'post') this.tryStartNextHand();
+      this.notifyStateChange();
+    }
+    return result;
+  }
+
+  /**
    * Set showdown callback
    */
   setOnShowdown(callback: (result: any) => void): void {

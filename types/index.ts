@@ -20,6 +20,7 @@ export interface Player {
   acted: boolean;
   showCards: boolean;
   owesBlind: boolean;     // blind-debt: сел/вернулся при живой ротации — должен пост ББ, гасится в settleBlindDebts()
+  blindMode?: 'post' | 'wait'; // blind-debt фаза 2: как гасить долг — постом сразу (дефолт) или бесплатно дождаться своего ББ
   sittingOut: boolean;    // NEW: игрок добровольно отсиделся
   leaving?: boolean;      // exit-reconnect: выход запрошен, доигрывает руку на автодействии
   isBot?: boolean;        // playtest bot — server-side Player driven by BotDriver (no socket)
@@ -97,7 +98,8 @@ export interface ClientEvents {
   showCards: () => void;
   // Auto-start continuous game
   sitOut: () => void;     // NEW: добровольный сит-аут
-  sitIn: () => void;      // NEW: вернуться за стол (будет ждать ББ)
+  sitIn: () => void;      // NEW: вернуться за стол (заплатив пост при долге)
+  setBlindMode: (mode: 'post' | 'wait') => void; // blind-debt фаза 2: пост сразу или ждать свой ББ
 }
 
 // События сокетов (Server -> Client)

@@ -113,4 +113,48 @@ describe('GameControls', () => {
     expect(screen.getByText(/thinking/i)).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /^fold$/i })).not.toBeInTheDocument();
   });
+
+  /* ── blind-debt phase 2: post now / wait for BB toggle ── */
+
+  it('between hands with a blind debt: toggle renders, Wait emits setBlindMode("wait")', () => {
+    const socket = makeSocket();
+    const state = makeGameState({
+      stage: 'waiting',
+      currentPlayer: null,
+      seats: [makePlayer({ owesBlind: true }), null, null, null, null, null],
+    });
+    render(<GameControls socket={socket as any} gameState={state} mySeat={0} />);
+    fireEvent.click(screen.getByRole('button', { name: /wait for bb/i }));
+    expect(socket.emit).toHaveBeenCalledWith('setBlindMode', 'wait');
+  });
+
+  it('a waiting player can switch back: Post emits setBlindMode("post")', () => {
+    const socket = makeSocket();
+    const state = makeGameState({
+      stage: 'waiting',
+      currentPlayer: null,
+      seats: [makePlayer({ owesBlind: true, blindMode: 'wait', sittingOut: true }), null, null, null, null, null],
+    });
+    render(<GameControls socket={socket as any} gameState={state} mySeat={0} />);
+    fireEvent.click(screen.getByRole('button', { name: /post bb/i }));
+    expect(socket.emit).toHaveBeenCalledWith('setBlindMode', 'post');
+  });
+
+  it('mid-hand joiner (cardless, debt) sees the toggle on the not-my-turn panel', () => {
+    const socket = makeSocket();
+    const state = makeGameState({
+      currentPlayer: 1,
+      seats: [makePlayer({ owesBlind: true, hand: [] }), makePlayer({ id: 'u2', displayName: 'Villain', seat: 1 }), null, null, null, null],
+    });
+    render(<GameControls socket={socket as any} gameState={state} mySeat={0} />);
+    expect(screen.getByRole('button', { name: /post bb/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /wait for bb/i })).toBeInTheDocument();
+  });
+
+  it('no debt — no toggle', () => {
+    const socket = makeSocket();
+    const state = makeGameState({ stage: 'waiting', currentPlayer: null });
+    render(<GameControls socket={socket as any} gameState={state} mySeat={0} />);
+    expect(screen.queryByRole('button', { name: /post bb/i })).not.toBeInTheDocument();
+  });
 });

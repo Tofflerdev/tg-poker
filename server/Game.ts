@@ -121,9 +121,20 @@ export default class Game {
    * waitingForBB) does not affect eligibility — debt is settled by posting inside
    * startNextHand, never by waiting — gating "may we deal?" on eligibility is safe
    * again (the B9 self-lock is structurally gone).
+   *
+   * blind-debt phase 2: a human waiting for their BB by choice (sittingOut +
+   * blindMode 'wait') also counts. Presence = the seat, per the 2026-07-16 decision:
+   * bots keep dealing so the waiter's BB actually arrives; the seat stops counting
+   * only when vacated (conscious leave or grace expiry). This LOOKS like the B9
+   * shape (dealing gated on a human whom dealing must activate), but cannot lock:
+   * hands run without the waiter, and the state exits through the player's own
+   * "post now" switch, leaving, or the force-seat guard — never only through dealing.
    */
   hasPlayableHuman(): boolean {
-    return this.getEligiblePlayers().some((p) => !p.isBot);
+    return this.seats.some((p) =>
+      p !== null && !p.isBot && p.chips > 0 &&
+      (!p.sittingOut || (p.owesBlind && p.blindMode === 'wait'))
+    );
   }
 
   addPlayer(telegramId: string, seat: number, chips: number = 1000, telegramIdNumeric?: number, displayName?: string, avatarUrl?: string, socketId?: string, avatarId?: string, isBot?: boolean): boolean {
@@ -155,6 +166,7 @@ export default class Game {
       acted: false,
       showCards: false,
       owesBlind,  // blind-debt: гасится постом в settleBlindDebts()
+      blindMode: 'post',  // blind-debt фаза 2: дефолт — пост сразу; 'wait' — ждать свой ББ бесплатно
       sittingOut: false,  // NEW: изначально не отсидиваемся
       isBot: isBot ?? false,  // playtest bot flag (BotDriver acts on this seat)
     };
@@ -281,6 +293,29 @@ export default class Game {
     return true;
   }
 
+  /**
+   * blind-debt phase 2 — how the player wants to settle a blind debt:
+   * 'post' (default) — pay a dead BB and get dealt next hand;
+   * 'wait' — sit out for free until the BB reaches their seat naturally
+   * (seatWaitingBBPlayers seats them exactly on it, so the live blind settles
+   * the debt via settleBlindDebts rule 2 — no extra money path involved).
+   */
+  setBlindMode(playerId: string, mode: 'post' | 'wait'): boolean {
+    const player = this.seats.find(p => p?.id === playerId);
+    if (!player || player.isBot) return false;
+    if (mode !== 'post' && mode !== 'wait') return false;
+    player.blindMode = mode;
+    if (mode === 'wait') {
+      // Waiting only means anything while a debt is unpaid. Without one the
+      // player is a regular participant — never park them.
+      if (player.owesBlind) player.sittingOut = true;
+    } else {
+      // Back to "post now": a plain sit-in — dealt next hand, dead post per settle.
+      player.sittingOut = false;
+    }
+    return true;
+  }
+
   // Вернуться за стол (со следующей раздачи, заплатив пост при долге)
   sitIn(playerId: string): boolean {
     const player = this.seats.find(p => p?.id === playerId);
@@ -332,7 +367,18 @@ export default class Game {
     // Передвигаем дилера перед стартом новой раздачи
     this.dealerPosition = this.getNextSeatForDealer(this.dealerPosition);
 
-    const eligiblePlayers = this.getEligiblePlayers();
+    // blind-debt phase 2: ждущие свой ББ садятся ровно на него (бесплатно).
+    this.seatWaitingBBPlayers();
+
+    let eligiblePlayers = this.getEligiblePlayers();
+
+    // Гард невозможной раздачи: если стол не может раздавать вовсе, ББ ждущего не
+    // наступит никогда — сажаем принудительно с долгом (мёртвый пост по общим
+    // правилам). Бесплатная посадка здесь была бы дожингом против ботов: хедз-ап с
+    // ботом → сит-аут перед своим ББ → стол встал → бесплатный возврат → орбита даром.
+    if (eligiblePlayers.length < 2 && this.forceSeatWaitingPlayers()) {
+      eligiblePlayers = this.getEligiblePlayers();
+    }
 
     // ДО settleBlindDebts: долг списывается только если раздача реально стартует.
     // Иначе пост ушёл бы в банк, который никогда не разыграется, — фишки сгорели бы.
@@ -373,6 +419,70 @@ export default class Game {
     this.currentPlayer = this.getNextPlayer(bbPos);
     this.startTurnTimer();
 
+    return true;
+  }
+
+  /**
+   * blind-debt phase 2: is this player parked waiting for their BB by choice?
+   * Connected humans only where seating is concerned — seating a disconnected
+   * player would just burn their blind on the auto-fold timer.
+   */
+  private isWaitingForBB(p: Player | null): p is Player {
+    return p !== null && !p.isBot && p.sittingOut && p.owesBlind &&
+      p.blindMode === 'wait' && p.chips > 0;
+  }
+
+  /**
+   * blind-debt phase 2: seat each waiting player exactly when their seat becomes
+   * the big blind, so the live blind settles their debt for free (settle rule 2).
+   *
+   * "Would W be the BB if seated right now?" is answered by simulation: W is
+   * temporarily flipped eligible and the regular position math runs. Seating is
+   * strictly one player at a time (fixpoint): with two adjacent waiters a batch
+   * flip could land the second on the SB, charging them the dead remainder they
+   * chose to wait out.
+   *
+   * This is position math again — but as a SEATING trigger, outside eligibility
+   * and outside every "may we deal?" gate. Worst failure is a player who keeps
+   * sitting out (same as a manual sit-out today); the table keeps dealing.
+   */
+  private seatWaitingBBPlayers(): void {
+    for (let guard = 0; guard < this.seats.length; guard++) {
+      const candidates = this.seats
+        .filter((p): p is Player => this.isWaitingForBB(p) && p.socketId !== undefined)
+        .sort((a, b) => this.seatOrderFromDealer(a.seat) - this.seatOrderFromDealer(b.seat));
+
+      const next = candidates.find((w) => {
+        w.sittingOut = false;
+        // Seating must actually produce a playable hand: alone at a dead table the
+        // position math degenerates (the only eligible seat "is" the BB) and would
+        // flip the waiter in for nothing, silently converting their wait into a
+        // future dead post. Left waiting, they get a free BB entry when the table
+        // revives instead.
+        const enough = this.getEligiblePlayers().length >= 2;
+        const bb = this.getBigBlindPosition();
+        w.sittingOut = true;
+        return enough && bb === w.seat;
+      });
+      if (!next) return;
+      next.sittingOut = false; // dealt in as the BB; the live blind clears the debt
+    }
+  }
+
+  /**
+   * blind-debt phase 2, the impossible-deal guard: when the table cannot run a
+   * hand at all, a waiter's BB will never arrive — seat every connected waiter
+   * with the debt intact (dead post per the usual settle rules).
+   */
+  private forceSeatWaitingPlayers(): boolean {
+    const waiters = this.seats.filter(
+      (p): p is Player => this.isWaitingForBB(p) && p.socketId !== undefined
+    );
+    if (waiters.length === 0) return false;
+    // Only force the flip when it actually enables a hand — otherwise the waiter
+    // is parked sitting-in with a live debt at a table that still cannot deal.
+    if (this.getEligiblePlayers().length + waiters.length < 2) return false;
+    waiters.forEach((w) => { w.sittingOut = false; });
     return true;
   }
 

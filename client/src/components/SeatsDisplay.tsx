@@ -126,6 +126,10 @@ const TURN_DURATION = 30;
 const getStatus = (p: Player): { label: string; color: string; glow: string } | null => {
   if (p.folded)       return { label: 'Fold',    color: N.fold.color,   glow: N.fold.glow };
   if (p.allIn)        return { label: 'All-in',  color: N.allin.color,  glow: N.allin.glow };
+  // blind-debt phase 2: waiting for the BB by choice is mechanically a sit-out,
+  // but the meaningful status is the wait — check it first.
+  if (p.owesBlind && p.blindMode === 'wait')
+                      return { label: 'Wait BB', color: N.waitbb.color, glow: N.waitbb.glow };
   if (p.sittingOut)   return { label: 'Sit out', color: N.sitout.color, glow: N.sitout.glow };
   // blind-debt: badge shows whenever the debt is unpaid — between hands AND while
   // the player sits cardless through someone else's hand (explains the missing cards).

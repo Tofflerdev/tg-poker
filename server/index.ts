@@ -1067,6 +1067,20 @@ io.on("connection", (socket) => {
           updateTableState(tableId);
         }
         break;
+
+      case 'setBlindMode': {
+        // blind-debt phase 2: 'post' — dead post next hand; 'wait' — free, parked
+        // until the BB reaches the seat. Validated here AND in Game.setBlindMode.
+        const mode = args[0];
+        if (mode !== 'post' && mode !== 'wait') {
+          socket.emit("errorMessage", "Invalid blind mode");
+          break;
+        }
+        if (table.setBlindMode(telegramId, mode)) {
+          updateTableState(tableId);
+        }
+        break;
+      }
     }
 
     return true;
@@ -1086,6 +1100,7 @@ io.on("connection", (socket) => {
   socket.on("showCards", () => handleGameAction('showCards'));
   socket.on("sitOut", () => handleGameAction('sitOut'));
   socket.on("sitIn", () => handleGameAction('sitIn'));
+  socket.on("setBlindMode", (mode: 'post' | 'wait') => handleGameAction('setBlindMode', mode));
 
   // Legacy "join" handler - auto-assigns to first available table
   // exit-reconnect B10: the legacy "join" (pick-a-seat) handler is GONE.

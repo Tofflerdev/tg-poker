@@ -97,6 +97,39 @@ const GameControls: React.FC<Props> = ({ socket, gameState, mySeat }) => {
     paddingBottom: 'max(env(safe-area-inset-bottom, 0px), 12px)',
   };
 
+  /* ── blind-debt phase 2: post now / wait for BB toggle.
+     Shown whenever my debt is unpaid and I'm not dealt in — both between hands
+     and while sitting cardless through someone else's hand. ── */
+  const blindMode = myPlayer?.blindMode ?? 'post';
+  const renderBlindDebtToggle = () => (
+    <div className="mb-2">
+      <div className="flex justify-center gap-2">
+        <Button
+          variant="raise"
+          emphasis={blindMode === 'post'}
+          onClick={() => emitAction('setBlindMode', 'post')}
+          style={{ padding: '10px 14px', fontSize: 12 }}
+        >
+          Post BB ({gameState.bigBlind}) · play now
+        </Button>
+        <Button
+          variant="neutral"
+          emphasis={blindMode === 'wait'}
+          onClick={() => emitAction('setBlindMode', 'wait')}
+          style={{ padding: '10px 14px', fontSize: 12 }}
+        >
+          Wait for BB · free
+        </Button>
+      </div>
+      <div className="mt-1 text-xs" style={{ color: '#78909c' }}>
+        {blindMode === 'post'
+          ? `Posting ${gameState.bigBlind} to play the next hand`
+          : 'Waiting for your big blind — no charge'}
+      </div>
+    </div>
+  );
+  const showBlindDebtToggle = !!myPlayer?.owesBlind && myPlayer.hand.length === 0;
+
   /* ═══════════════════════════════════════════
      Status states (waiting / showdown)
      ═══════════════════════════════════════════ */
@@ -132,11 +165,7 @@ const GameControls: React.FC<Props> = ({ socket, gameState, mySeat }) => {
           </div>
         )}
 
-        {myPlayer?.owesBlind && (
-          <div className="mb-2 text-sm" style={{ color: TOKEN.raise.color }}>
-            Posting a blind next hand
-          </div>
-        )}
+        {showBlindDebtToggle && renderBlindDebtToggle()}
 
         {amIWinner && !myPlayer?.showCards && (
           <Button
@@ -161,6 +190,9 @@ const GameControls: React.FC<Props> = ({ socket, gameState, mySeat }) => {
         className="text-center backdrop-blur-md border-t border-white/5"
         style={{ ...safeBottom, background: 'rgba(10,10,14,0.85)', padding: '14px 16px' }}
       >
+        {/* blind-debt phase 2: a mid-hand joiner sits cardless through this hand —
+            let them pick post/wait before the next one starts. */}
+        {showBlindDebtToggle && renderBlindDebtToggle()}
         <div className="text-sm" style={{ color: '#546e7a' }}>
           {gameState.currentPlayer !== null
             ? `${gameState.seats[gameState.currentPlayer]?.displayName || gameState.seats[gameState.currentPlayer]?.id.slice(0, 4)} is thinking...`

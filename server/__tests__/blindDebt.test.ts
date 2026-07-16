@@ -231,3 +231,173 @@ describe('money accounting with a dead post', () => {
     expect(checkHand(evt!)).toEqual([]);
   });
 });
+
+/* ══════════════ Phase 2 — post now / wait for the BB ══════════════ */
+
+/** Humans get a socketId (connected); bots do not — mirrors prod addPlayer. */
+function gameWithSockets(players: { id: string; seat: number; chips?: number; bot?: boolean }[]): Game {
+  const g = new Game('t', { smallBlind: SB, bigBlind: BB });
+  for (const p of players) {
+    g.addPlayer(p.id, p.seat, p.chips ?? 1000, undefined, undefined, undefined,
+      p.bot ? undefined : `s-${p.id}`, undefined, p.bot ?? false);
+  }
+  return g;
+}
+
+/** Park a seated player as a waiting-by-choice debtor. */
+function parkWaiting(g: Game, seatIdx: number): Player {
+  const p = seat(g, seatIdx);
+  p.owesBlind = true;
+  p.blindMode = 'wait';
+  p.sittingOut = true;
+  return p;
+}
+
+describe('wait for BB — seated exactly on the blind, for free', () => {
+  it('stays parked while the BB is elsewhere, then enters as the live BB', () => {
+    const g = gameWithSockets([
+      { id: '-1', seat: 0, bot: true }, { id: '-2', seat: 1, bot: true }, { id: 'W', seat: 2 },
+    ]);
+    const w = parkWaiting(g, 2);
+
+    (g as any).dealerPosition = 0; // hand 1: dealer=1, simulated BB lands on seat 0 — not W
+    expect(g.startNextHand()).toBe(true);
+    expect(w.sittingOut).toBe(true);   // still waiting
+    expect(w.chips).toBe(1000);        // and still uncharged
+
+    expect(g.startNextHand()).toBe(true); // hand 2: dealer=0, SB=1, BB=W's seat
+    expect(w.sittingOut).toBe(false);
+    expect(w.hand.length).toBe(2);
+    expect(w.bet).toBe(BB);            // the live blind — nothing else
+    expect(w.chips).toBe(1000 - BB);
+    expect(w.owesBlind).toBe(false);
+    expect(deadOf(g, 'W')).toBe(0);    // free: no dead post ever
+  });
+
+  it('two adjacent waiters enter one at a time, each as the BB (fixpoint)', () => {
+    const g = gameWithSockets([
+      { id: '-1', seat: 0, bot: true }, { id: '-2', seat: 1, bot: true },
+      { id: 'W1', seat: 2 }, { id: 'W2', seat: 3 },
+    ]);
+    const w1 = parkWaiting(g, 2);
+    const w2 = parkWaiting(g, 3);
+
+    (g as any).dealerPosition = 0;
+    expect(g.startNextHand()).toBe(true); // hand 1: bots only, both wait
+    expect(w1.sittingOut).toBe(true);
+    expect(w2.sittingOut).toBe(true);
+
+    expect(g.startNextHand()).toBe(true); // hand 2: BB reaches seat 2 — W1 only
+    expect(w1.sittingOut).toBe(false);
+    expect(w1.bet).toBe(BB);
+    // A batch flip would have shoved W2 in on the SB here, charging the dead
+    // remainder they chose to wait out.
+    expect(w2.sittingOut).toBe(true);
+    expect(w2.chips).toBe(1000);
+
+    expect(g.startNextHand()).toBe(true); // hand 3: BB reaches seat 3 — W2
+    expect(w2.sittingOut).toBe(false);
+    expect(w2.bet).toBe(BB);
+    expect(deadOf(g, 'W1')).toBe(0);
+    expect(deadOf(g, 'W2')).toBe(0);
+    expect(w2.chips).toBe(1000 - BB);
+  });
+
+  it('a disconnected waiter is never auto-seated (auto-fold would burn the blind)', () => {
+    const g = gameWithSockets([
+      { id: '-1', seat: 0, bot: true }, { id: '-2', seat: 1, bot: true }, { id: 'W', seat: 2 },
+    ]);
+    const w = parkWaiting(g, 2);
+    g.updatePlayerSocketId('W', undefined); // grace window: seat held, socket gone
+
+    (g as any).dealerPosition = 0;
+    expect(g.startNextHand()).toBe(true);
+    expect(g.startNextHand()).toBe(true); // the hand where W would have been BB
+    expect(w.sittingOut).toBe(true);      // skipped — resumes after reconnect
+    expect(w.chips).toBe(1000);
+  });
+});
+
+describe('wait for BB — presence and the impossible-deal guard', () => {
+  it('a waiting human counts as a playable human (bots keep dealing)', () => {
+    const g = gameWithSockets([
+      { id: '-1', seat: 0, bot: true }, { id: '-2', seat: 1, bot: true }, { id: 'W', seat: 2 },
+    ]);
+    parkWaiting(g, 2);
+    expect(g.hasPlayableHuman()).toBe(true);
+
+    // Presence = the seat: still true while disconnected inside the grace window.
+    g.updatePlayerSocketId('W', undefined);
+    expect(g.hasPlayableHuman()).toBe(true);
+  });
+
+  it('a plain sit-out human (post mode) still does NOT keep the table dealing', () => {
+    const g = gameWithSockets([
+      { id: '-1', seat: 0, bot: true }, { id: '-2', seat: 1, bot: true }, { id: 'H', seat: 2 },
+    ]);
+    const h = seat(g, 2);
+    h.sittingOut = true; // disconnect sit-out, no wait choice
+    expect(g.hasPlayableHuman()).toBe(false);
+  });
+
+  it('guard: two lone waiters are force-seated with the debt intact', () => {
+    const g = gameWithSockets([{ id: 'W1', seat: 0 }, { id: 'W2', seat: 1 }]);
+    const w1 = parkWaiting(g, 0);
+    const w2 = parkWaiting(g, 1);
+
+    // No one else can deal — their BB would never arrive. Forced in, the usual
+    // settle rules apply: the BB is free, the SB pays the dead remainder up to
+    // one full BB. A free entry here would be bot-dodging with house money.
+    expect(g.startNextHand()).toBe(true);
+    expect(w1.sittingOut).toBe(false);
+    expect(w2.sittingOut).toBe(false);
+    expect(w1.owesBlind).toBe(false);
+    expect(w2.owesBlind).toBe(false);
+    const paid = (w: Player) => 1000 - w.chips;
+    // Heads-up: one is SB (5 live + 5 dead), the other BB (10 live) — both exactly BB.
+    expect(paid(w1)).toBe(BB);
+    expect(paid(w2)).toBe(BB);
+  });
+
+  it('guard does not fire pointlessly: a single waiter at a dead table stays waiting', () => {
+    const g = gameWithSockets([{ id: 'W', seat: 0 }]);
+    const w = parkWaiting(g, 0);
+
+    expect(g.startNextHand()).toBe(false); // still cannot deal
+    expect(w.sittingOut).toBe(true);       // wait preserved — free BB entry when the table revives
+    expect(w.owesBlind).toBe(true);
+    expect(w.chips).toBe(1000);
+  });
+});
+
+describe('setBlindMode', () => {
+  it('wait parks only a debtor; without debt the player stays in', () => {
+    const g = gameWithSockets([{ id: 'A', seat: 0 }, { id: 'B', seat: 1 }]);
+    expect(g.setBlindMode('A', 'wait')).toBe(true);
+    expect(seat(g, 0).sittingOut).toBe(false); // no debt — nothing to wait out
+
+    seat(g, 0).owesBlind = true;
+    expect(g.setBlindMode('A', 'wait')).toBe(true);
+    expect(seat(g, 0).sittingOut).toBe(true);
+  });
+
+  it('switching back to post sits the player in — dead post next hand', () => {
+    const g = gameWithSockets([
+      { id: '-1', seat: 0, bot: true }, { id: '-2', seat: 1, bot: true }, { id: 'W', seat: 2 },
+    ]);
+    const w = parkWaiting(g, 2);
+    expect(g.setBlindMode('W', 'post')).toBe(true);
+    expect(w.sittingOut).toBe(false);
+
+    (g as any).dealerPosition = 1; // dealer=W's seat, SB=0, BB=1 — W off the blinds
+    expect(g.startNextHand()).toBe(true);
+    expect(w.chips).toBe(1000 - BB);
+    expect(deadOf(g, 'W')).toBe(BB);
+    expect(w.owesBlind).toBe(false);
+  });
+
+  it('bots cannot set a blind mode', () => {
+    const g = gameWithSockets([{ id: '-1', seat: 0, bot: true }]);
+    expect(g.setBlindMode('-1', 'wait')).toBe(false);
+  });
+});

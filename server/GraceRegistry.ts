@@ -90,6 +90,14 @@ export function clear(telegramId: string): void {
     // the player a dead post for no reason.
     const seated = table.getState().seats.find((p) => p?.id === telegramId);
     if (seated?.sittingOut) {
+      // blind-debt phase 2: a player waiting for their BB by choice stays parked —
+      // sitting them in here would silently convert a free wait into a paid post.
+      // Their wait resumes now that they are connected (seatWaitingBBPlayers skips
+      // disconnected players).
+      if (seated.owesBlind && seated.blindMode === 'wait') {
+        console.info('[Grace] cleared telegramId=%s — still waiting for BB by choice', telegramId);
+        return;
+      }
       table.sitIn(telegramId);
       console.info('[Grace] cleared telegramId=%s — sat back in', telegramId);
       return;
