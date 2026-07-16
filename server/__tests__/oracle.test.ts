@@ -47,6 +47,22 @@ describe('checkHand — invariant violations', () => {
     expect(checks).toContain('chipConservation');
   });
 
+  it('accepts Σ netDelta == -rake on a raked hand (rake leaves the table by design)', () => {
+    // Live hand e643dd4a (2026-07-16): winner received pot - rake, so seats sum
+    // to -rake, not 0 — the pre-fix oracle flagged every raked hand.
+    const h = cleanHand();
+    h.rake = 10;
+    h.perPlayer[0].netDelta = 90;      // won 200-pot minus 10 rake, minus own 100
+    h.perPlayer[0].finalChips = 1090;
+    expect(checkHand(h).map((f) => f.check)).not.toContain('chipConservation');
+  });
+
+  it('still flags burnt chips on a raked hand', () => {
+    const h = cleanHand();
+    h.rake = 10;                       // netDelta still sums to 0 → 10 chips minted
+    expect(checkHand(h).map((f) => f.check)).toContain('chipConservation');
+  });
+
   it('flags pots accounting when pot sum != contributed', () => {
     const h = cleanHand();
     h.pots![0].amount = 250; // pot bigger than the 200 contributed

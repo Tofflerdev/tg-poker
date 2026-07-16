@@ -101,10 +101,14 @@ export function checkHand(h: HandCompleteEvent): OracleFinding[] {
   const showedDown = new Set(h.perPlayer.filter((p) => p.showedDown).map((p) => p.telegramId));
   const isShowdown = showedDown.size >= 2;
 
-  // 1. Chip conservation.
+  // 1. Chip conservation. Rake leaves the table by design, so the seats sum to
+  // exactly -rake, not 0. First seen live 2026-07-16 hand e643dd4a: net -2 with
+  // rake 2 was flagged — earlier oracle runs only ever saw rake-free hands
+  // (no-flop-no-drop and pots too small for a 5% floor to reach 1 chip).
   const netSum = h.perPlayer.reduce((s, p) => s + p.netDelta, 0);
-  if (Math.abs(netSum) > EPS) {
-    at('chipConservation', `Σ netDelta = ${netSum} (expected 0)`, { netSum });
+  const expectedNet = -(h.rake ?? 0);
+  if (Math.abs(netSum - expectedNet) > EPS) {
+    at('chipConservation', `Σ netDelta = ${netSum} (expected ${expectedNet} = -rake)`, { netSum, rake: h.rake ?? 0 });
   }
 
   // 2-4 need the pot snapshot.
