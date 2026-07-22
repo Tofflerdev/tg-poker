@@ -24,6 +24,11 @@ export class Table {
   // next between-hands boundary does it (see requestBotRemoval).
   private botRemovalRequested = false;
 
+  // crypto-payments-rake phase 4 §K: fired after bots are removed, carrying each
+  // bot's final stack so the caller can return it to the bot bankroll. Wired in
+  // index.ts (setupTableEvents) → UserRepository.creditBankrollFromBotCashout.
+  private onBotsRemovedCallback: ((removals: { telegramId: string; stack: number }[]) => void) | null = null;
+
   // Auto-start timer
   private nextHandTimer: NodeJS.Timeout | null = null;
   private readonly NEXT_HAND_DELAY = 5000; // 5 секунд между раздачами
@@ -172,14 +177,21 @@ export class Table {
 
   /** Remove every seated bot. Only safe to call between hands. */
   private removeAllBots(): void {
-    const botIds = this.game.getState().seats
+    // §K: capture each bot's final stack BEFORE removal so it can be returned to
+    // the bankroll. This is the single choke point for bot removal (requestBotRemoval,
+    // maybeCleanupBots, setBotsContinue all funnel here), so the cashout hook here
+    // covers every path a bot can leave a table.
+    const removals = this.game.getState().seats
       .filter((p): p is NonNullable<typeof p> => !!p?.isBot)
-      .map((p) => p.id);
-    if (botIds.length === 0) return;
-    botIds.forEach((id) => {
-      this.game.removePlayer(id);
-      this.playerIds.delete(id);
+      .map((p) => ({ telegramId: p.id, stack: p.chips }));
+    if (removals.length === 0) return;
+    removals.forEach(({ telegramId }) => {
+      this.game.removePlayer(telegramId);
+      this.playerIds.delete(telegramId);
     });
+    if (this.onBotsRemovedCallback) {
+      this.onBotsRemovedCallback(removals);
+    }
     // Nothing left to deal — settle the engine back to 'waiting'.
     if (this.game.getEligiblePlayers().length < 2) {
       this.game.startNextHand(); // returns false, sets stage = 'waiting'
@@ -190,8 +202,9 @@ export class Table {
   /**
    * exit-reconnect A: admin "Remove Bots", deferred to the hand boundary.
    *
-   * Bots hold no money, so this is not about refunds — it is about not corrupting
-   * the hand the table is in the middle of. removePlayer force-folds a bot that
+   * §K: bots on live tables now hold bankroll money, and removeAllBots returns
+   * each stack to the bankroll — but the deferral below is still about not
+   * corrupting the hand in progress. removePlayer force-folds a bot that
    * still has cards, which hands a pot it was entitled to (an all-in bot has no
    * decision left to make) to the other players, and drops it out of
    * evt.perPlayer so the session recorder's chip-conservation check no longer
@@ -492,6 +505,14 @@ export class Table {
    */
   setOnHandComplete(cb: (evt: HandCompleteEvent) => void): void {
     this.game.setOnHandComplete(cb);
+  }
+
+  /**
+   * §K: register the bot-removal cashout hook. Invoked by removeAllBots with each
+   * leaving bot's final stack so the caller can return it to the bot bankroll.
+   */
+  setOnBotsRemoved(cb: (removals: { telegramId: string; stack: number }[]) => void): void {
+    this.onBotsRemovedCallback = cb;
   }
 
   /**

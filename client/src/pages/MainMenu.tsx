@@ -333,7 +333,7 @@ export const MainMenu: React.FC<MainMenuProps> = ({
       >
         <BlockRow
           title="Deposit"
-          subtitle="Add chips — coming soon"
+          subtitle="Add chips with USDT"
           titleColor="var(--color-action-raise)"
           left={
             <div

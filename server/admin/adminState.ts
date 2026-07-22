@@ -2,6 +2,7 @@ import prisma from '../db/prisma.js';
 import { tableManager } from '../TableManager.js';
 import { userStorage } from '../models/User.js';
 import { getTableAdminStatus } from './adminMutations.js';
+import { BOT_BANKROLL_TELEGRAM_ID } from '../payments/systemAccounts.js';
 import type {
   AdminState,
   AdminTableInfo,
@@ -89,5 +90,17 @@ export async function buildAdminState(): Promise<AdminState> {
     createdAt: r.createdAt.toISOString(),
   }));
 
-  return { tables: tableInfos, users: userInfos, totalChipsInPlay, recentAuditLogs };
+  // §K: current bot-bankroll float balance (0 if the account isn't seeded yet).
+  const bankroll = await prisma.user.findUnique({
+    where: { telegramId: BigInt(BOT_BANKROLL_TELEGRAM_ID) },
+    select: { balance: true },
+  });
+
+  return {
+    tables: tableInfos,
+    users: userInfos,
+    totalChipsInPlay,
+    recentAuditLogs,
+    bankrollBalance: bankroll?.balance ?? 0,
+  };
 }

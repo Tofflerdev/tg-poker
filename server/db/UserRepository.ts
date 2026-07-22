@@ -2,9 +2,20 @@ import prisma from './prisma.js';
 import { generateRandomName } from '../utils/nameGenerator.js';
 import { TelegramUser, UserProfile } from '../../types/index.js';
 import { randomAvatarId } from '../../types/avatars.js';
+import {
+  HOUSE_TELEGRAM_ID,
+  BOT_BANKROLL_TELEGRAM_ID,
+  isSystemAccount,
+} from '../payments/systemAccounts.js';
 
 export class UserRepository {
   static async findOrCreate(telegramId: number, username?: string, _photoUrl?: string): Promise<TelegramUser> {
+    // §H/§K: house (0) and bot-bankroll are money-holding system accounts, never
+    // logins. Real Telegram ids are ≥ 1, so this only ever fires on a bug or a
+    // forged/dev id — refuse to create or resolve a session for them.
+    if (isSystemAccount(telegramId)) {
+      throw new Error(`[UserRepository] refusing to log in system account telegramId=${telegramId}`);
+    }
     let user = await prisma.user.findUnique({
       where: { telegramId: BigInt(telegramId) }
     });
@@ -79,16 +90,18 @@ export class UserRepository {
   }
 
   /**
-   * crypto-payments-rake phase 2: append a `rake` row to the ledger.
+   * crypto-payments-rake phase 2 + phase 4 §H: append a `rake` row to the ledger
+   * AND credit the rake to the house account balance.
    *
-   * The rake chips are removed from play at hand settlement (Game.ts deducts
-   * them from the pots before payout), so this is purely an accounting record —
-   * it is the source of truth for total rake collected (invariant §E). Until the
-   * house account (§H) is introduced, the row is system-scoped: `userId` and
-   * `balanceAfter` are null and no balance is credited (the chips are simply out
-   * of circulation). `meta` carries { handId, tableId, breakdown } where
-   * `breakdown` is the per-participant rake split proportional to contribution —
-   * a hook for future rakeback with no schema change.
+   * The rake chips are removed from play at hand settlement (Game.ts deducts them
+   * from the pots before payout); §H makes them land as house balance rather than
+   * simply vanishing from circulation. Balance UPDATE + ledger row commit together
+   * in one DB transaction, so the money invariant stays closed
+   * (`Σ balances + chips in play` is conserved: chips leave play, house grows).
+   *
+   * `meta` carries { handId, tableId, breakdown } where `breakdown` is the
+   * per-participant rake split proportional to contribution — a hook for future
+   * rakeback with no schema change. It is the source of truth for total rake (§E).
    *
    * No-op for `amount <= 0` (preflop folds / sub-threshold pots rake nothing).
    */
@@ -97,14 +110,230 @@ export class UserRepository {
     meta: { handId: string; tableId: string; breakdown?: Record<string, number> }
   ): Promise<void> {
     if (!Number.isInteger(amount) || amount <= 0) return;
+    await prisma.$transaction(async (tx) => {
+      const result = await tx.user.updateMany({
+        where: { telegramId: BigInt(HOUSE_TELEGRAM_ID) },
+        data: { balance: { increment: amount } },
+      });
+      if (result.count !== 1) {
+        // House row must exist (seeded at boot by ensureSystemAccounts). Fail
+        // loudly rather than silently drop rake from the ledger and invariant.
+        throw new Error('[recordRake] house account row missing — rake not recorded');
+      }
+      const house = await tx.user.findUnique({
+        where: { telegramId: BigInt(HOUSE_TELEGRAM_ID) },
+        select: { id: true, balance: true },
+      });
+      await tx.transaction.create({
+        data: {
+          userId: house!.id,
+          type: 'rake',
+          amount,
+          balanceAfter: house!.balance,
+          meta: meta as any,
+        },
+      });
+    });
+  }
+
+  /**
+   * phase 4 §H/§K: idempotently seed a money-holding system account (house or bot
+   * bankroll). Called once per account at boot. `update: {}` guarantees a restart
+   * NEVER resets an accrued balance — only the initial `create` sets balance 0.
+   * These rows are excluded from login (findOrCreate guard) and from any
+   * player-facing list.
+   */
+  static async ensureSystemAccount(telegramId: number, displayName: string): Promise<void> {
+    await prisma.user.upsert({
+      where: { telegramId: BigInt(telegramId) },
+      update: {},
+      create: {
+        telegramId: BigInt(telegramId),
+        displayName,
+        balance: 0,
+      },
+    });
+  }
+
+  /** phase 4: seed both system accounts (house §H + bot bankroll §K) at boot. */
+  static async ensureSystemAccounts(): Promise<void> {
+    await this.ensureSystemAccount(HOUSE_TELEGRAM_ID, 'House');
+    await this.ensureSystemAccount(BOT_BANKROLL_TELEGRAM_ID, 'Bot Bankroll');
+  }
+
+  /**
+   * phase 4 §K: external top-up of the bot bankroll by the owner (admin action).
+   * This is real money entering the system from outside, so it sits on the
+   * money-in side of the invariant. Recorded as an `adjustment` row scoped to the
+   * bankroll account, committed together with the balance UPDATE.
+   */
+  static async topUpBankroll(amount: number): Promise<{ success: boolean; newBalance?: number }> {
+    if (!Number.isInteger(amount) || amount <= 0) return { success: false };
+    return prisma.$transaction(async (tx) => {
+      const result = await tx.user.updateMany({
+        where: { telegramId: BigInt(BOT_BANKROLL_TELEGRAM_ID) },
+        data: { balance: { increment: amount } },
+      });
+      if (result.count !== 1) return { success: false };
+      const bankroll = await tx.user.findUnique({
+        where: { telegramId: BigInt(BOT_BANKROLL_TELEGRAM_ID) },
+        select: { id: true, balance: true },
+      });
+      await tx.transaction.create({
+        data: {
+          userId: bankroll!.id,
+          type: 'adjustment',
+          amount,
+          balanceAfter: bankroll!.balance,
+          meta: { reason: 'bankroll_topup' },
+        },
+      });
+      return { success: true, newBalance: bankroll!.balance };
+    });
+  }
+
+  /**
+   * phase 4 §K: debit the bot bankroll to fund one bot buy-in on a live table.
+   * Reuses the guarded, atomic `tryDecrementBalance` path (WHERE balance >= amount
+   * → a `buyin` ledger row scoped to the bankroll). Returns false when the float
+   * is insufficient — the caller must then NOT seat the bot (no overdraft) and
+   * raise an alert. No session columns are written (system account never "sits").
+   */
+  static async debitBankrollForBotBuyIn(
+    amount: number,
+    meta: { tableId: string; seat: number }
+  ): Promise<boolean> {
+    return this.tryDecrementBalance(BOT_BANKROLL_TELEGRAM_ID, amount, { ...meta, bot: true });
+  }
+
+  /**
+   * phase 4 §K: return a leaving bot's remaining stack to the bankroll. Bots are
+   * never checkpointed (see checkpointSeatedPlayers), so their chips live only in
+   * the live Game state — the caller reads the stack from there and passes it here.
+   * A busted bot has stack 0: nothing to credit and a zero-amount cashout is pure
+   * ledger noise, so we no-op (mirrors refundCurrentChips). Balance UPDATE +
+   * `cashout` row commit together.
+   */
+  static async creditBankrollFromBotCashout(
+    amount: number,
+    meta: { tableId: string }
+  ): Promise<void> {
+    if (!Number.isInteger(amount) || amount <= 0) return;
+    await prisma.$transaction(async (tx) => {
+      const result = await tx.user.updateMany({
+        where: { telegramId: BigInt(BOT_BANKROLL_TELEGRAM_ID) },
+        data: { balance: { increment: amount } },
+      });
+      if (result.count !== 1) {
+        throw new Error('[creditBankrollFromBotCashout] bankroll row missing — stack not returned');
+      }
+      const bankroll = await tx.user.findUnique({
+        where: { telegramId: BigInt(BOT_BANKROLL_TELEGRAM_ID) },
+        select: { id: true, balance: true },
+      });
+      await tx.transaction.create({
+        data: {
+          userId: bankroll!.id,
+          type: 'cashout',
+          amount,
+          balanceAfter: bankroll!.balance,
+          meta: { ...meta, bot: true },
+        },
+      });
+    });
+  }
+
+  /**
+   * crypto-payments-rake phase 4 (§D): record a pending deposit for a freshly
+   * created Crypto Pay invoice. `externalId = invoiceId` (@unique) is what makes
+   * the eventual webhook idempotent. balanceAfter stays null until the payment is
+   * confirmed and credited (creditDepositIfPending). `amount` holds the requested
+   * chips for now; it is finalized to the actual net credit on completion.
+   */
+  static async createPendingDeposit(
+    telegramId: number,
+    amountChips: number,
+    invoiceId: string,
+  ): Promise<void> {
+    const user = await prisma.user.findUnique({
+      where: { telegramId: BigInt(telegramId) },
+      select: { id: true },
+    });
+    if (!user) throw new Error(`[createPendingDeposit] user ${telegramId} not found`);
     await prisma.transaction.create({
       data: {
-        userId: null,
-        type: 'rake',
-        amount,
+        userId: user.id,
+        type: 'deposit',
+        amount: amountChips,
         balanceAfter: null,
-        meta: meta as any,
+        externalId: invoiceId,
+        status: 'pending',
+        meta: { requestedChips: amountChips },
       },
+    });
+  }
+
+  /**
+   * crypto-payments-rake phase 4 (§D/§E): credit a paid deposit exactly once.
+   *
+   * Idempotent against duplicate webhook deliveries via a guarded status
+   * transition: the pending → completed flip is an `updateMany WHERE status =
+   * 'pending'`, so only the first caller (which takes the row lock) proceeds to
+   * increment the balance; a racing delivery sees count 0 and bails. Balance
+   * increment + ledger finalization commit together.
+   *
+   * `netChips` is what we actually credit (paid amount minus provider fee — the
+   * player pays the fee, plan §D decision 2026-07-21). A net of 0 marks the row
+   * failed without crediting.
+   */
+  static async creditDepositIfPending(
+    invoiceId: string,
+    netChips: number,
+    paymentMeta: Record<string, unknown>,
+  ): Promise<{ credited: boolean; reason?: string; telegramId?: number; balance?: number; creditedChips?: number }> {
+    return prisma.$transaction(async (tx) => {
+      const row = await tx.transaction.findUnique({ where: { externalId: invoiceId } });
+      if (!row || row.type !== 'deposit') return { credited: false, reason: 'unknown_invoice' };
+      if (row.status === 'completed') return { credited: false, reason: 'already_credited' };
+      if (row.userId === null) return { credited: false, reason: 'no_user' };
+
+      const prevMeta = (row.meta as Record<string, unknown> | null) ?? {};
+
+      if (!Number.isInteger(netChips) || netChips <= 0) {
+        // Net rounded to zero after fee — mark failed (guarded) and credit nothing.
+        await tx.transaction.updateMany({
+          where: { id: row.id, status: 'pending' },
+          data: { status: 'failed', meta: { ...prevMeta, ...paymentMeta, note: 'net<=0' } as any },
+        });
+        return { credited: false, reason: 'net_zero' };
+      }
+
+      // Guarded claim: only the first delivery flips pending → completed.
+      const claim = await tx.transaction.updateMany({
+        where: { id: row.id, status: 'pending' },
+        data: { status: 'completed' },
+      });
+      if (claim.count !== 1) return { credited: false, reason: 'already_credited' };
+
+      const updated = await tx.user.update({
+        where: { id: row.userId },
+        data: { balance: { increment: netChips } },
+        select: { telegramId: true, balance: true },
+      });
+      await tx.transaction.update({
+        where: { id: row.id },
+        data: {
+          amount: netChips, // finalized to the actual net credit
+          balanceAfter: updated.balance,
+          meta: { ...prevMeta, ...paymentMeta } as any,
+        },
+      });
+      return {
+        credited: true,
+        telegramId: Number(updated.telegramId),
+        balance: updated.balance,
+        creditedChips: netChips,
+      };
     });
   }
 

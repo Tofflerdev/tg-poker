@@ -4,7 +4,12 @@ vi.mock('../db/prisma.js', () => ({
   default: { adminAuditLog: { create: vi.fn(async () => ({ id: 'a1' })) } },
 }));
 vi.mock('../db/UserRepository.js', () => ({
-  UserRepository: { ensureBotUser: vi.fn(async () => {}) },
+  UserRepository: {
+    ensureBotUser: vi.fn(async () => {}),
+    // §K: bot buy-ins are funded from the bankroll. Default: float always sufficient.
+    debitBankrollForBotBuyIn: vi.fn(async () => true),
+    creditBankrollFromBotCashout: vi.fn(async () => {}),
+  },
 }));
 vi.mock('../TableManager.js', () => ({
   tableManager: { getTable: vi.fn(), getActiveBotIds: vi.fn(() => new Set<string>()) },
@@ -104,6 +109,51 @@ describe('addBots', () => {
   it('throws when the table does not exist', async () => {
     vi.mocked(tableManager.getTable).mockReturnValue(undefined);
     await expect(addBots('admin', 'nope', 2)).rejects.toThrow(/not found/);
+  });
+
+  it('§K: funds each seated bot from the bankroll with the clamped buy-in', async () => {
+    const table = makeFakeTable();
+    wire(table);
+
+    await addBots('admin', 't', 2);
+
+    // Clamped buy-in = maxBuyIn (1000) for this fake table config.
+    expect(UserRepository.debitBankrollForBotBuyIn).toHaveBeenCalledTimes(2);
+    expect(UserRepository.debitBankrollForBotBuyIn).toHaveBeenCalledWith(
+      1000,
+      expect.objectContaining({ tableId: 't' }),
+    );
+  });
+
+  it('§K: stops seating and reports skips when the bankroll float runs out', async () => {
+    const table = makeFakeTable();
+    wire(table);
+    // First bot funds, second bot's debit fails (float exhausted).
+    vi.mocked(UserRepository.debitBankrollForBotBuyIn)
+      .mockResolvedValueOnce(true)
+      .mockResolvedValueOnce(false);
+
+    const { added, skippedInsufficientFloat } = await addBots('admin', 't', 3);
+
+    expect(added).toBe(1);
+    expect(skippedInsufficientFloat).toBe(1);
+    // Loop stops at the first insufficient-float debit — no third attempt.
+    expect(UserRepository.debitBankrollForBotBuyIn).toHaveBeenCalledTimes(2);
+    expect(table.addPlayer).toHaveBeenCalledTimes(1);
+  });
+
+  it('§K: returns the buy-in to the bankroll when the seat is lost after debit', async () => {
+    const table = makeFakeTable();
+    wire(table);
+    vi.mocked(table.addPlayer).mockReturnValueOnce(false); // seat race lost
+
+    const { added } = await addBots('admin', 't', 1);
+
+    expect(added).toBe(0);
+    expect(UserRepository.creditBankrollFromBotCashout).toHaveBeenCalledWith(
+      1000,
+      expect.objectContaining({ tableId: 't' }),
+    );
   });
 });
 

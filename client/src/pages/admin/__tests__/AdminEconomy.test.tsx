@@ -1,5 +1,5 @@
-import { describe, it, expect, beforeAll } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { describe, it, expect, beforeAll, vi } from 'vitest';
+import { render, screen, fireEvent } from '@testing-library/react';
 import '@testing-library/jest-dom/vitest';
 
 // Recharts ResponsiveContainer uses ResizeObserver — jsdom doesn't ship one.
@@ -22,17 +22,38 @@ function makeState(overrides: Partial<AdminState> = {}): AdminState {
     users: [],
     totalChipsInPlay: 0,
     recentAuditLogs: [],
+    bankrollBalance: 0,
     ...overrides,
   } as any as AdminState;
 }
 
+function makeSocket() {
+  return { on: vi.fn(), off: vi.fn(), emit: vi.fn() } as any;
+}
+
 describe('AdminEconomy', () => {
   it('renders empty economy without crash; both StatCards show labels', () => {
-    render(<AdminEconomy state={makeState()} />);
+    render(<AdminEconomy state={makeState()} socket={makeSocket()} />);
     expect(screen.getByText(/total chips in play/i)).toBeInTheDocument();
     expect(screen.getByText(/active players/i)).toBeInTheDocument();
     // Both stat values show "0" — at least one such element should be visible.
     expect(screen.getAllByText(/^0$/).length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('§K: top-up button emits topUpBankroll with the entered chip amount', () => {
+    const socket = makeSocket();
+    render(<AdminEconomy state={makeState()} socket={socket} />);
+    const input = screen.getByLabelText(/bankroll top-up amount in chips/i);
+    fireEvent.change(input, { target: { value: '5000' } });
+    fireEvent.click(screen.getByRole('button', { name: /top up bot bankroll/i }));
+    expect(socket.emit).toHaveBeenCalledWith('topUpBankroll', { amountChips: 5000 });
+  });
+
+  it('§K: shows the current bankroll balance from state', () => {
+    render(<AdminEconomy state={makeState({ bankrollBalance: 25000 })} socket={makeSocket()} />);
+    // toLocaleString grouping depends on the runtime's ICU data — tolerate "25,000"/"25000".
+    expect(screen.getByText(/25[,\s]?000 chips/i)).toBeInTheDocument();
+    expect(screen.getByText(/\$250\.00/)).toBeInTheDocument();
   });
 
   it('renders populated economy with correct values; recharts container does not throw', () => {
@@ -49,6 +70,7 @@ describe('AdminEconomy', () => {
     render(
       <AdminEconomy
         state={makeState({ tables, users, totalChipsInPlay: 8000 })}
+        socket={makeSocket()}
       />
     );
     // Stat labels render

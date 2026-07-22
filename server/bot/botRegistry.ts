@@ -1,5 +1,6 @@
 import { generateRandomName } from '../utils/nameGenerator.js';
 import { randomAvatarId } from '../../types/avatars.js';
+import { RESERVED_SYSTEM_IDS } from '../payments/systemAccounts.js';
 
 /**
  * Playtest bot identity.
@@ -24,7 +25,9 @@ export interface BotIdentity {
  */
 export function acquireBotIdentity(seatedBotIds: Set<string>): BotIdentity {
   let id = -1;
-  while (seatedBotIds.has(String(id))) id -= 1;
+  // Skip ids already seated, and never hand out a reserved system id (§K bankroll
+  // lives in the negative range) — a bot must never seat under the bankroll wallet.
+  while (seatedBotIds.has(String(id)) || RESERVED_SYSTEM_IDS.has(id)) id -= 1;
   return {
     telegramId: id,
     displayName: generateRandomName(),

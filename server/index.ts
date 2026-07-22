@@ -16,6 +16,8 @@ import { clampBuyIn } from "./config/tables.js";
 import { BotDriver } from "./bot/BotDriver.js";
 import { SessionRecorder } from "./bot/SessionRecorder.js";
 import { UserRepository } from "./db/UserRepository.js";
+import { CryptoPayClient, type CryptoPayWebhookUpdate } from "./payments/cryptoPay.js";
+import { MIN_DEPOSIT_CHIPS, usdtToCents, chipsToUsdt } from "./payments/peg.js";
 import { isValidAvatarId } from "../types/avatars.js";
 import * as HandHistoryQueue from "./HandHistoryQueue.js";
 import { HandHistoryRepository } from "./db/HandHistoryRepository.js";
@@ -88,7 +90,13 @@ const CORS_ORIGIN = process.env.NODE_ENV === 'production'
 
 // Phase 5 / Plan 05-03 / ADMIN-01 / Pitfall 1: register JSON body parser BEFORE
 // any POST handlers. (Existing GET handlers don't need a body parser.)
-app.use(express.json({ limit: '10kb' })); // small limit — login payload is tiny
+// crypto-payments-rake phase 4: `verify` captures the raw request bytes on every
+// JSON body so the Crypto Pay webhook can HMAC-verify the exact payload it
+// received (re-serializing a parsed body would change the bytes and fail).
+app.use(express.json({
+  limit: '10kb', // small limit — login + webhook payloads are tiny
+  verify: (req, _res, buf) => { (req as unknown as { rawBody?: Buffer }).rawBody = buf; },
+}));
 
 // Phase 5 / Plan 05-03 / Pitfall 2: Express CORS for /api/admin/* routes.
 // Mirrors the Socket.io CORS_ORIGIN list so the admin SPA's POST /api/admin/login
@@ -132,6 +140,10 @@ setupAdminNamespace(io, { broadcastTableState: (tableId: string) => updateTableS
 
 const PORT = parseInt(process.env.PORT || "3000", 10);
 
+// crypto-payments-rake phase 4 §D: Crypto Pay client, null when no token is set
+// (deposits disabled — dev/play-money still works). getMe() is checked at boot below.
+const cryptoPay = CryptoPayClient.fromEnv();
+
 // Debug endpoint
 app.get("/", (_req, res) => {
   const status = {
@@ -146,6 +158,62 @@ app.get("/", (_req, res) => {
 // Get tables list endpoint (REST API fallback)
 app.get("/api/tables", (_req, res) => {
   res.json(tableManager.getAllTablesInfo());
+});
+
+// crypto-payments-rake phase 4 §D: Crypto Pay deposit webhook.
+// Authenticates the payload (HMAC over the raw bytes), then credits the matching
+// pending deposit exactly once. Always answers 200 quickly on an authenticated,
+// understood update — Crypto Pay retries on any non-2xx.
+app.post('/api/crypto/webhook', async (req, res) => {
+  if (!cryptoPay) { res.status(503).end(); return; }
+
+  const raw = (req as unknown as { rawBody?: Buffer }).rawBody;
+  const signature = req.header('crypto-pay-api-signature');
+  if (!raw || !cryptoPay.verifyWebhookSignature(raw, signature)) {
+    res.status(401).end(); // do not leak why
+    return;
+  }
+
+  const update = req.body as CryptoPayWebhookUpdate;
+  if (update?.update_type !== 'invoice_paid' || !update.payload) {
+    res.status(200).end(); // ack unrelated updates
+    return;
+  }
+
+  try {
+    const inv = update.payload;
+    const invoiceId = String(inv.invoice_id);
+    // Player pays the provider fee → credit net = paid amount − fee (plan §D).
+    const paidCents = usdtToCents(inv.paid_amount ?? inv.amount ?? '0');
+    const feeCents = usdtToCents(inv.fee_amount ?? inv.fee ?? '0');
+    const netChips = paidCents - feeCents;
+
+    const result = await UserRepository.creditDepositIfPending(invoiceId, netChips, {
+      paidAmount: inv.paid_amount ?? inv.amount,
+      fee: inv.fee_amount ?? inv.fee,
+      asset: inv.paid_asset ?? inv.asset,
+      usdRate: inv.paid_usd_rate,
+    });
+
+    if (result.credited && result.telegramId !== undefined) {
+      // Push the fresh balance to the payer if they are online.
+      const sid = getSocketId(String(result.telegramId));
+      if (sid) {
+        io.to(sid).emit('depositCredited', {
+          creditedChips: result.creditedChips ?? 0,
+          balance: result.balance ?? 0,
+        });
+      }
+      console.log('[Deposit] credited invoice %s: +%d chips to %d', invoiceId, result.creditedChips, result.telegramId);
+    } else {
+      console.log('[Deposit] webhook for invoice %s not credited (%s)', invoiceId, result.reason);
+    }
+  } catch (err) {
+    console.error('[Deposit] webhook processing error:', err);
+    // Fall through to 200: a retry would hit the same error. The pending row stays
+    // pending for manual reconciliation rather than looping the provider forever.
+  }
+  res.status(200).end();
 });
 
 /**
@@ -317,6 +385,21 @@ const setupTableEvents = (tableId: string) => {
     updateTableState(tableId);
   });
 
+  // crypto-payments-rake phase 4 §K: return each removed bot's final stack to the
+  // bot bankroll. Fire-and-forget — this runs inside sync game-loop/timer contexts,
+  // so a DB hiccup must never propagate back into the engine.
+  table.setOnBotsRemoved((removals) => {
+    void (async () => {
+      for (const r of removals) {
+        try {
+          await UserRepository.creditBankrollFromBotCashout(r.stack, { tableId });
+        } catch (err) {
+          console.error('[BotBankroll] cashout credit failed for', r.telegramId, err);
+        }
+      }
+    })();
+  });
+
   table.setOnPlayerAction((evt) => {
     // Playtest recorder (best-effort, no-op unless RECORD_SESSIONS is set).
     sessionRecorder.recordAction(evt);
@@ -410,6 +493,30 @@ const setupTableEvents = (tableId: string) => {
 setTimeout(async () => {
   const tables = tableManager.getAllTablesInfo();
   tables.forEach((t) => setupTableEvents(t.id));
+
+  // crypto-payments-rake phase 4 §H/§K: seed the money-holding system accounts
+  // (house + bot bankroll) before anything can rake or seat a bot. recordRake and
+  // the bankroll debit both assume these rows exist.
+  try {
+    await UserRepository.ensureSystemAccounts();
+    console.log('[Boot] system accounts (house + bot bankroll) ensured');
+  } catch (err) {
+    console.error('[Boot] ensureSystemAccounts failed:', err);
+    // Non-fatal for listen, but rake/bankroll ops will error until this succeeds.
+  }
+
+  // crypto-payments-rake phase 4 §D: verify the Crypto Pay token, or log that
+  // deposits are disabled. Non-fatal either way.
+  if (cryptoPay) {
+    try {
+      const me = await cryptoPay.getMe();
+      console.log('[Boot] Crypto Pay connected as app "%s"', me.name);
+    } catch (err) {
+      console.error('[Boot] Crypto Pay getMe failed — deposits will error:', err);
+    }
+  } else {
+    console.log('[Boot] Crypto Pay disabled (no CRYPTO_PAY_TOKEN)');
+  }
 
   // Phase 4 / Plan 04-06 / D-C2: boot-time session recovery sweep.
   // Refunds every persisted session row (currentTableId IS NOT NULL) and
@@ -582,6 +689,46 @@ io.on("connection", (socket) => {
     } catch (error) {
       console.error("[DailyBonus] Error:", error);
       socket.emit("dailyBonusError", "Server error");
+    }
+  });
+
+  // crypto-payments-rake phase 4 §D: create a Crypto Pay deposit invoice.
+  socket.on("createDeposit", async ({ amountChips }) => {
+    const telegramId = socket.data.telegramId;
+    if (!telegramId) {
+      socket.emit("authError", { message: 'Not authenticated' } as any);
+      return;
+    }
+    const user = userStorage.getUser(telegramId);
+    if (!user) return;
+
+    if (!cryptoPay) {
+      socket.emit("depositError", "Deposits are not available right now");
+      return;
+    }
+    // Sanity bounds: at least the $5 minimum, an integer, and a generous upper
+    // guard against a nonsense/overflowing invoice ($1M — not a policy limit).
+    if (!Number.isInteger(amountChips) || amountChips < MIN_DEPOSIT_CHIPS || amountChips > 100_000_000) {
+      socket.emit("depositError", `Minimum deposit is ${MIN_DEPOSIT_CHIPS} chips`);
+      return;
+    }
+
+    try {
+      const invoice = await cryptoPay.createInvoice({
+        amountUsdt: chipsToUsdt(amountChips),
+        payload: String(user.telegramId),
+        description: `Deposit ${amountChips} chips`,
+      });
+      // Record the pending deposit keyed by invoiceId (@unique → webhook idempotency).
+      await UserRepository.createPendingDeposit(user.telegramId, amountChips, invoice.invoiceId);
+      socket.emit("depositInvoice", {
+        invoiceId: invoice.invoiceId,
+        payUrl: invoice.payUrl,
+        amountChips,
+      });
+    } catch (error) {
+      console.error("[Deposit] createDeposit error:", error);
+      socket.emit("depositError", "Could not create the invoice, try again");
     }
   });
 

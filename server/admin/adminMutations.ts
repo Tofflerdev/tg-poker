@@ -3,6 +3,8 @@ import { tableManager } from '../TableManager.js';
 import { userStorage } from '../models/User.js';
 import { UserRepository } from '../db/UserRepository.js';
 import { acquireBotIdentity } from '../bot/botRegistry.js';
+import { clampBuyIn } from '../config/tables.js';
+import { BOT_BANKROLL_TELEGRAM_ID } from '../payments/systemAccounts.js';
 import * as GraceRegistry from '../GraceRegistry.js';
 import type { Server } from 'socket.io';
 import type { DefaultEventsMap } from 'socket.io';
@@ -224,38 +226,67 @@ export async function drainTable(adminNs: AdminNs, adminUser: string, tableId: s
  * Seat up to `count` tight-passive playtest bots at a table (BotDriver acts on
  * them — see server/bot/). Each bot gets a reserved-range User row (isBot=true)
  * so its hands persist to hand-history. Stops early if the table fills up.
- * Returns the number actually seated.
+ *
+ * §K: bots now play for real chips against humans, so each buy-in is funded from
+ * the bot bankroll float — an atomic, guarded debit. If the float is insufficient
+ * the bot is NOT seated (no overdraft) and the loop stops; `skippedInsufficientFloat`
+ * reports how many were dropped so the caller can raise an alert. On a rare seat
+ * failure after a successful debit, the buy-in is returned to the bankroll.
+ *
+ * Returns the number actually seated and the number skipped for lack of float.
  */
-export async function addBots(adminUser: string, tableId: string, count: number): Promise<{ added: number }> {
+export async function addBots(
+  adminUser: string,
+  tableId: string,
+  count: number,
+): Promise<{ added: number; skippedInsufficientFloat: number }> {
   const table = tableManager.getTable(tableId);
   if (!table) throw new Error(`Table ${tableId} not found`);
 
   const before = { playerCount: table.getState().seats.filter((s) => s !== null).length };
+  const buyIn = clampBuyIn(table.config.maxBuyIn, table.config);
   let added = 0;
+  let skippedInsufficientFloat = 0;
   await runWithAudit(
     { adminUser, action: 'addBots', targetType: 'table', targetId: tableId, beforeJson: before, afterJson: { requested: count } },
     async () => {
       for (let i = 0; i < count; i++) {
         const seat = table.findFirstAvailableSeat();
         if (seat === -1) break; // table full
+
+        // §K: fund this bot's buy-in from the bankroll. Insufficient float → stop.
+        const funded = await UserRepository.debitBankrollForBotBuyIn(buyIn, { tableId, seat });
+        if (!funded) {
+          skippedInsufficientFloat++;
+          console.warn(
+            `[BotBankroll] insufficient float to seat a bot at ${tableId} (buyIn=${buyIn}); skipping remaining`,
+          );
+          break; // float is out — no point trying more this call
+        }
+
         // Re-read seated bots each iteration so successive ids don't collide.
         const identity = acquireBotIdentity(tableManager.getActiveBotIds());
         await UserRepository.ensureBotUser(identity.telegramId, identity.displayName, identity.avatarId);
         const ok = table.addPlayer(
           String(identity.telegramId),
           seat,
-          table.config.maxBuyIn,
+          buyIn,
           identity.telegramId,
           identity.displayName,
           undefined,
           identity.avatarId,
           true, // isBot
         );
-        if (ok) added++;
+        if (ok) {
+          added++;
+        } else {
+          // Seat lost to a race after the debit — return the buy-in so it doesn't leak.
+          await UserRepository.creditBankrollFromBotCashout(buyIn, { tableId });
+        }
       }
     }
   );
-  return { added };
+  return { added, skippedInsufficientFloat };
 }
 
 /**
@@ -281,6 +312,35 @@ export async function removeBots(adminUser: string, tableId: string): Promise<{ 
     }
   );
   return { removed: botIds.length };
+}
+
+/**
+ * §K: external owner top-up of the bot bankroll float. Real money entering the
+ * system from outside (owner's own funds), recorded as an `adjustment` on the
+ * bankroll account. `amountChips` is a positive chip amount (1 chip = $0.01).
+ * Returns the bankroll's new balance.
+ */
+export async function topUpBankroll(adminUser: string, amountChips: number): Promise<{ newBalance: number }> {
+  if (!Number.isInteger(amountChips) || amountChips <= 0) {
+    throw new Error('amount must be a positive integer chip amount');
+  }
+  let newBalance = 0;
+  await runWithAudit(
+    {
+      adminUser,
+      action: 'topUpBankroll',
+      targetType: 'bankroll',
+      targetId: String(BOT_BANKROLL_TELEGRAM_ID),
+      beforeJson: null,
+      afterJson: { amountChips },
+    },
+    async () => {
+      const res = await UserRepository.topUpBankroll(amountChips);
+      if (!res.success) throw new Error('bankroll top-up failed (account row missing?)');
+      newBalance = res.newBalance!;
+    },
+  );
+  return { newBalance };
 }
 
 /**

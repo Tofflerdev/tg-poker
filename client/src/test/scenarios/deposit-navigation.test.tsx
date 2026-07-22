@@ -41,14 +41,29 @@ describe('Scenario: deposit navigation', () => {
     expect(onNavigate).toHaveBeenCalledWith('deposit');
   });
 
-  it('Deposit page renders "Coming Soon" copy (DEPOSIT-02)', () => {
-    render(<Deposit onBack={vi.fn()} />);
-    expect(screen.getByText(/coming soon/i)).toBeInTheDocument();
+  it('Deposit page renders the amount picker and a Deposit button', () => {
+    const socket = makeSocket();
+    render(<Deposit onBack={vi.fn()} socket={socket as any} />);
+    // Preset amount buttons and the default $10 → 1000 chips readout.
+    expect(screen.getByRole('button', { name: '$10' })).toBeInTheDocument();
+    // toLocaleString grouping depends on the runtime's ICU data — tolerate "1,000"/"1000".
+    expect(screen.getByText(/1[,\s]?000 chips/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /deposit \$10\.00/i })).toBeInTheDocument();
+  });
+
+  it('Deposit button emits createDeposit with the selected chip amount', () => {
+    const socket = makeSocket();
+    render(<Deposit onBack={vi.fn()} socket={socket as any} />);
+    // Pick $20 → 2000 chips, then deposit.
+    fireEvent.click(screen.getByRole('button', { name: '$20' }));
+    fireEvent.click(screen.getByRole('button', { name: /deposit \$20\.00/i }));
+    expect(socket.emit).toHaveBeenCalledWith('createDeposit', { amountChips: 2000 });
   });
 
   it('Deposit page Back button invokes onBack', () => {
     const onBack = vi.fn();
-    render(<Deposit onBack={onBack} />);
+    const socket = makeSocket();
+    render(<Deposit onBack={onBack} socket={socket as any} />);
     const back = screen.getByRole('button', { name: /back to menu/i });
     fireEvent.click(back);
     expect(onBack).toHaveBeenCalledTimes(1);

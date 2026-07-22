@@ -115,7 +115,7 @@ const AdminAuthenticatedShell: React.FC<ShellProps> = ({ onLogout }) => {
             <>
               {tab === 'tables' && <AdminTables state={state} socket={socket} />}
               {tab === 'users' && <AdminUsers state={state} socket={socket} />}
-              {tab === 'economy' && <AdminEconomy state={state} />}
+              {tab === 'economy' && <AdminEconomy state={state} socket={socket} />}
               {tab === 'audit' && <AdminAudit state={state} />}
             </>
           )}

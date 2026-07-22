@@ -372,6 +372,13 @@ const App: React.FC = () => {
       setCurrentUser(prev => prev ? { ...prev, balance: newBalance } : null);
     });
     
+    // crypto-payments-rake phase 4 §D: a paid deposit was credited server-side.
+    // Update the global balance so MainMenu/Profile reflect it immediately; the
+    // Deposit page separately shows its own success state.
+    socket.on("depositCredited", (payload) => {
+      setCurrentUser(prev => prev ? { ...prev, balance: payload.balance } : prev);
+    });
+
     socket.on("dailyBonusClaimed", (data) => {
         setCurrentUser(prev => prev ? { 
             ...prev, 
@@ -412,6 +419,7 @@ const App: React.FC = () => {
       socket.off("showdown");
       socket.off("errorMessage");
       socket.off("balanceUpdate");
+      socket.off("depositCredited");
       socket.off("dailyBonusClaimed");
       socket.off("profileUpdated");
       socket.off("avatarUpdated");
@@ -629,13 +637,13 @@ const App: React.FC = () => {
     );
   }
 
-  // Deposit view (Plan 02-04, D-17 / DEPOSIT-02) — "Coming soon" stub.
+  // Deposit view — crypto-payments-rake phase 4 §D: real-money USDT deposits.
   if (view === 'deposit') {
     return (
       <>
         {devToolbar}
         {overlay}
-        <Deposit onBack={() => setView('menu')} />
+        <Deposit socket={socket} onBack={() => setView('menu')} />
       </>
     );
   }

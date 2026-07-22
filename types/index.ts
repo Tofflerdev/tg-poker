@@ -266,6 +266,12 @@ export interface ExtendedServerEvents extends ServerEvents {
   // NEW
   dailyBonusClaimed: (data: { balance: number; nextClaimAt: string }) => void;
   dailyBonusError: (msg: string) => void;
+  // crypto-payments-rake phase 4: deposit flow (Crypto Pay).
+  // The invoice was created — the client opens `payUrl` (WebApp.openInvoice/openLink).
+  depositInvoice: (payload: { invoiceId: string; payUrl: string; amountChips: number }) => void;
+  depositError: (msg: string) => void;
+  // Pushed when the paid-invoice webhook credits the balance and the payer is online.
+  depositCredited: (payload: { creditedChips: number; balance: number }) => void;
   profileData: (profile: UserProfile) => void;
   profileUpdated: (profile: UserProfile) => void;
   profileError: (msg: string) => void;
@@ -316,6 +322,8 @@ export interface ExtendedClientEvents extends ClientEvents {
   sendChatMessage: (message: Omit<ChatMessage, 'id' | 'timestamp'>) => void;
   // NEW
   claimDailyBonus: () => void;
+  // crypto-payments-rake phase 4: request a Crypto Pay invoice for `amountChips`.
+  createDeposit: (payload: { amountChips: number }) => void;
   getProfile: () => void;
   updateProfile: (data: { displayName?: string; avatarUrl?: string }) => void;
   // Plan 02-02: avatar + TOS substrate (picker UI lands in Plan 06; TOS gate in Plan 08)
@@ -478,6 +486,8 @@ export interface AdminState {
   users: AdminUserInfo[];          // only users with active socket connections
   totalChipsInPlay: number;        // sum of every seated Player.chips across all tables
   recentAuditLogs: AdminAuditLogEntry[]; // last 10
+  // crypto-payments-rake phase 4 §K: current bot-bankroll float balance (chips).
+  bankrollBalance: number;
 }
 
 // ADMIN-02 / Pitfall 5: dedicated typed events for the /admin namespace.
@@ -504,4 +514,7 @@ export interface AdminClientEvents {
   addBots: (payload: { tableId: string; count: number }) => void;
   removeBots: (payload: { tableId: string }) => void;
   setBotsContinue: (payload: { tableId: string; enabled: boolean }) => void;
+  // crypto-payments-rake phase 4 §K: external owner top-up of the bot bankroll
+  // float. `amountChips` is a positive chip amount (1 chip = $0.01).
+  topUpBankroll: (payload: { amountChips: number }) => void;
 }

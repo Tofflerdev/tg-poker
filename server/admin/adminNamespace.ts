@@ -13,6 +13,7 @@ import {
   addBots,
   removeBots,
   setBotsContinue,
+  topUpBankroll,
 } from './adminMutations.js';
 import type { AdminClientEvents, AdminServerEvents } from '../../types/index.js';
 
@@ -142,10 +143,18 @@ export function setupAdminNamespace(io: Server, deps: AdminNamespaceDeps): void 
         return;
       }
       try {
-        await addBots(adminUser, tableId, count);
+        const res = await addBots(adminUser, tableId, count);
         deps.broadcastTableState(tableId); // refresh seated humans
         const info = buildAdminTableInfo(tableId);
         if (info) adminNs.emit('tableStateChanged', info);
+        // §K: alert the operator when the bankroll float ran short so fewer bots
+        // seated than requested — surfaced as a (non-fatal) adminError toast.
+        if (res.skippedInsufficientFloat > 0) {
+          socket.emit('adminError', {
+            code: 'BOT_BANKROLL_LOW',
+            message: `Bankroll float low: ${res.skippedInsufficientFloat} bot(s) not seated. Top up the bankroll.`,
+          });
+        }
       } catch (err) {
         socket.emit('adminError', { code: 'ADD_BOTS_FAILED', message: (err as Error).message });
       }
@@ -158,6 +167,25 @@ export function setupAdminNamespace(io: Server, deps: AdminNamespaceDeps): void 
         if (info) adminNs.emit('tableStateChanged', info);
       } catch (err) {
         socket.emit('adminError', { code: 'REMOVE_BOTS_FAILED', message: (err as Error).message });
+      }
+    });
+    // §K: external owner top-up of the bot bankroll float.
+    socket.on('topUpBankroll', async ({ amountChips }) => {
+      if (!Number.isInteger(amountChips) || amountChips < 1) {
+        socket.emit('adminError', { code: 'INVALID_AMOUNT', message: 'amountChips must be a positive integer' });
+        return;
+      }
+      try {
+        const { newBalance } = await topUpBankroll(adminUser, amountChips);
+        socket.emit('adminError', { code: 'BANKROLL_TOPPED_UP', message: `Bankroll balance is now ${newBalance} chips.` });
+        // §K: refresh this admin's snapshot so the bankroll balance card updates live.
+        try {
+          socket.emit('adminState', await buildAdminState());
+        } catch (err) {
+          console.error('[Admin] snapshot refresh after top-up failed:', err);
+        }
+      } catch (err) {
+        socket.emit('adminError', { code: 'TOPUP_FAILED', message: (err as Error).message });
       }
     });
     socket.on('setBotsContinue', async ({ tableId, enabled }) => {
