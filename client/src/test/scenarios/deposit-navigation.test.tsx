@@ -26,7 +26,6 @@ describe('Scenario: deposit navigation', () => {
       <MainMenu
         user={HERO}
         onNavigate={onNavigate}
-        onClaimBonus={vi.fn()}
         socket={socket as any}
         showGrandfatherBanner={false}
         onTosAccepted={vi.fn()}

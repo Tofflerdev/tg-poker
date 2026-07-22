@@ -14,8 +14,8 @@ import { HandHistoryList } from '../components/HandHistoryList';
  * - Profile tab (D-21): current avatar (manifest-resolved; Telegram photo NOT
  *   rendered per D-15), inline-editable display name (tap to edit, Enter/blur
  *   commits via existing `updateProfile` socket event), stats grid from
- *   `UserProfile` (fetched via existing `getProfile` / `profileData` pattern),
- *   daily-bonus eligibility block driven by `currentUser.canClaimDaily`.
+ *   `UserProfile` (fetched via existing `getProfile` / `profileData` pattern).
+ *   (§G: the daily-bonus block was removed with play-money.)
  * - Avatar tab (D-22): 4×5 grid picker with explicit Confirm (D-13 — no
  *   instant-save). Implemented in Task 2 of this plan.
  * - History tab (D-23): empty-state stub, no socket/data wiring. Layout is
@@ -139,11 +139,6 @@ export const ProfileSettings: React.FC<ProfileSettingsProps> = ({ socket, onBack
     setNameDraft('');
   };
 
-  const handleClaimBonus = () => {
-    hapticFeedback?.impactOccurred('medium');
-    socket.emit('claimDailyBonus');
-  };
-
   const handleSelectAvatar = (id: AvatarId) => {
     hapticFeedback?.selectionChanged?.();
     setPendingAvatar(id);
@@ -170,35 +165,6 @@ export const ProfileSettings: React.FC<ProfileSettingsProps> = ({ socket, onBack
 
     const currentAvatarSrc = avatarUrl(currentUser.avatarId as AvatarId | undefined);
     const fallbackInitial = (currentUser.displayName || '?').charAt(0).toUpperCase();
-
-    // Daily bonus block copy
-    let bonusLine: React.ReactNode;
-    if (currentUser.canClaimDaily) {
-      bonusLine = (
-        <>
-          <div style={{ color: 'var(--color-action-sit)', fontWeight: 700, marginBottom: 10 }}>
-            Claimable now
-          </div>
-          <Button variant="sit" emphasis fullWidth onClick={handleClaimBonus}>
-            Claim 1000
-          </Button>
-        </>
-      );
-    } else if (currentUser.lastDailyRefill) {
-      const next = new Date(new Date(currentUser.lastDailyRefill).getTime() + 24 * 60 * 60 * 1000);
-      bonusLine = (
-        <div style={{ color: 'var(--color-neutral)', fontSize: 13 }}>
-          Next claim available at:{' '}
-          <span style={{ color: 'var(--color-active)' }}>{next.toLocaleString()}</span>
-        </div>
-      );
-    } else {
-      bonusLine = (
-        <div style={{ color: 'var(--color-neutral)', fontSize: 13 }}>
-          Daily bonus unlocks when your balance drops below 1000.
-        </div>
-      );
-    }
 
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
@@ -372,24 +338,6 @@ export const ProfileSettings: React.FC<ProfileSettingsProps> = ({ socket, onBack
               span={2}
             />
           </div>
-        </Card>
-
-        {/* Daily bonus card */}
-        <Card variant="sit" padding={16}>
-          <div
-            style={{
-              color: 'var(--color-action-sit)',
-              fontSize: 11,
-              fontWeight: 700,
-              letterSpacing: '0.08em',
-              textTransform: 'uppercase',
-              marginBottom: 10,
-              textShadow: '0 0 6px var(--glow-sit)',
-            }}
-          >
-            Daily Bonus
-          </div>
-          {bonusLine}
         </Card>
       </div>
     );

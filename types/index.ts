@@ -129,8 +129,7 @@ export interface TelegramUser {
   bannedAt?: string;       // Plan 05-01 (COMPLIANCE-04 + RESEARCH Open Q3): ISO timestamp; truthy = banned
   analyticsId?: string;     // Plan 05-02 / OBS-03 / D-12: sha256(telegramId) — only identity sent to PostHog
   balance: number;
-  lastDailyRefill?: string; // NEW: ISO timestamp
-  canClaimDaily?: boolean;  // NEW: computed field
+  // crypto-payments-rake §G: daily-bonus fields removed (chips only enter via deposits).
 }
 
 export interface UserProfile {
@@ -263,9 +262,6 @@ export interface ExtendedServerEvents extends ServerEvents {
   // Chat events
   chatMessage: (message: ChatMessage) => void;
   systemMessage: (text: string) => void;
-  // NEW
-  dailyBonusClaimed: (data: { balance: number; nextClaimAt: string }) => void;
-  dailyBonusError: (msg: string) => void;
   // crypto-payments-rake phase 4: deposit flow (Crypto Pay).
   // The invoice was created — the client opens `payUrl` (WebApp.openInvoice/openLink).
   depositInvoice: (payload: { invoiceId: string; payUrl: string; amountChips: number }) => void;
@@ -320,8 +316,6 @@ export interface ExtendedClientEvents extends ClientEvents {
   leaveTable: () => void;
   // Chat
   sendChatMessage: (message: Omit<ChatMessage, 'id' | 'timestamp'>) => void;
-  // NEW
-  claimDailyBonus: () => void;
   // crypto-payments-rake phase 4: request a Crypto Pay invoice for `amountChips`.
   createDeposit: (payload: { amountChips: number }) => void;
   getProfile: () => void;

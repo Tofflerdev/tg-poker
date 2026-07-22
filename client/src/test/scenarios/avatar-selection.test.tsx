@@ -36,8 +36,6 @@ const PROFILE: UserProfile = {
   handsWon: 0,
   totalWinnings: 0,
   biggestPot: 0,
-  lastDailyRefill: null,
-  canClaimDaily: false,
 } as any as UserProfile;
 
 describe('Scenario: avatar selection', () => {

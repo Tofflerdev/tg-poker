@@ -200,23 +200,5 @@ describe('UserRepository atomic helpers', () => {
     });
   });
 
-  describe('claimDailyBonus (bonus ledger)', () => {
-    it('sets balance to 1000 and records the delta as a bonus ledger row', async () => {
-      txClient.user.findUnique.mockResolvedValue({ id: 7, balance: 300, lastDailyRefill: null });
-      txClient.user.update.mockResolvedValue({ balance: 1000 });
-      const result = await UserRepository.claimDailyBonus(1001);
-      expect(result.success).toBe(true);
-      expect(result.balance).toBe(1000);
-      expect(txClient.transaction.create).toHaveBeenCalledWith({
-        data: { userId: 7, type: 'bonus', amount: 700, balanceAfter: 1000 },
-      });
-    });
-
-    it('does not write a ledger row when balance is already >= 1000', async () => {
-      txClient.user.findUnique.mockResolvedValue({ id: 7, balance: 1000, lastDailyRefill: null });
-      const result = await UserRepository.claimDailyBonus(1001);
-      expect(result.success).toBe(false);
-      expect(txClient.transaction.create).not.toHaveBeenCalled();
-    });
-  });
+  // crypto-payments-rake §G: daily bonus (claimDailyBonus) removed — no test.
 });

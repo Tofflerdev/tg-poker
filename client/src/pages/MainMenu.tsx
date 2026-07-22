@@ -2,7 +2,6 @@ import React from 'react';
 import { Socket } from 'socket.io-client';
 import { useTelegram } from '../hooks/useTelegram';
 import type { TelegramUser, ExtendedClientEvents, ExtendedServerEvents } from '../../../types/index';
-import { DailyBonusButton } from '../components/DailyBonusButton';
 import { ConsentBanner } from '../components/ConsentBanner';
 import { Card } from '../components/ui';
 import { avatarUrl, type AvatarId } from '../assets/avatars/manifest';
@@ -46,7 +45,6 @@ export type AppNavigateTarget =
 interface MainMenuProps {
   user: TelegramUser | null;
   onNavigate: (view: AppNavigateTarget) => void;
-  onClaimBonus: () => void;
   // Plan 02-08: socket is required by ConsentBanner for the grandfather flow.
   // Only the consent-related events are used from this socket here; all other
   // MainMenu interactions stay on App.tsx's shared socket via onNavigate.
@@ -248,7 +246,6 @@ const ChevronRight: React.FC<{ color: string }> = ({ color }) => (
 export const MainMenu: React.FC<MainMenuProps> = ({
   user,
   onNavigate,
-  onClaimBonus,
   socket,
   showGrandfatherBanner,
   onTosAccepted,
@@ -393,50 +390,7 @@ export const MainMenu: React.FC<MainMenuProps> = ({
         />
       </BlockCard>
 
-      {/* ─── Block 3: Daily Bonus ────────────────────────────── */}
-      <BlockCard variant="sit">
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-          <BlockRow
-            title="Daily Bonus"
-            subtitle={
-              user && user.balance >= 1000
-                ? 'Available when balance drops below 1,000'
-                : 'Top up your stack every 24 hours'
-            }
-            titleColor="var(--color-action-sit)"
-            left={
-              <div
-                aria-hidden
-                style={{
-                  width: 40,
-                  height: 40,
-                  borderRadius: 12,
-                  display: 'grid',
-                  placeItems: 'center',
-                  border: '1.5px solid color-mix(in srgb, var(--color-action-sit) 50%, transparent)',
-                  background: 'color-mix(in srgb, var(--color-action-sit) 10%, transparent)',
-                  color: 'var(--color-action-sit)',
-                  fontSize: 22,
-                  flexShrink: 0,
-                  textShadow: '0 0 8px var(--glow-sit)',
-                }}
-              >
-                🎁
-              </div>
-            }
-          />
-          {user && (
-            <DailyBonusButton
-              balance={user.balance}
-              lastDailyRefill={user.lastDailyRefill}
-              canClaimDaily={user.canClaimDaily}
-              onClaim={onClaimBonus}
-            />
-          )}
-        </div>
-      </BlockCard>
-
-      {/* ─── Block 4: Profile ────────────────────────────────── */}
+      {/* ─── Block 3: Profile ────────────────────────────────── */}
       <BlockCard
         variant="active"
         onClick={nav('profile', 'light')}

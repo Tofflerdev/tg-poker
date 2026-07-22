@@ -30,7 +30,8 @@ export class UserRepository {
           displayName: generateRandomName(),
           avatarUrl: null,
           avatarId: randomAvatarId(),
-          balance: 1000
+          // §G: real-money economy — new users start with 0 chips (was 1000).
+          balance: 0
         }
       });
     } else {
@@ -549,53 +550,9 @@ export class UserRepository {
     return { success: result.count === 1 };
   }
 
-  static async claimDailyBonus(telegramId: number): Promise<{ success: boolean; balance: number; nextClaimAt?: Date; message?: string }> {
-    const now = new Date();
-    // NOTE (crypto-payments-rake): daily bonus / play-money is slated for removal
-    // (plan §G) once deposits (phase 4) exist. Until then it stays testable, but
-    // the balance jump is recorded as a `bonus` ledger entry so the money
-    // invariant stays complete. Balance write + ledger row commit together.
-    return prisma.$transaction(async (tx) => {
-      const user = await tx.user.findUnique({
-        where: { telegramId: BigInt(telegramId) }
-      });
-
-      if (!user) return { success: false, balance: 0, message: 'User not found' };
-
-      if (user.balance >= 1000) {
-        return { success: false, balance: user.balance, message: 'Balance is already 1000 or more' };
-      }
-
-      const lastRefill = user.lastDailyRefill;
-      if (lastRefill) {
-        const nextClaim = new Date(lastRefill.getTime() + 24 * 60 * 60 * 1000);
-        if (now < nextClaim) {
-          return { success: false, balance: user.balance, nextClaimAt: nextClaim, message: 'Daily bonus already claimed' };
-        }
-      }
-
-      const delta = 1000 - user.balance;
-      const updatedUser = await tx.user.update({
-        where: { telegramId: BigInt(telegramId) },
-        data: {
-          balance: 1000,
-          lastDailyRefill: now
-        }
-      });
-
-      await tx.transaction.create({
-        data: {
-          userId: user.id,
-          type: 'bonus',
-          amount: delta,
-          balanceAfter: updatedUser.balance,
-        }
-      });
-
-      const nextClaimAt = new Date(now.getTime() + 24 * 60 * 60 * 1000);
-      return { success: true, balance: updatedUser.balance, nextClaimAt };
-    });
-  }
+  // crypto-payments-rake §G: daily bonus removed — the real-money economy has no
+  // free play-money top-up. `lastDailyRefill` stays a dead DB column. (Deleted
+  // claimDailyBonus + its socket handler + client UI.)
 
   static async updateProfile(telegramId: number, displayName?: string, avatarUrl?: string): Promise<UserProfile> {
     const data: any = {};
@@ -710,21 +667,7 @@ export class UserRepository {
   }
 
   private static mapToTelegramUser(user: any): TelegramUser {
-    const now = new Date();
-    const lastRefill = user.lastDailyRefill;
-    let canClaimDaily = false;
-    
-    if (user.balance < 1000) {
-        if (!lastRefill) {
-            canClaimDaily = true;
-        } else {
-            const nextClaim = new Date(lastRefill.getTime() + 24 * 60 * 60 * 1000);
-            if (now >= nextClaim) {
-                canClaimDaily = true;
-            }
-        }
-    }
-
+    // §G: daily-bonus fields removed — chips only enter via deposits.
     return {
       id: user.id.toString(),
       telegramId: Number(user.telegramId),
@@ -736,8 +679,6 @@ export class UserRepository {
       tosAcceptedAt: user.tosAcceptedAt?.toISOString(),
       bannedAt: user.bannedAt ? user.bannedAt.toISOString() : undefined,
       balance: user.balance,
-      lastDailyRefill: user.lastDailyRefill?.toISOString(),
-      canClaimDaily
     };
   }
 

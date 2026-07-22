@@ -12,7 +12,10 @@ model User {
   telegramUsername  String?   @map("telegram_username") @db.VarChar(255)
   displayName       String    @map("display_name") @db.VarChar(50)
   avatarUrl         String?   @map("avatar_url")
-  balance           Int       @default(1000)
+  // crypto-payments-rake §G: real-money economy — new users start at 0; chips
+  // only enter via a deposit. (Was 1000 play-money default.)
+  balance           Int       @default(0)
+  // Dead field (§G): daily bonus removed; column kept to avoid a data-loss migration.
   lastDailyRefill   DateTime? @map("last_daily_refill") @db.Timestamptz
   handsPlayed       Int       @default(0) @map("hands_played")
   handsWon          Int       @default(0) @map("hands_won")

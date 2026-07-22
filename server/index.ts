@@ -660,37 +660,7 @@ io.on("connection", (socket) => {
   // Profile & Daily Bonus
   // ==========================================
 
-  socket.on("claimDailyBonus", async () => {
-    const telegramId = socket.data.telegramId;
-    if (!telegramId) {
-      socket.emit("authError", { message: 'Not authenticated' } as any);
-      return;
-    }
-    const user = userStorage.getUser(telegramId);
-    if (!user) return;
-
-    try {
-      const result = await UserRepository.claimDailyBonus(user.telegramId);
-
-      if (result.success) {
-        // Update local session
-        user.balance = result.balance;
-        user.lastDailyRefill = new Date().toISOString();
-        user.canClaimDaily = false;
-
-        socket.emit("dailyBonusClaimed", {
-          balance: result.balance,
-          nextClaimAt: result.nextClaimAt!.toISOString()
-        });
-        socket.emit("balanceUpdate", result.balance);
-      } else {
-        socket.emit("dailyBonusError", result.message || "Failed to claim bonus");
-      }
-    } catch (error) {
-      console.error("[DailyBonus] Error:", error);
-      socket.emit("dailyBonusError", "Server error");
-    }
-  });
+  // crypto-payments-rake §G: daily bonus removed — chips only enter via deposits.
 
   // crypto-payments-rake phase 4 §D: create a Crypto Pay deposit invoice.
   socket.on("createDeposit", async ({ amountChips }) => {

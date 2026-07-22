@@ -379,15 +379,6 @@ const App: React.FC = () => {
       setCurrentUser(prev => prev ? { ...prev, balance: payload.balance } : prev);
     });
 
-    socket.on("dailyBonusClaimed", (data) => {
-        setCurrentUser(prev => prev ? { 
-            ...prev, 
-            balance: data.balance,
-            lastDailyRefill: new Date().toISOString(), // Approximate
-            canClaimDaily: false
-        } : null);
-    });
-
     socket.on("profileUpdated", (profile) => {
         setCurrentUser(prev => prev ? {
             ...prev,
@@ -420,7 +411,6 @@ const App: React.FC = () => {
       socket.off("errorMessage");
       socket.off("balanceUpdate");
       socket.off("depositCredited");
-      socket.off("dailyBonusClaimed");
       socket.off("profileUpdated");
       socket.off("avatarUpdated");
       socket.off("tosAccepted");
@@ -485,10 +475,6 @@ const App: React.FC = () => {
 
   const handleOpenProfile = useCallback(() => {
     setView('profile');
-  }, []);
-
-  const handleClaimBonus = useCallback(() => {
-    socket.emit("claimDailyBonus");
   }, []);
 
   const handleBackFromProfile = useCallback(() => {
@@ -599,7 +585,6 @@ const App: React.FC = () => {
               setView(target);
             }
           }}
-          onClaimBonus={handleClaimBonus}
         />
         {buyInSheet}
       </>

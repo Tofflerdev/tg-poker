@@ -135,7 +135,7 @@ export function useTelegram(): UseTelegramReturn {
           firstName: tgUser.first_name,
           lastName: tgUser.last_name,
           photoUrl: tgUser.photo_url,
-          balance: 1000, // Default starting balance
+          balance: 0, // §G: real-money economy — chips only via deposits
         });
       }
 
