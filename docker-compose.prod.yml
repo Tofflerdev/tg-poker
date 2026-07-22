@@ -33,6 +33,10 @@ services:
       ADMIN_PASS: ${ADMIN_PASS}
       # Playtest bots: set RECORD_SESSIONS=1 in .env to record sessions/*.jsonl
       RECORD_SESSIONS: ${RECORD_SESSIONS:-}
+      # crypto-payments-rake phase 4 §D: Crypto Pay deposits. Empty token disables
+      # deposits (graceful). Set both in .env; testnet flag hits testnet-pay.crypt.bot.
+      CRYPTO_PAY_TOKEN: ${CRYPTO_PAY_TOKEN:-}
+      CRYPTO_PAY_TESTNET: ${CRYPTO_PAY_TESTNET:-}
     volumes:
       - client-dist:/app/client-dist
       # Persist playtest session logs + generated reports on the host so they
