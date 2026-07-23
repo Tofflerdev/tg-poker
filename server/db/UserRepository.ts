@@ -163,37 +163,6 @@ export class UserRepository {
   }
 
   /**
-   * phase 4 §K: external top-up of the bot bankroll by the owner (admin action).
-   * This is real money entering the system from outside, so it sits on the
-   * money-in side of the invariant. Recorded as an `adjustment` row scoped to the
-   * bankroll account, committed together with the balance UPDATE.
-   */
-  static async topUpBankroll(amount: number): Promise<{ success: boolean; newBalance?: number }> {
-    if (!Number.isInteger(amount) || amount <= 0) return { success: false };
-    return prisma.$transaction(async (tx) => {
-      const result = await tx.user.updateMany({
-        where: { telegramId: BigInt(BOT_BANKROLL_TELEGRAM_ID) },
-        data: { balance: { increment: amount } },
-      });
-      if (result.count !== 1) return { success: false };
-      const bankroll = await tx.user.findUnique({
-        where: { telegramId: BigInt(BOT_BANKROLL_TELEGRAM_ID) },
-        select: { id: true, balance: true },
-      });
-      await tx.transaction.create({
-        data: {
-          userId: bankroll!.id,
-          type: 'adjustment',
-          amount,
-          balanceAfter: bankroll!.balance,
-          meta: { reason: 'bankroll_topup' },
-        },
-      });
-      return { success: true, newBalance: bankroll!.balance };
-    });
-  }
-
-  /**
    * phase 4 §K: debit the bot bankroll to fund one bot buy-in on a live table.
    * Reuses the guarded, atomic `tryDecrementBalance` path (WHERE balance >= amount
    * → a `buyin` ledger row scoped to the bankroll). Returns false when the float

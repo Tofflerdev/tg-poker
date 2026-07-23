@@ -41,13 +41,13 @@ describe('AdminEconomy', () => {
     expect(screen.getAllByText(/^0$/).length).toBeGreaterThanOrEqual(1);
   });
 
-  it('§K: top-up button emits topUpBankroll with the entered chip amount', () => {
+  it('§K: deposit button emits createBankrollDeposit with the entered chip amount', () => {
     const socket = makeSocket();
     render(<AdminEconomy state={makeState()} socket={socket} />);
-    const input = screen.getByLabelText(/bankroll top-up amount in chips/i);
+    const input = screen.getByLabelText(/bankroll deposit amount in chips/i);
     fireEvent.change(input, { target: { value: '5000' } });
-    fireEvent.click(screen.getByRole('button', { name: /top up bot bankroll/i }));
-    expect(socket.emit).toHaveBeenCalledWith('topUpBankroll', { amountChips: 5000 });
+    fireEvent.click(screen.getByRole('button', { name: /deposit to bot bankroll/i }));
+    expect(socket.emit).toHaveBeenCalledWith('createBankrollDeposit', { amountChips: 5000 });
   });
 
   it('§K: shows the current bankroll balance from state', () => {

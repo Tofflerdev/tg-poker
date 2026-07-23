@@ -497,6 +497,9 @@ export interface AdminServerEvents {
   balanceGranted: (payload: { telegramId: string; delta: number; newBalance: number }) => void;
   auditLogAppended: (entry: AdminAuditLogEntry) => void;
   adminError: (payload: { code: string; message: string }) => void;
+  // crypto-payments-rake §K: a Crypto Pay invoice was minted for a bankroll
+  // deposit — the admin opens `payUrl` to pay; the webhook credits the bankroll.
+  bankrollInvoice: (payload: { invoiceId: string; payUrl: string; amountChips: number }) => void;
 }
 
 export interface AdminClientEvents {
@@ -510,9 +513,10 @@ export interface AdminClientEvents {
   addBots: (payload: { tableId: string; count: number }) => void;
   removeBots: (payload: { tableId: string }) => void;
   setBotsContinue: (payload: { tableId: string; enabled: boolean }) => void;
-  // crypto-payments-rake phase 4 §K: external owner top-up of the bot bankroll
-  // float. `amountChips` is a positive chip amount (1 chip = $0.01).
-  topUpBankroll: (payload: { amountChips: number }) => void;
+  // crypto-payments-rake phase 4 §K: fund the bot bankroll float with a REAL
+  // Crypto Pay deposit (same invoice flow as players, credited to the bankroll
+  // account). Replaces the old adjustment-based top-up (no more minting).
+  createBankrollDeposit: (payload: { amountChips: number }) => void;
   // crypto-payments-rake phase 4 §H: withdraw accumulated house rake to a Telegram
   // user via Crypto Pay transfer. `amountChips` in chips; `targetUserId` = recipient.
   withdrawHouseRake: (payload: { amountChips: number; targetUserId: number }) => void;

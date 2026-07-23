@@ -75,9 +75,9 @@ export const AdminEconomy: React.FC<Props> = ({ state, socket }) => {
       .reduce((sum, u) => sum + u.chips, 0),
   }));
 
-  // The server routes both success and failure through `adminError`; we surface
-  // the bankroll (§K) and house-withdrawal (§H) codes as inline feedback.
-  const [topUpAmount, setTopUpAmount] = React.useState('');
+  // The server routes results through `adminError`; §K bankroll deposit returns a
+  // `bankrollInvoice` (a Crypto Pay URL to open), §H house-withdrawal via adminError.
+  const [bankrollAmount, setBankrollAmount] = React.useState('');
   const [bankrollFeedback, setBankrollFeedback] = React.useState<{ ok: boolean; message: string } | null>(null);
 
   // §H: house rake withdrawal.
@@ -87,24 +87,35 @@ export const AdminEconomy: React.FC<Props> = ({ state, socket }) => {
 
   React.useEffect(() => {
     const onAdminError = (payload: { code: string; message: string }) => {
-      if (['BANKROLL_TOPPED_UP', 'TOPUP_FAILED', 'INVALID_AMOUNT'].includes(payload.code)) {
-        setBankrollFeedback({ ok: payload.code === 'BANKROLL_TOPPED_UP', message: payload.message });
+      if (['BANKROLL_DEPOSIT_FAILED', 'INVALID_AMOUNT'].includes(payload.code)) {
+        setBankrollFeedback({ ok: false, message: payload.message });
       } else if (['HOUSE_WITHDRAWN', 'WITHDRAW_FAILED', 'INVALID_WITHDRAWAL'].includes(payload.code)) {
         setHouseFeedback({ ok: payload.code === 'HOUSE_WITHDRAWN', message: payload.message });
       }
     };
+    const onBankrollInvoice = (payload: { invoiceId: string; payUrl: string; amountChips: number }) => {
+      if (payload.payUrl) window.open(payload.payUrl, '_blank');
+      setBankrollFeedback({
+        ok: true,
+        message: 'Invoice opened — pay it in Crypto Pay; the bankroll credits automatically.',
+      });
+    };
     socket.on('adminError', onAdminError);
-    return () => { socket.off('adminError', onAdminError); };
+    socket.on('bankrollInvoice', onBankrollInvoice);
+    return () => {
+      socket.off('adminError', onAdminError);
+      socket.off('bankrollInvoice', onBankrollInvoice);
+    };
   }, [socket]);
 
-  const submitTopUp = () => {
-    const n = Number.parseInt(topUpAmount, 10);
-    if (!Number.isInteger(n) || n < 1 || n > 100_000_000) {
-      alert('Amount must be a positive integer chip amount (1 chip = $0.01).');
+  const submitBankrollDeposit = () => {
+    const n = Number.parseInt(bankrollAmount, 10);
+    if (!Number.isInteger(n) || n < 500 || n > 100_000_000) {
+      alert('Minimum bankroll deposit is 500 chips ($5).');
       return;
     }
-    socket.emit('topUpBankroll', { amountChips: n });
-    setTopUpAmount('');
+    socket.emit('createBankrollDeposit', { amountChips: n });
+    setBankrollAmount('');
   };
 
   const submitWithdraw = () => {
@@ -126,8 +137,8 @@ export const AdminEconomy: React.FC<Props> = ({ state, socket }) => {
     setWdAmount('');
   };
 
-  const parsedTopUp = Number.parseInt(topUpAmount, 10);
-  const topUpHint = Number.isInteger(parsedTopUp) && parsedTopUp > 0 ? `= ${usd(parsedTopUp)}` : '';
+  const parsedBankroll = Number.parseInt(bankrollAmount, 10);
+  const bankrollHint = Number.isInteger(parsedBankroll) && parsedBankroll > 0 ? `= ${usd(parsedBankroll)}` : '';
   const parsedWd = Number.parseInt(wdAmount, 10);
   const wdHint = Number.isInteger(parsedWd) && parsedWd > 0 ? `= ${usd(parsedWd)}` : '';
 
@@ -248,26 +259,27 @@ export const AdminEconomy: React.FC<Props> = ({ state, socket }) => {
           </div>
         </div>
         <p style={{ margin: '0 0 12px', fontSize: 13, color: 'var(--color-neutral)', opacity: 0.85 }}>
-          Float that funds bot buy-ins on live tables. Top up with your own funds; bots stop
+          Float that funds bot buy-ins on live tables. Fund it with a real Crypto Pay deposit
+          (min 500 chips / $5) — opens an invoice; the balance credits when paid. Bots stop
           seating when it runs dry.
         </p>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
           <input
             type="number"
             placeholder="chips"
-            value={topUpAmount}
-            onChange={(e) => setTopUpAmount(e.target.value)}
-            aria-label="Bankroll top-up amount in chips"
+            value={bankrollAmount}
+            onChange={(e) => setBankrollAmount(e.target.value)}
+            aria-label="Bankroll deposit amount in chips"
             style={{ width: 140, height: 40 }}
           />
-          <span style={{ fontSize: 13, color: 'var(--color-action-raise)', minWidth: 72 }}>{topUpHint}</span>
+          <span style={{ fontSize: 13, color: 'var(--color-action-raise)', minWidth: 72 }}>{bankrollHint}</span>
           <Button
             variant="raise"
-            aria-label="Top up bot bankroll"
+            aria-label="Deposit to bot bankroll"
             style={{ padding: '4px 16px', minHeight: 40 }}
-            onClick={submitTopUp}
+            onClick={submitBankrollDeposit}
           >
-            Top Up Bankroll
+            Deposit to Bankroll
           </Button>
         </div>
         {bankrollFeedback && (

@@ -18,6 +18,8 @@ import { SessionRecorder } from "./bot/SessionRecorder.js";
 import { UserRepository } from "./db/UserRepository.js";
 import { getCryptoPay, type CryptoPayWebhookUpdate } from "./payments/cryptoPay.js";
 import { MIN_DEPOSIT_CHIPS, usdtToCents, chipsToUsdt } from "./payments/peg.js";
+import { BOT_BANKROLL_TELEGRAM_ID } from "./payments/systemAccounts.js";
+import { buildAdminState } from "./admin/adminState.js";
 import { isValidAvatarId } from "../types/avatars.js";
 import * as HandHistoryQueue from "./HandHistoryQueue.js";
 import { HandHistoryRepository } from "./db/HandHistoryRepository.js";
@@ -196,13 +198,23 @@ app.post('/api/crypto/webhook', async (req, res) => {
     });
 
     if (result.credited && result.telegramId !== undefined) {
-      // Push the fresh balance to the payer if they are online.
-      const sid = getSocketId(String(result.telegramId));
-      if (sid) {
-        io.to(sid).emit('depositCredited', {
-          creditedChips: result.creditedChips ?? 0,
-          balance: result.balance ?? 0,
-        });
+      if (result.telegramId === BOT_BANKROLL_TELEGRAM_ID) {
+        // §K: a bankroll deposit — no player socket to notify; refresh the admin
+        // economy view so the House/Bankroll card updates live.
+        try {
+          (io.of('/admin') as any).emit('adminState', await buildAdminState());
+        } catch (err) {
+          console.error('[Deposit] admin refresh after bankroll credit failed:', err);
+        }
+      } else {
+        // Push the fresh balance to the payer if they are online.
+        const sid = getSocketId(String(result.telegramId));
+        if (sid) {
+          io.to(sid).emit('depositCredited', {
+            creditedChips: result.creditedChips ?? 0,
+            balance: result.balance ?? 0,
+          });
+        }
       }
       console.log('[Deposit] credited invoice %s: +%d chips to %d', invoiceId, result.creditedChips, result.telegramId);
     } else {

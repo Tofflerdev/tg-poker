@@ -7,7 +7,7 @@ import { acquireBotIdentity } from '../bot/botRegistry.js';
 import { clampBuyIn } from '../config/tables.js';
 import { BOT_BANKROLL_TELEGRAM_ID, HOUSE_TELEGRAM_ID } from '../payments/systemAccounts.js';
 import { getCryptoPay } from '../payments/cryptoPay.js';
-import { chipsToUsdt, MIN_WITHDRAWAL_CHIPS } from '../payments/peg.js';
+import { chipsToUsdt, MIN_WITHDRAWAL_CHIPS, MIN_DEPOSIT_CHIPS } from '../payments/peg.js';
 import * as GraceRegistry from '../GraceRegistry.js';
 import type { Server } from 'socket.io';
 import type { DefaultEventsMap } from 'socket.io';
@@ -318,32 +318,46 @@ export async function removeBots(adminUser: string, tableId: string): Promise<{ 
 }
 
 /**
- * §K: external owner top-up of the bot bankroll float. Real money entering the
- * system from outside (owner's own funds), recorded as an `adjustment` on the
- * bankroll account. `amountChips` is a positive chip amount (1 chip = $0.01).
- * Returns the bankroll's new balance.
+ * §K: fund the bot bankroll float with a REAL Crypto Pay deposit. Mints a USDT
+ * invoice whose pending ledger row is scoped to the bankroll account, so the
+ * ordinary deposit webhook (`creditDepositIfPending`) credits the NET to the
+ * bankroll when it is paid — exactly like a player deposit, just a different
+ * owning account. Replaces the old adjustment top-up (no chips from thin air;
+ * every bankroll chip is now backed by real USDT in the Crypto Pay wallet).
+ *
+ * Returns the invoice URL for the admin to open and pay.
  */
-export async function topUpBankroll(adminUser: string, amountChips: number): Promise<{ newBalance: number }> {
-  if (!Number.isInteger(amountChips) || amountChips <= 0) {
-    throw new Error('amount must be a positive integer chip amount');
+export async function createBankrollDeposit(
+  adminUser: string,
+  amountChips: number,
+): Promise<{ invoiceId: string; payUrl: string; amountChips: number }> {
+  if (!Number.isInteger(amountChips) || amountChips < MIN_DEPOSIT_CHIPS || amountChips > 100_000_000) {
+    throw new Error(`Minimum bankroll deposit is ${MIN_DEPOSIT_CHIPS} chips`);
   }
-  let newBalance = 0;
+  const cryptoPay = getCryptoPay();
+  if (!cryptoPay) throw new Error('Crypto Pay is not configured');
+
+  let result!: { invoiceId: string; payUrl: string; amountChips: number };
   await runWithAudit(
     {
       adminUser,
-      action: 'topUpBankroll',
+      action: 'createBankrollDeposit',
       targetType: 'bankroll',
       targetId: String(BOT_BANKROLL_TELEGRAM_ID),
-      beforeJson: null,
-      afterJson: { amountChips },
+      beforeJson: { amountChips },
+      afterJson: null,
     },
     async () => {
-      const res = await UserRepository.topUpBankroll(amountChips);
-      if (!res.success) throw new Error('bankroll top-up failed (account row missing?)');
-      newBalance = res.newBalance!;
+      const invoice = await cryptoPay.createInvoice({
+        amountUsdt: chipsToUsdt(amountChips),
+        payload: String(BOT_BANKROLL_TELEGRAM_ID),
+        description: `Bankroll deposit ${amountChips} chips`,
+      });
+      await UserRepository.createPendingDeposit(BOT_BANKROLL_TELEGRAM_ID, amountChips, invoice.invoiceId);
+      result = { invoiceId: invoice.invoiceId, payUrl: invoice.payUrl, amountChips };
     },
   );
-  return { newBalance };
+  return result;
 }
 
 /**

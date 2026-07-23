@@ -13,7 +13,7 @@ import {
   addBots,
   removeBots,
   setBotsContinue,
-  topUpBankroll,
+  createBankrollDeposit,
   withdrawHouseRake,
 } from './adminMutations.js';
 import type { AdminClientEvents, AdminServerEvents } from '../../types/index.js';
@@ -170,23 +170,18 @@ export function setupAdminNamespace(io: Server, deps: AdminNamespaceDeps): void 
         socket.emit('adminError', { code: 'REMOVE_BOTS_FAILED', message: (err as Error).message });
       }
     });
-    // §K: external owner top-up of the bot bankroll float.
-    socket.on('topUpBankroll', async ({ amountChips }) => {
+    // §K: fund the bot bankroll with a real Crypto Pay deposit. Returns an invoice
+    // URL; the bankroll balance is credited later by the deposit webhook.
+    socket.on('createBankrollDeposit', async ({ amountChips }) => {
       if (!Number.isInteger(amountChips) || amountChips < 1) {
         socket.emit('adminError', { code: 'INVALID_AMOUNT', message: 'amountChips must be a positive integer' });
         return;
       }
       try {
-        const { newBalance } = await topUpBankroll(adminUser, amountChips);
-        socket.emit('adminError', { code: 'BANKROLL_TOPPED_UP', message: `Bankroll balance is now ${newBalance} chips.` });
-        // §K: refresh this admin's snapshot so the bankroll balance card updates live.
-        try {
-          socket.emit('adminState', await buildAdminState());
-        } catch (err) {
-          console.error('[Admin] snapshot refresh after top-up failed:', err);
-        }
+        const invoice = await createBankrollDeposit(adminUser, amountChips);
+        socket.emit('bankrollInvoice', invoice);
       } catch (err) {
-        socket.emit('adminError', { code: 'TOPUP_FAILED', message: (err as Error).message });
+        socket.emit('adminError', { code: 'BANKROLL_DEPOSIT_FAILED', message: (err as Error).message });
       }
     });
     // §H: withdraw accumulated house rake to a Telegram user via Crypto Pay transfer.
