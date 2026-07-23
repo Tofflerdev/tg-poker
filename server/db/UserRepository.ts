@@ -338,6 +338,74 @@ export class UserRepository {
     });
   }
 
+  /**
+   * §H: reserve a house rake withdrawal — guarded atomic debit of the house
+   * balance + a `pending` withdrawal ledger row keyed by `spendId` (externalId
+   * @unique). The guard (`balance >= amount`) makes it impossible to withdraw
+   * player money. Returns ok:false/'insufficient' when the house lacks funds.
+   * The actual Crypto Pay transfer happens AFTER this commits (see adminMutations).
+   */
+  static async debitHouseForWithdrawal(
+    amountChips: number,
+    spendId: string,
+    meta: Record<string, unknown>,
+  ): Promise<{ ok: boolean; reason?: string; newBalance?: number }> {
+    if (!Number.isInteger(amountChips) || amountChips <= 0) return { ok: false, reason: 'bad_amount' };
+    return prisma.$transaction(async (tx) => {
+      const res = await tx.user.updateMany({
+        where: { telegramId: BigInt(HOUSE_TELEGRAM_ID), balance: { gte: amountChips } },
+        data: { balance: { decrement: amountChips } },
+      });
+      if (res.count !== 1) return { ok: false, reason: 'insufficient' };
+      const house = await tx.user.findUnique({
+        where: { telegramId: BigInt(HOUSE_TELEGRAM_ID) },
+        select: { id: true, balance: true },
+      });
+      await tx.transaction.create({
+        data: {
+          userId: house!.id,
+          type: 'withdrawal',
+          amount: -amountChips,
+          balanceAfter: house!.balance,
+          externalId: spendId,
+          status: 'pending',
+          meta: meta as any,
+        },
+      });
+      return { ok: true, newBalance: house!.balance };
+    });
+  }
+
+  /** §H: mark a house withdrawal row completed (transfer succeeded). */
+  static async completeHouseWithdrawal(spendId: string, extraMeta?: Record<string, unknown>): Promise<void> {
+    await prisma.transaction.updateMany({
+      where: { externalId: spendId, status: 'pending' },
+      data: { status: 'completed', ...(extraMeta ? { meta: extraMeta as any } : {}) },
+    });
+  }
+
+  /**
+   * §H: transfer failed — credit the debited amount back to the house and mark
+   * the row failed. Guarded (only a still-`pending` row) so it is idempotent and
+   * cannot double-refund. A failed row is excluded from the money invariant.
+   */
+  static async refundHouseWithdrawal(spendId: string): Promise<void> {
+    await prisma.$transaction(async (tx) => {
+      const row = await tx.transaction.findUnique({ where: { externalId: spendId } });
+      if (!row || row.status !== 'pending') return;
+      const claim = await tx.transaction.updateMany({
+        where: { id: row.id, status: 'pending' },
+        data: { status: 'failed' },
+      });
+      if (claim.count !== 1) return;
+      // row.amount is negative (money leaving house) → credit back by -amount.
+      await tx.user.updateMany({
+        where: { telegramId: BigInt(HOUSE_TELEGRAM_ID) },
+        data: { balance: { increment: -row.amount } },
+      });
+    });
+  }
+
   static async updateBalance(telegramId: number, amount: number): Promise<number> {
     const user = await prisma.user.update({
       where: { telegramId: BigInt(telegramId) },

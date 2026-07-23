@@ -23,6 +23,7 @@ function makeState(overrides: Partial<AdminState> = {}): AdminState {
     totalChipsInPlay: 0,
     recentAuditLogs: [],
     bankrollBalance: 0,
+    houseBalance: 0,
     ...overrides,
   } as any as AdminState;
 }
@@ -54,6 +55,21 @@ describe('AdminEconomy', () => {
     // toLocaleString grouping depends on the runtime's ICU data — tolerate "25,000"/"25000".
     expect(screen.getByText(/25[,\s]?000 chips/i)).toBeInTheDocument();
     expect(screen.getByText(/\$250\.00/)).toBeInTheDocument();
+  });
+
+  it('§H: shows the house rake balance from state', () => {
+    render(<AdminEconomy state={makeState({ houseBalance: 5000 })} socket={makeSocket()} />);
+    expect(screen.getByText(/5[,\s]?000 chips/i)).toBeInTheDocument();
+    expect(screen.getByText(/\$50\.00/)).toBeInTheDocument();
+  });
+
+  it('§H: withdraw emits withdrawHouseRake with amount + target user id', () => {
+    const socket = makeSocket();
+    render(<AdminEconomy state={makeState({ houseBalance: 5000 })} socket={socket} />);
+    fireEvent.change(screen.getByLabelText(/house withdrawal amount in chips/i), { target: { value: '2000' } });
+    fireEvent.change(screen.getByLabelText(/withdrawal recipient telegram user id/i), { target: { value: '424242' } });
+    fireEvent.click(screen.getByRole('button', { name: /withdraw house rake/i }));
+    expect(socket.emit).toHaveBeenCalledWith('withdrawHouseRake', { amountChips: 2000, targetUserId: 424242 });
   });
 
   it('renders populated economy with correct values; recharts container does not throw', () => {

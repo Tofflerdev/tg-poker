@@ -65,6 +65,28 @@ export class CryptoPayClient {
     return new CryptoPayClient({ token, testnet });
   }
 
+  /**
+   * §H: transfer coins from the app's Crypto Pay wallet to a Telegram user
+   * (house rake withdrawal → owner). `spendId` is a required unique idempotency
+   * key — Crypto Pay dedupes retries with the same spend_id, so a repeated call
+   * never double-sends. The recipient must have interacted with the (test)bot.
+   */
+  async transfer(params: {
+    userId: number;
+    amountUsdt: string;
+    spendId: string;
+    comment?: string;
+  }): Promise<{ transfer_id: number; status: string }> {
+    return this.call('transfer', {
+      user_id: params.userId,
+      asset: 'USDT',
+      amount: params.amountUsdt,
+      spend_id: params.spendId,
+      comment: params.comment,
+      disable_send_notification: false,
+    });
+  }
+
   private async call<T>(method: string, body?: Record<string, unknown>): Promise<T> {
     const res = await fetch(`${this.base}/${method}`, {
       method: 'POST',
@@ -137,4 +159,12 @@ export class CryptoPayClient {
     if (a.length !== b.length) return false;
     return crypto.timingSafeEqual(a, b);
   }
+}
+
+// Shared singleton so index.ts (deposits/webhook) and adminMutations (house
+// withdrawal) use the same configured client. Lazily created once from env.
+let _instance: CryptoPayClient | null | undefined;
+export function getCryptoPay(): CryptoPayClient | null {
+  if (_instance === undefined) _instance = CryptoPayClient.fromEnv();
+  return _instance;
 }

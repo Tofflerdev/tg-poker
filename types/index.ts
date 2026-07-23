@@ -482,6 +482,8 @@ export interface AdminState {
   recentAuditLogs: AdminAuditLogEntry[]; // last 10
   // crypto-payments-rake phase 4 §K: current bot-bankroll float balance (chips).
   bankrollBalance: number;
+  // crypto-payments-rake phase 4 §H: accumulated house rake balance (chips).
+  houseBalance: number;
 }
 
 // ADMIN-02 / Pitfall 5: dedicated typed events for the /admin namespace.
@@ -511,4 +513,7 @@ export interface AdminClientEvents {
   // crypto-payments-rake phase 4 §K: external owner top-up of the bot bankroll
   // float. `amountChips` is a positive chip amount (1 chip = $0.01).
   topUpBankroll: (payload: { amountChips: number }) => void;
+  // crypto-payments-rake phase 4 §H: withdraw accumulated house rake to a Telegram
+  // user via Crypto Pay transfer. `amountChips` in chips; `targetUserId` = recipient.
+  withdrawHouseRake: (payload: { amountChips: number; targetUserId: number }) => void;
 }

@@ -2,9 +2,12 @@ import prisma from '../db/prisma.js';
 import { tableManager } from '../TableManager.js';
 import { userStorage } from '../models/User.js';
 import { UserRepository } from '../db/UserRepository.js';
+import { randomUUID } from 'crypto';
 import { acquireBotIdentity } from '../bot/botRegistry.js';
 import { clampBuyIn } from '../config/tables.js';
-import { BOT_BANKROLL_TELEGRAM_ID } from '../payments/systemAccounts.js';
+import { BOT_BANKROLL_TELEGRAM_ID, HOUSE_TELEGRAM_ID } from '../payments/systemAccounts.js';
+import { getCryptoPay } from '../payments/cryptoPay.js';
+import { chipsToUsdt, MIN_WITHDRAWAL_CHIPS } from '../payments/peg.js';
 import * as GraceRegistry from '../GraceRegistry.js';
 import type { Server } from 'socket.io';
 import type { DefaultEventsMap } from 'socket.io';
@@ -338,6 +341,77 @@ export async function topUpBankroll(adminUser: string, amountChips: number): Pro
       const res = await UserRepository.topUpBankroll(amountChips);
       if (!res.success) throw new Error('bankroll top-up failed (account row missing?)');
       newBalance = res.newBalance!;
+    },
+  );
+  return { newBalance };
+}
+
+/**
+ * §H: withdraw accumulated house rake to a Telegram user via Crypto Pay transfer.
+ * The ONLY sanctioned way to take profit out (never straight from the CryptoBot
+ * UI, which would desync the money invariant).
+ *
+ * Flow: guarded atomic debit of the house balance + a `pending` withdrawal row
+ * (spendId = idempotency key) → Crypto Pay `transfer` → mark completed. On a
+ * transfer error the debit is refunded and the row marked failed. Crypto Pay
+ * dedupes by spend_id, so this never double-sends.
+ *
+ * NOTE: on an ambiguous network failure the refund assumes "not sent". If the
+ * transfer may actually have gone through, reconcile manually against the
+ * CryptoBot transfer history (the spendId is in the ledger row + audit log).
+ */
+export async function withdrawHouseRake(
+  adminUser: string,
+  amountChips: number,
+  targetUserId: number,
+): Promise<{ newBalance: number }> {
+  if (!Number.isInteger(amountChips) || amountChips < MIN_WITHDRAWAL_CHIPS) {
+    throw new Error(`Minimum withdrawal is ${MIN_WITHDRAWAL_CHIPS} chips`);
+  }
+  if (!Number.isInteger(targetUserId) || targetUserId <= 0) {
+    throw new Error('Invalid target Telegram user id');
+  }
+  const cryptoPay = getCryptoPay();
+  if (!cryptoPay) throw new Error('Crypto Pay is not configured');
+
+  const spendId = `house-wd-${randomUUID()}`;
+  let newBalance = 0;
+  await runWithAudit(
+    {
+      adminUser,
+      action: 'withdrawHouseRake',
+      targetType: 'house',
+      targetId: String(HOUSE_TELEGRAM_ID),
+      beforeJson: { amountChips, targetUserId },
+      afterJson: { spendId },
+    },
+    async () => {
+      const debit = await UserRepository.debitHouseForWithdrawal(amountChips, spendId, {
+        targetUserId,
+        adminUser,
+      });
+      if (!debit.ok) {
+        throw new Error(debit.reason === 'insufficient' ? 'House balance is insufficient' : 'Debit failed');
+      }
+      newBalance = debit.newBalance!;
+      try {
+        const res = await cryptoPay.transfer({
+          userId: targetUserId,
+          amountUsdt: chipsToUsdt(amountChips),
+          spendId,
+          comment: 'House rake withdrawal',
+        });
+        await UserRepository.completeHouseWithdrawal(spendId, {
+          targetUserId,
+          transferId: res.transfer_id,
+        });
+      } catch (err) {
+        // Definitive/most errors → not sent. Refund and surface.
+        await UserRepository.refundHouseWithdrawal(spendId);
+        newBalance += amountChips;
+        console.error('[HouseWithdraw] transfer failed, refunded:', err);
+        throw new Error(`Transfer failed: ${(err as Error).message}`);
+      }
     },
   );
   return { newBalance };

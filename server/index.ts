@@ -16,7 +16,7 @@ import { clampBuyIn } from "./config/tables.js";
 import { BotDriver } from "./bot/BotDriver.js";
 import { SessionRecorder } from "./bot/SessionRecorder.js";
 import { UserRepository } from "./db/UserRepository.js";
-import { CryptoPayClient, type CryptoPayWebhookUpdate } from "./payments/cryptoPay.js";
+import { getCryptoPay, type CryptoPayWebhookUpdate } from "./payments/cryptoPay.js";
 import { MIN_DEPOSIT_CHIPS, usdtToCents, chipsToUsdt } from "./payments/peg.js";
 import { isValidAvatarId } from "../types/avatars.js";
 import * as HandHistoryQueue from "./HandHistoryQueue.js";
@@ -140,9 +140,9 @@ setupAdminNamespace(io, { broadcastTableState: (tableId: string) => updateTableS
 
 const PORT = parseInt(process.env.PORT || "3000", 10);
 
-// crypto-payments-rake phase 4 §D: Crypto Pay client, null when no token is set
-// (deposits disabled — dev/play-money still works). getMe() is checked at boot below.
-const cryptoPay = CryptoPayClient.fromEnv();
+// crypto-payments-rake phase 4 §D: shared Crypto Pay client, null when no token
+// is set (deposits disabled). getMe() is checked at boot below.
+const cryptoPay = getCryptoPay();
 
 // Debug endpoint
 app.get("/", (_req, res) => {

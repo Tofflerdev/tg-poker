@@ -75,15 +75,23 @@ export const AdminEconomy: React.FC<Props> = ({ state, socket }) => {
       .reduce((sum, u) => sum + u.chips, 0),
   }));
 
-  // §K: bot bankroll top-up. The server routes both success and failure through
-  // `adminError`; we surface the bankroll-related codes here as inline feedback.
+  // The server routes both success and failure through `adminError`; we surface
+  // the bankroll (§K) and house-withdrawal (§H) codes as inline feedback.
   const [topUpAmount, setTopUpAmount] = React.useState('');
-  const [feedback, setFeedback] = React.useState<{ ok: boolean; message: string } | null>(null);
+  const [bankrollFeedback, setBankrollFeedback] = React.useState<{ ok: boolean; message: string } | null>(null);
+
+  // §H: house rake withdrawal.
+  const [wdAmount, setWdAmount] = React.useState('');
+  const [wdTarget, setWdTarget] = React.useState('');
+  const [houseFeedback, setHouseFeedback] = React.useState<{ ok: boolean; message: string } | null>(null);
 
   React.useEffect(() => {
     const onAdminError = (payload: { code: string; message: string }) => {
-      if (!['BANKROLL_TOPPED_UP', 'TOPUP_FAILED', 'INVALID_AMOUNT'].includes(payload.code)) return;
-      setFeedback({ ok: payload.code === 'BANKROLL_TOPPED_UP', message: payload.message });
+      if (['BANKROLL_TOPPED_UP', 'TOPUP_FAILED', 'INVALID_AMOUNT'].includes(payload.code)) {
+        setBankrollFeedback({ ok: payload.code === 'BANKROLL_TOPPED_UP', message: payload.message });
+      } else if (['HOUSE_WITHDRAWN', 'WITHDRAW_FAILED', 'INVALID_WITHDRAWAL'].includes(payload.code)) {
+        setHouseFeedback({ ok: payload.code === 'HOUSE_WITHDRAWN', message: payload.message });
+      }
     };
     socket.on('adminError', onAdminError);
     return () => { socket.off('adminError', onAdminError); };
@@ -99,8 +107,29 @@ export const AdminEconomy: React.FC<Props> = ({ state, socket }) => {
     setTopUpAmount('');
   };
 
+  const submitWithdraw = () => {
+    const n = Number.parseInt(wdAmount, 10);
+    const target = Number.parseInt(wdTarget, 10);
+    if (!Number.isInteger(n) || n < 1000) {
+      alert('Minimum withdrawal is 1000 chips ($10).');
+      return;
+    }
+    if (!Number.isInteger(target) || target < 1) {
+      alert("Enter the recipient's Telegram user id (positive integer).");
+      return;
+    }
+    if (n > state.houseBalance) {
+      alert('Amount exceeds the house balance.');
+      return;
+    }
+    socket.emit('withdrawHouseRake', { amountChips: n, targetUserId: target });
+    setWdAmount('');
+  };
+
   const parsedTopUp = Number.parseInt(topUpAmount, 10);
   const topUpHint = Number.isInteger(parsedTopUp) && parsedTopUp > 0 ? `= ${usd(parsedTopUp)}` : '';
+  const parsedWd = Number.parseInt(wdAmount, 10);
+  const wdHint = Number.isInteger(parsedWd) && parsedWd > 0 ? `= ${usd(parsedWd)}` : '';
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -115,6 +144,80 @@ export const AdminEconomy: React.FC<Props> = ({ state, socket }) => {
           value={String(state.users.length)}
         />
       </div>
+
+      {/* §H: House rake balance + withdraw profit via Crypto Pay transfer. */}
+      <Card variant="neutral" style={{ padding: 16 }}>
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'baseline',
+            marginBottom: 4,
+          }}
+        >
+          <div
+            style={{
+              fontSize: 13,
+              fontWeight: 700,
+              textTransform: 'uppercase',
+              letterSpacing: '0.05em',
+              color: 'var(--color-neutral)',
+            }}
+          >
+            House Rake
+          </div>
+          <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--color-chip)' }}>
+            {state.houseBalance.toLocaleString()} chips
+            <span style={{ color: 'var(--color-neutral)', fontWeight: 400, marginLeft: 6 }}>
+              {usd(state.houseBalance)}
+            </span>
+          </div>
+        </div>
+        <p style={{ margin: '0 0 12px', fontSize: 13, color: 'var(--color-neutral)', opacity: 0.85 }}>
+          Accumulated rake profit. Withdraw to a Telegram user via Crypto Pay (min 1000 chips /
+          $10). Never take profit straight from CryptoBot — it desyncs the ledger.
+        </p>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+          <input
+            type="number"
+            placeholder="chips"
+            value={wdAmount}
+            onChange={(e) => setWdAmount(e.target.value)}
+            aria-label="House withdrawal amount in chips"
+            style={{ width: 120, height: 40 }}
+          />
+          <span style={{ fontSize: 13, color: 'var(--color-chip)', minWidth: 64 }}>{wdHint}</span>
+          <input
+            type="number"
+            placeholder="Telegram user id"
+            value={wdTarget}
+            onChange={(e) => setWdTarget(e.target.value)}
+            aria-label="Withdrawal recipient Telegram user id"
+            style={{ width: 160, height: 40 }}
+          />
+          <Button
+            variant="fold"
+            aria-label="Withdraw house rake"
+            style={{ padding: '4px 16px', minHeight: 40 }}
+            onClick={submitWithdraw}
+          >
+            Withdraw
+          </Button>
+        </div>
+        {houseFeedback && (
+          <div
+            role="status"
+            aria-live="polite"
+            style={{
+              marginTop: 10,
+              fontSize: 13,
+              color: houseFeedback.ok ? 'var(--color-action-sit)' : 'var(--color-action-fold)',
+            }}
+          >
+            {houseFeedback.message}
+          </div>
+        )}
+      </Card>
 
       {/* §K: Bot bankroll float top-up (owner funds bot buy-ins for massovka). */}
       <Card variant="neutral" style={{ padding: 16 }}>
@@ -167,17 +270,17 @@ export const AdminEconomy: React.FC<Props> = ({ state, socket }) => {
             Top Up Bankroll
           </Button>
         </div>
-        {feedback && (
+        {bankrollFeedback && (
           <div
             role="status"
             aria-live="polite"
             style={{
               marginTop: 10,
               fontSize: 13,
-              color: feedback.ok ? 'var(--color-action-sit)' : 'var(--color-action-fold)',
+              color: bankrollFeedback.ok ? 'var(--color-action-sit)' : 'var(--color-action-fold)',
             }}
           >
-            {feedback.message}
+            {bankrollFeedback.message}
           </div>
         )}
       </Card>

@@ -14,6 +14,7 @@ import {
   removeBots,
   setBotsContinue,
   topUpBankroll,
+  withdrawHouseRake,
 } from './adminMutations.js';
 import type { AdminClientEvents, AdminServerEvents } from '../../types/index.js';
 
@@ -186,6 +187,24 @@ export function setupAdminNamespace(io: Server, deps: AdminNamespaceDeps): void 
         }
       } catch (err) {
         socket.emit('adminError', { code: 'TOPUP_FAILED', message: (err as Error).message });
+      }
+    });
+    // §H: withdraw accumulated house rake to a Telegram user via Crypto Pay transfer.
+    socket.on('withdrawHouseRake', async ({ amountChips, targetUserId }) => {
+      if (!Number.isInteger(amountChips) || amountChips < 1 || !Number.isInteger(targetUserId) || targetUserId < 1) {
+        socket.emit('adminError', { code: 'INVALID_WITHDRAWAL', message: 'amountChips and targetUserId must be positive integers' });
+        return;
+      }
+      try {
+        const { newBalance } = await withdrawHouseRake(adminUser, amountChips, targetUserId);
+        socket.emit('adminError', { code: 'HOUSE_WITHDRAWN', message: `Sent. House balance is now ${newBalance} chips.` });
+        try {
+          socket.emit('adminState', await buildAdminState());
+        } catch (err) {
+          console.error('[Admin] snapshot refresh after withdrawal failed:', err);
+        }
+      } catch (err) {
+        socket.emit('adminError', { code: 'WITHDRAW_FAILED', message: (err as Error).message });
       }
     });
     socket.on('setBotsContinue', async ({ tableId, enabled }) => {
