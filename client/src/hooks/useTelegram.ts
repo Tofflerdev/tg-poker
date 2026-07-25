@@ -132,6 +132,12 @@ export function useTelegram(): UseTelegramReturn {
           id: tgUser.id.toString(),
           telegramId: tgUser.id,
           username: tgUser.username,
+          // Provisional label until `authSuccess` brings the stored profile name
+          // (which the player can edit and which the server generates for new
+          // users). Telegram never sends an empty first_name, so this is safe.
+          displayName:
+            tgUser.username ??
+            [tgUser.first_name, tgUser.last_name].filter(Boolean).join(' '),
           firstName: tgUser.first_name,
           lastName: tgUser.last_name,
           photoUrl: tgUser.photo_url,
