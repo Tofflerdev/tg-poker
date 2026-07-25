@@ -37,6 +37,20 @@ services:
       # deposits (graceful). Set both in .env; testnet flag hits testnet-pay.crypt.bot.
       CRYPTO_PAY_TOKEN: ${CRYPTO_PAY_TOKEN:-}
       CRYPTO_PAY_TESTNET: ${CRYPTO_PAY_TESTNET:-}
+      # Where a paid invoice's "back to the app" button points. Set one of these
+      # in .env; changing the bot at release means changing only this.
+      BOT_USERNAME: ${BOT_USERNAME:-}
+      MINI_APP_URL: ${MINI_APP_URL:-}
+      # crypto-payments-rake phase 5 §I: withdrawal policy. All optional — code
+      # defaults apply when unset. NOTE: compose passes env by EXPLICIT list, so
+      # a key that is not named here never reaches the container, however neatly
+      # it sits in .env.
+      WITHDRAWAL_MIN_CHIPS: ${WITHDRAWAL_MIN_CHIPS:-}
+      WITHDRAWAL_MAX_CHIPS: ${WITHDRAWAL_MAX_CHIPS:-}
+      WITHDRAWAL_DAILY_LIMIT_CHIPS: ${WITHDRAWAL_DAILY_LIMIT_CHIPS:-}
+      WITHDRAWAL_MIN_HANDS: ${WITHDRAWAL_MIN_HANDS:-}
+      WITHDRAWAL_FLAG_RATIO_PCT: ${WITHDRAWAL_FLAG_RATIO_PCT:-}
+      WITHDRAWAL_FLAG_HANDS_BELOW: ${WITHDRAWAL_FLAG_HANDS_BELOW:-}
     volumes:
       - client-dist:/app/client-dist
       # Persist playtest session logs + generated reports on the host so they

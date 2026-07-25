@@ -12,6 +12,7 @@
  * Docs: https://help.crypt.bot/crypto-pay-api
  */
 import crypto from 'crypto';
+import { getMiniAppUrl } from '../config/app.js';
 
 const MAINNET_BASE = 'https://pay.crypt.bot/api';
 const TESTNET_BASE = 'https://testnet-pay.crypt.bot/api';
@@ -156,6 +157,7 @@ export class CryptoPayClient {
     /** Seconds until the invoice expires (API allows 1…2678400). */
     expiresIn?: number;
   }): Promise<CreateInvoiceResult> {
+    const returnUrl = getMiniAppUrl();
     const result = await this.call<{
       invoice_id: number;
       status: string;
@@ -168,6 +170,11 @@ export class CryptoPayClient {
       amount: params.amountUsdt,
       payload: params.payload,
       description: params.description,
+      // "Back to the app" button CryptoBot shows once the invoice is paid.
+      // Only sent when a link is configured (BOT_USERNAME / MINI_APP_URL) —
+      // paid_btn_url is mandatory whenever paid_btn_name is present, so the two
+      // travel together or not at all.
+      ...(returnUrl ? { paid_btn_name: 'openBot', paid_btn_url: returnUrl } : {}),
       // Without `expires_in` an unpaid invoice lives forever and its pending
       // ledger row never resolves. Bound it so abandoned deposits age out.
       expires_in: params.expiresIn ?? INVOICE_TTL_SECONDS,

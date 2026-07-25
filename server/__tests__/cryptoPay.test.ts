@@ -73,6 +73,37 @@ describe('CryptoPayClient request contract', () => {
     });
   });
 
+  it('adds a "back to the app" button when a bot link is configured', async () => {
+    const prev = process.env.BOT_USERNAME;
+    process.env.BOT_USERNAME = '@Testpoke_bot';
+    const calls = stubFetch({ invoice_id: 1, status: 'active', bot_invoice_url: 'u' });
+
+    await client.createInvoice({ amountUsdt: '5.00', payload: '1' });
+
+    // paid_btn_url is mandatory whenever paid_btn_name is present.
+    expect(calls[0].body).toMatchObject({
+      paid_btn_name: 'openBot',
+      paid_btn_url: 'https://t.me/Testpoke_bot',
+    });
+    if (prev === undefined) delete process.env.BOT_USERNAME;
+    else process.env.BOT_USERNAME = prev;
+  });
+
+  it('omits the button entirely when no link is configured', async () => {
+    const prevUser = process.env.BOT_USERNAME;
+    const prevUrl = process.env.MINI_APP_URL;
+    delete process.env.BOT_USERNAME;
+    delete process.env.MINI_APP_URL;
+    const calls = stubFetch({ invoice_id: 1, status: 'active', bot_invoice_url: 'u' });
+
+    await client.createInvoice({ amountUsdt: '5.00', payload: '1' });
+
+    expect(calls[0].body).not.toHaveProperty('paid_btn_name');
+    expect(calls[0].body).not.toHaveProperty('paid_btn_url');
+    if (prevUser !== undefined) process.env.BOT_USERNAME = prevUser;
+    if (prevUrl !== undefined) process.env.MINI_APP_URL = prevUrl;
+  });
+
   it('getPaidInvoices asks only for paid invoices and unwraps `items`', async () => {
     const calls = stubFetch({ items: [{ invoice_id: 7, status: 'paid' }] });
     const items = await client.getPaidInvoices(5);
