@@ -1,11 +1,29 @@
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, act } from '@testing-library/react';
 import { MainMenu } from '../../pages/MainMenu';
 import { Deposit } from '../../pages/Deposit';
 import type { TelegramUser } from '../../../../types/index';
 
+/**
+ * Socket double that keeps the registered handlers so a test can push a server
+ * event (e.g. `depositInfo` carrying a changed Crypto Pay fee) into the page.
+ */
 function makeSocket() {
-  return { on: vi.fn(), off: vi.fn(), emit: vi.fn() };
+  const handlers: Record<string, Function[]> = {};
+  return {
+    on: vi.fn((event: string, fn: Function) => {
+      (handlers[event] ??= []).push(fn);
+    }),
+    off: vi.fn((event: string, fn: Function) => {
+      handlers[event] = (handlers[event] ?? []).filter((h) => h !== fn);
+    }),
+    emit: vi.fn(),
+    __fire(event: string, payload?: unknown) {
+      act(() => {
+        (handlers[event] ?? []).forEach((h) => h(payload));
+      });
+    },
+  };
 }
 
 const HERO: TelegramUser = {
@@ -43,11 +61,32 @@ describe('Scenario: deposit navigation', () => {
   it('Deposit page renders the amount picker and a Deposit button', () => {
     const socket = makeSocket();
     render(<Deposit onBack={vi.fn()} socket={socket as any} />);
-    // Preset amount buttons and the default $10 → 1000 chips readout.
     expect(screen.getByRole('button', { name: '$10' })).toBeInTheDocument();
-    // toLocaleString grouping depends on the runtime's ICU data — tolerate "1,000"/"1000".
-    expect(screen.getByText(/1[,\s]?000 chips/i)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /deposit \$10\.00/i })).toBeInTheDocument();
+  });
+
+  it('quotes the NET chips after the Crypto Pay fee, not the gross invoice', () => {
+    const socket = makeSocket();
+    render(<Deposit onBack={vi.fn()} socket={socket as any} />);
+    // Default $10 invoice at the 3% fallback rate: pay $10.00, fee $0.30, get 970.
+    expect(screen.getByText('$10.00')).toBeInTheDocument();
+    expect(screen.getByText(/crypto pay fee \(3%\)/i)).toBeInTheDocument();
+    expect(screen.getByText('−$0.30')).toBeInTheDocument();
+    expect(screen.getByText(/^970 chips$/)).toBeInTheDocument();
+    // The gross amount must NOT be presented as what the player receives.
+    expect(screen.queryByText(/1[,\s]?000 chips/i)).not.toBeInTheDocument();
+  });
+
+  it('asks the server for the live fee and re-quotes when the rate changes', () => {
+    const socket = makeSocket();
+    render(<Deposit onBack={vi.fn()} socket={socket as any} />);
+    expect(socket.emit).toHaveBeenCalledWith('getDepositInfo');
+
+    // Crypto Pay moves to 5% → the quote follows without a code change.
+    socket.__fire('depositInfo', { feeBps: 500, feeSource: 'observed', minChips: 500, available: true });
+    expect(screen.getByText(/crypto pay fee \(5%\)/i)).toBeInTheDocument();
+    expect(screen.getByText('−$0.50')).toBeInTheDocument();
+    expect(screen.getByText(/^950 chips$/)).toBeInTheDocument();
   });
 
   it('Deposit button emits createDeposit with the selected chip amount', () => {

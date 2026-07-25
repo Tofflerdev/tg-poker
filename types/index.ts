@@ -266,6 +266,16 @@ export interface ExtendedServerEvents extends ServerEvents {
   // The invoice was created — the client opens `payUrl` (WebApp.openInvoice/openLink).
   depositInvoice: (payload: { invoiceId: string; payUrl: string; amountChips: number }) => void;
   depositError: (msg: string) => void;
+  // Quote data for the deposit screen. `feeBps` is the Crypto Pay commission
+  // (300 = 3%) — OBSERVED from the last paid invoice, since the API publishes it
+  // nowhere; `feeSource` says whether it is a real observation or the built-in
+  // default. The client uses it to show the NET chips a payment will credit.
+  depositInfo: (payload: {
+    feeBps: number;
+    feeSource: 'observed' | 'default';
+    minChips: number;
+    available: boolean;
+  }) => void;
   // Pushed when the paid-invoice webhook credits the balance and the payer is online.
   depositCredited: (payload: { creditedChips: number; balance: number }) => void;
   profileData: (profile: UserProfile) => void;
@@ -318,6 +328,8 @@ export interface ExtendedClientEvents extends ClientEvents {
   sendChatMessage: (message: Omit<ChatMessage, 'id' | 'timestamp'>) => void;
   // crypto-payments-rake phase 4: request a Crypto Pay invoice for `amountChips`.
   createDeposit: (payload: { amountChips: number }) => void;
+  // Ask for the current commission + limits so the deposit screen can quote net chips.
+  getDepositInfo: () => void;
   getProfile: () => void;
   updateProfile: (data: { displayName?: string; avatarUrl?: string }) => void;
   // Plan 02-02: avatar + TOS substrate (picker UI lands in Plan 06; TOS gate in Plan 08)
@@ -484,6 +496,9 @@ export interface AdminState {
   bankrollBalance: number;
   // crypto-payments-rake phase 4 §H: accumulated house rake balance (chips).
   houseBalance: number;
+  // Crypto Pay commission in basis points (300 = 3%), observed from the last paid
+  // invoice. The bankroll card quotes net chips with it — a $50 invoice funds 4850.
+  depositFeeBps: number;
 }
 
 // ADMIN-02 / Pitfall 5: dedicated typed events for the /admin namespace.

@@ -16,6 +16,14 @@ import crypto from 'crypto';
 const MAINNET_BASE = 'https://pay.crypt.bot/api';
 const TESTNET_BASE = 'https://testnet-pay.crypt.bot/api';
 
+/**
+ * How long a deposit invoice stays payable (1 hour). The API defaults to no
+ * expiry, which would leave abandoned invoices — and their pending ledger rows —
+ * open indefinitely. Long enough for a distracted payer, short enough that a
+ * stale row means something.
+ */
+export const INVOICE_TTL_SECONDS = 3600;
+
 export interface CreateInvoiceResult {
   invoiceId: string;
   /** URL the client opens to pay (mini-app invoice URL preferred, then bot URL). */
@@ -117,6 +125,8 @@ export class CryptoPayClient {
     amountUsdt: string;
     payload: string;
     description?: string;
+    /** Seconds until the invoice expires (API allows 1…2678400). */
+    expiresIn?: number;
   }): Promise<CreateInvoiceResult> {
     const result = await this.call<{
       invoice_id: number;
@@ -130,6 +140,12 @@ export class CryptoPayClient {
       amount: params.amountUsdt,
       payload: params.payload,
       description: params.description,
+      // Without `expires_in` an unpaid invoice lives forever and its pending
+      // ledger row never resolves. Bound it so abandoned deposits age out.
+      expires_in: params.expiresIn ?? INVOICE_TTL_SECONDS,
+      // Shown by CryptoBot right after payment — sets the expectation that the
+      // balance updates on its own (the webhook credits asynchronously).
+      hidden_message: 'Chips are credited to your balance automatically.',
       allow_comments: false,
       allow_anonymous: true,
     });
@@ -140,6 +156,34 @@ export class CryptoPayClient {
       result.pay_url ??
       '';
     return { invoiceId: String(result.invoice_id), payUrl, status: result.status };
+  }
+
+  /**
+   * Most recent PAID invoices (newest last). Used only to observe the current
+   * commission rate at boot (see depositFee.ts) — Crypto Pay publishes the rate
+   * nowhere else, but every paid invoice carries `paid_amount` + `fee_amount`.
+   */
+  async getPaidInvoices(count = 10): Promise<PaidInvoicePayload[]> {
+    const result = await this.call<{ items?: PaidInvoicePayload[] }>('getInvoices', {
+      status: 'paid',
+      count,
+    });
+    return result?.items ?? [];
+  }
+
+  /**
+   * Look up specific invoices by id (API: `invoice_ids`, comma-separated). This
+   * is the reconciliation path — the authoritative answer to "was this invoice
+   * ever paid?" when no webhook arrived. Returns whatever the API knows about;
+   * unknown ids are simply absent.
+   */
+  async getInvoicesByIds(invoiceIds: string[]): Promise<PaidInvoicePayload[]> {
+    if (invoiceIds.length === 0) return [];
+    const result = await this.call<{ items?: PaidInvoicePayload[] }>('getInvoices', {
+      invoice_ids: invoiceIds.join(','),
+      count: invoiceIds.length,
+    });
+    return result?.items ?? [];
   }
 
   /**

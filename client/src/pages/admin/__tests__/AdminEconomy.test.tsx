@@ -57,6 +57,16 @@ describe('AdminEconomy', () => {
     expect(screen.getByText(/\$250\.00/)).toBeInTheDocument();
   });
 
+  it('§K: quotes the NET chips the bankroll will receive after the Crypto Pay fee', () => {
+    render(<AdminEconomy state={makeState({ depositFeeBps: 300 })} socket={makeSocket()} />);
+    fireEvent.change(screen.getByLabelText(/bankroll deposit amount in chips/i), {
+      target: { value: '5000' },
+    });
+    // A $50 invoice funds 4850 chips at 3% — the amount actually credited.
+    expect(screen.getByText(/4[,\s]?850 chips/i)).toBeInTheDocument();
+    expect(screen.getByText(/−3% fee/i)).toBeInTheDocument();
+  });
+
   it('§H: shows the house rake balance from state', () => {
     render(<AdminEconomy state={makeState({ houseBalance: 5000 })} socket={makeSocket()} />);
     expect(screen.getByText(/5[,\s]?000 chips/i)).toBeInTheDocument();

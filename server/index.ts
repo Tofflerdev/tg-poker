@@ -17,7 +17,13 @@ import { BotDriver } from "./bot/BotDriver.js";
 import { SessionRecorder } from "./bot/SessionRecorder.js";
 import { UserRepository } from "./db/UserRepository.js";
 import { getCryptoPay, type CryptoPayWebhookUpdate } from "./payments/cryptoPay.js";
-import { MIN_DEPOSIT_CHIPS, usdtToCents, chipsToUsdt } from "./payments/peg.js";
+import { MIN_DEPOSIT_CHIPS, chipsToUsdt } from "./payments/peg.js";
+import { getDepositFeeInfo, refreshFeeFromHistory } from "./payments/depositFee.js";
+import {
+  creditPaidInvoice,
+  startDepositReconciliation,
+  type CreditedNotifier,
+} from "./payments/depositReconciliation.js";
 import { BOT_BANKROLL_TELEGRAM_ID } from "./payments/systemAccounts.js";
 import { buildAdminState } from "./admin/adminState.js";
 import { isValidAvatarId } from "../types/avatars.js";
@@ -181,43 +187,22 @@ app.post('/api/crypto/webhook', async (req, res) => {
     res.status(200).end(); // ack unrelated updates
     return;
   }
+  // `invoice_paid` is the only update type the API sends, but the invoice object
+  // carries its own status (active|paid|expired) — never credit on anything but
+  // `paid`. Tolerates the field being absent (ack, don't credit) rather than
+  // trusting the update type alone.
+  if (update.payload.status && update.payload.status !== 'paid') {
+    console.warn('[Deposit] ignoring invoice_paid with status %s', update.payload.status);
+    res.status(200).end();
+    return;
+  }
 
   try {
-    const inv = update.payload;
-    const invoiceId = String(inv.invoice_id);
-    // Player pays the provider fee → credit net = paid amount − fee (plan §D).
-    const paidCents = usdtToCents(inv.paid_amount ?? inv.amount ?? '0');
-    const feeCents = usdtToCents(inv.fee_amount ?? inv.fee ?? '0');
-    const netChips = paidCents - feeCents;
-
-    const result = await UserRepository.creditDepositIfPending(invoiceId, netChips, {
-      paidAmount: inv.paid_amount ?? inv.amount,
-      fee: inv.fee_amount ?? inv.fee,
-      asset: inv.paid_asset ?? inv.asset,
-      usdRate: inv.paid_usd_rate,
-    });
-
-    if (result.credited && result.telegramId !== undefined) {
-      if (result.telegramId === BOT_BANKROLL_TELEGRAM_ID) {
-        // §K: a bankroll deposit — no player socket to notify; refresh the admin
-        // economy view so the House/Bankroll card updates live.
-        try {
-          (io.of('/admin') as any).emit('adminState', await buildAdminState());
-        } catch (err) {
-          console.error('[Deposit] admin refresh after bankroll credit failed:', err);
-        }
-      } else {
-        // Push the fresh balance to the payer if they are online.
-        const sid = getSocketId(String(result.telegramId));
-        if (sid) {
-          io.to(sid).emit('depositCredited', {
-            creditedChips: result.creditedChips ?? 0,
-            balance: result.balance ?? 0,
-          });
-        }
-      }
-      console.log('[Deposit] credited invoice %s: +%d chips to %d', invoiceId, result.creditedChips, result.telegramId);
-    } else {
+    const invoiceId = String(update.payload.invoice_id);
+    // Shared with the reconciliation sweep so both paths credit identically and
+    // idempotently — a late webhook after a reconciled credit is a no-op.
+    const result = await creditPaidInvoice(update.payload, 'webhook', notifyDepositCredited);
+    if (!result.credited) {
       console.log('[Deposit] webhook for invoice %s not credited (%s)', invoiceId, result.reason);
     }
   } catch (err) {
@@ -234,6 +219,27 @@ app.post('/api/crypto/webhook', async (req, res) => {
  */
 const getSocketId = (telegramId: string): string | undefined => {
   return tableManager.getSocketIdForTelegram(telegramId);
+};
+
+/**
+ * Push a freshly credited deposit to whoever should see it. Used by BOTH the
+ * webhook and the reconciliation sweep (payments/depositReconciliation.ts), so a
+ * deposit rescued by reconciliation reaches the UI exactly like a live one.
+ */
+const notifyDepositCredited: CreditedNotifier = async ({ telegramId, creditedChips, balance }) => {
+  if (telegramId === BOT_BANKROLL_TELEGRAM_ID) {
+    // §K: a bankroll deposit — no player socket to notify; refresh the admin
+    // economy view so the House/Bankroll card updates live.
+    try {
+      (io.of('/admin') as any).emit('adminState', await buildAdminState());
+    } catch (err) {
+      console.error('[Deposit] admin refresh after bankroll credit failed:', err);
+    }
+    return;
+  }
+  // Push the fresh balance to the payer if they are online.
+  const sid = getSocketId(String(telegramId));
+  if (sid) io.to(sid).emit('depositCredited', { creditedChips, balance });
 };
 
 /**
@@ -523,6 +529,18 @@ setTimeout(async () => {
     try {
       const me = await cryptoPay.getMe();
       console.log('[Boot] Crypto Pay connected as app "%s"', me.name);
+      // Learn the current commission from the latest paid invoice so the deposit
+      // UI quotes the real net amount (the API exposes the rate nowhere else).
+      const fee = await refreshFeeFromHistory(cryptoPay);
+      console.log(
+        '[Boot] Crypto Pay fee: %s%% (%s)',
+        (fee.bps / 100).toFixed(2),
+        fee.source === 'observed' ? `observed ${fee.observedAt}` : 'built-in default',
+      );
+      // Safety net for the push-only credit path: catch up on any payment whose
+      // webhook we missed (downtime/deploy), then keep sweeping on an interval.
+      startDepositReconciliation(cryptoPay, notifyDepositCredited);
+      console.log('[Boot] deposit reconciliation started');
     } catch (err) {
       console.error('[Boot] Crypto Pay getMe failed — deposits will error:', err);
     }
@@ -675,6 +693,19 @@ io.on("connection", (socket) => {
   // crypto-payments-rake §G: daily bonus removed — chips only enter via deposits.
 
   // crypto-payments-rake phase 4 §D: create a Crypto Pay deposit invoice.
+  // The deposit screen asks for this on mount so it can quote the NET chips a
+  // payment will credit (invoice minus the Crypto Pay commission) instead of the
+  // gross amount. Cheap and read-only — no auth gate beyond a live socket.
+  socket.on("getDepositInfo", () => {
+    const fee = getDepositFeeInfo();
+    socket.emit("depositInfo", {
+      feeBps: fee.bps,
+      feeSource: fee.source,
+      minChips: MIN_DEPOSIT_CHIPS,
+      available: Boolean(cryptoPay),
+    });
+  });
+
   socket.on("createDeposit", async ({ amountChips }) => {
     const telegramId = socket.data.telegramId;
     if (!telegramId) {

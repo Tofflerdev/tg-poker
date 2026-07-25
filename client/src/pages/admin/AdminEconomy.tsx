@@ -10,6 +10,11 @@ import {
   Tooltip,
 } from 'recharts';
 import type { Socket } from 'socket.io-client';
+import {
+  DEFAULT_DEPOSIT_FEE_BPS,
+  formatFeePercent,
+  netDepositChips,
+} from '../../utils/depositFee';
 import type {
   AdminClientEvents,
   AdminServerEvents,
@@ -137,8 +142,14 @@ export const AdminEconomy: React.FC<Props> = ({ state, socket }) => {
     setWdAmount('');
   };
 
+  // Crypto Pay keeps a commission, so the invoice funds LESS than it costs:
+  // 5000 chips ($50) credits 4850 at 3%. Quote the net, not the gross.
+  const feeBps = state.depositFeeBps ?? DEFAULT_DEPOSIT_FEE_BPS;
   const parsedBankroll = Number.parseInt(bankrollAmount, 10);
-  const bankrollHint = Number.isInteger(parsedBankroll) && parsedBankroll > 0 ? `= ${usd(parsedBankroll)}` : '';
+  const bankrollHint =
+    Number.isInteger(parsedBankroll) && parsedBankroll > 0
+      ? `${usd(parsedBankroll)} → ${netDepositChips(parsedBankroll, feeBps).toLocaleString()} chips (−${formatFeePercent(feeBps)} fee)`
+      : '';
   const parsedWd = Number.parseInt(wdAmount, 10);
   const wdHint = Number.isInteger(parsedWd) && parsedWd > 0 ? `= ${usd(parsedWd)}` : '';
 
@@ -260,8 +271,9 @@ export const AdminEconomy: React.FC<Props> = ({ state, socket }) => {
         </div>
         <p style={{ margin: '0 0 12px', fontSize: 13, color: 'var(--color-neutral)', opacity: 0.85 }}>
           Float that funds bot buy-ins on live tables. Fund it with a real Crypto Pay deposit
-          (min 500 chips / $5) — opens an invoice; the balance credits when paid. Bots stop
-          seating when it runs dry.
+          (min 500 chips / $5) — opens an invoice; the balance credits when paid. Enter the
+          INVOICE amount: Crypto Pay keeps {formatFeePercent(feeBps)}, so the bankroll receives
+          the net shown below. Bots stop seating when it runs dry.
         </p>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
           <input
@@ -272,7 +284,9 @@ export const AdminEconomy: React.FC<Props> = ({ state, socket }) => {
             aria-label="Bankroll deposit amount in chips"
             style={{ width: 140, height: 40 }}
           />
-          <span style={{ fontSize: 13, color: 'var(--color-action-raise)', minWidth: 72 }}>{bankrollHint}</span>
+          <span style={{ fontSize: 13, color: 'var(--color-action-raise)', minWidth: 72, flex: '1 1 220px' }}>
+            {bankrollHint}
+          </span>
           <Button
             variant="raise"
             aria-label="Deposit to bot bankroll"

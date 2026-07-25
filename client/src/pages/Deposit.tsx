@@ -3,6 +3,12 @@ import type { Socket } from 'socket.io-client';
 import { Button, Card } from '../components/ui';
 import { useTelegram } from '../hooks/useTelegram';
 import logoUrl from '../assets/logo.svg';
+import {
+  DEFAULT_DEPOSIT_FEE_BPS,
+  depositFeeChips,
+  formatFeePercent,
+  netDepositChips,
+} from '../utils/depositFee';
 import type { ExtendedServerEvents, ExtendedClientEvents } from '../../../types/index';
 
 /**
@@ -12,6 +18,13 @@ import type { ExtendedServerEvents, ExtendedClientEvents } from '../../../types/
  * `createDeposit` mints an invoice, and the CryptoBot payment flow opens. The
  * balance updates automatically when the paid-invoice webhook lands
  * (`depositCredited`). Peg: 1 chip = $0.01.
+ *
+ * Crypto Pay takes a commission off every paid invoice, so the chips credited are
+ * LESS than the invoice: $50 → 4850 chips at 3%. The screen therefore quotes the
+ * breakdown (pay → fee → credited) rather than the gross amount. The rate is not
+ * published by the API — the server observes it from paid invoices and sends it
+ * as `depositInfo.feeBps`, so a change on Crypto Pay's side follows through here
+ * on its own.
  */
 
 // Peg mirror (server: server/payments/peg.ts). 1 chip = 1 cent.
@@ -51,10 +64,23 @@ export const Deposit: React.FC<DepositProps> = ({ onBack, socket }) => {
   const { setHeaderColor, hapticFeedback } = useTelegram();
   const [dollars, setDollars] = React.useState<number>(10);
   const [status, setStatus] = React.useState<DepositStatus>({ kind: 'idle' });
+  const [feeBps, setFeeBps] = React.useState<number>(DEFAULT_DEPOSIT_FEE_BPS);
 
   React.useEffect(() => {
     setHeaderColor('#0a0a0e');
   }, [setHeaderColor]);
+
+  // Ask the server for the live Crypto Pay commission so the quote below is real.
+  React.useEffect(() => {
+    const onInfo = (payload: { feeBps: number }) => {
+      if (Number.isFinite(payload?.feeBps) && payload.feeBps >= 0) setFeeBps(payload.feeBps);
+    };
+    socket.on('depositInfo', onInfo);
+    socket.emit('getDepositInfo');
+    return () => {
+      socket.off('depositInfo', onInfo);
+    };
+  }, [socket]);
 
   React.useEffect(() => {
     const onInvoice = (payload: { invoiceId: string; payUrl: string; amountChips: number }) => {
@@ -92,6 +118,8 @@ export const Deposit: React.FC<DepositProps> = ({ onBack, socket }) => {
 
   const busy = status.kind === 'creating';
   const chips = chipsFor(dollars);
+  const feeChips = depositFeeChips(chips, feeBps);
+  const netChips = netDepositChips(chips, feeBps);
 
   return (
     <div
@@ -197,20 +225,48 @@ export const Deposit: React.FC<DepositProps> = ({ onBack, socket }) => {
                 })}
               </div>
 
+              {/* Breakdown: what leaves the wallet, what Crypto Pay takes, what
+                  actually lands on the balance. */}
               <div
                 style={{
                   marginTop: 16,
                   paddingTop: 14,
                   borderTop: '1px solid rgba(255,255,255,0.08)',
                   display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'baseline',
+                  flexDirection: 'column',
+                  gap: 8,
                 }}
               >
-                <span style={{ fontSize: 13, color: 'var(--color-neutral)' }}>You get</span>
-                <span style={{ fontSize: 18, fontWeight: 800, fontFamily: 'monospace', color: 'var(--color-action-raise)', textShadow: '0 0 8px var(--glow-raise)' }}>
-                  {chips.toLocaleString()} chips
-                </span>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+                  <span style={{ fontSize: 13, color: 'var(--color-neutral)' }}>You pay</span>
+                  <span style={{ fontSize: 14, fontFamily: 'monospace', color: '#c9d8de' }}>
+                    {usd(chips)}
+                  </span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+                  <span style={{ fontSize: 13, color: 'var(--color-neutral)' }}>
+                    Crypto Pay fee ({formatFeePercent(feeBps)})
+                  </span>
+                  <span style={{ fontSize: 14, fontFamily: 'monospace', color: 'var(--color-action-fold)' }}>
+                    −{usd(feeChips)}
+                  </span>
+                </div>
+                <div
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'baseline',
+                    paddingTop: 8,
+                    borderTop: '1px solid rgba(255,255,255,0.08)',
+                  }}
+                >
+                  <span style={{ fontSize: 13, color: '#e0f7fa', fontWeight: 600 }}>
+                    Credited to balance
+                  </span>
+                  <span style={{ fontSize: 18, fontWeight: 800, fontFamily: 'monospace', color: 'var(--color-action-raise)', textShadow: '0 0 8px var(--glow-raise)' }}>
+                    {netChips.toLocaleString()} chips
+                  </span>
+                </div>
               </div>
             </Card>
 
@@ -241,7 +297,8 @@ export const Deposit: React.FC<DepositProps> = ({ onBack, socket }) => {
             </Button>
 
             <p style={{ margin: '2px 4px 0', color: 'var(--color-neutral)', fontSize: 12, lineHeight: 1.5, opacity: 0.8, textAlign: 'center' }}>
-              Paid in USDT via Crypto Pay. 1 chip = $0.01. Network fees are covered by the sender.
+              Paid in USDT via Crypto Pay. 1 chip = $0.01. The {formatFeePercent(feeBps)} fee is
+              charged by Crypto Pay, not by us — your balance is credited with exactly what arrives.
             </p>
           </>
         )}

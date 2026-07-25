@@ -308,6 +308,54 @@ export class UserRepository {
   }
 
   /**
+   * crypto-payments-rake phase 4 (§D): deposits still awaiting confirmation.
+   *
+   * The webhook is the ONLY delivery path for a credit, so a payment made while
+   * the server was down (deploy, crash, network) leaves the row pending forever:
+   * money taken, chips never granted. The reconciler reads these rows and asks
+   * Crypto Pay what really happened — see payments/depositReconciliation.ts.
+   */
+  static async listPendingDeposits(
+    limit = 100,
+  ): Promise<Array<{ invoiceId: string; telegramId: number; requestedChips: number; createdAt: Date }>> {
+    const rows = await prisma.transaction.findMany({
+      where: { type: 'deposit', status: 'pending', externalId: { not: null } },
+      orderBy: { createdAt: 'asc' },
+      take: limit,
+      select: {
+        externalId: true,
+        amount: true,
+        createdAt: true,
+        user: { select: { telegramId: true } },
+      },
+    });
+    return rows
+      .filter((r) => r.externalId !== null && r.user !== null)
+      .map((r) => ({
+        invoiceId: r.externalId as string,
+        telegramId: Number(r.user!.telegramId),
+        requestedChips: r.amount,
+        createdAt: r.createdAt,
+      }));
+  }
+
+  /**
+   * Close out a pending deposit that will never be paid (Crypto Pay reports the
+   * invoice `expired`). Guarded on `pending` so it can never race a credit —
+   * a payment landing at the same moment wins.
+   */
+  static async failPendingDeposit(invoiceId: string, reason: string): Promise<boolean> {
+    const row = await prisma.transaction.findUnique({ where: { externalId: invoiceId } });
+    if (!row || row.type !== 'deposit') return false;
+    const prevMeta = (row.meta as Record<string, unknown> | null) ?? {};
+    const res = await prisma.transaction.updateMany({
+      where: { id: row.id, status: 'pending' },
+      data: { status: 'failed', meta: { ...prevMeta, note: reason } as any },
+    });
+    return res.count === 1;
+  }
+
+  /**
    * §H: reserve a house rake withdrawal — guarded atomic debit of the house
    * balance + a `pending` withdrawal ledger row keyed by `spendId` (externalId
    * @unique). The guard (`balance >= amount`) makes it impossible to withdraw
