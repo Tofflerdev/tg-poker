@@ -85,14 +85,28 @@ export class CryptoPayClient {
     spendId: string;
     comment?: string;
   }): Promise<{ transfer_id: number; status: string }> {
-    return this.call('transfer', {
+    const body: Record<string, unknown> = {
       user_id: params.userId,
       asset: 'USDT',
       amount: params.amountUsdt,
       spend_id: params.spendId,
       comment: params.comment,
       disable_send_notification: false,
-    });
+    };
+    try {
+      return await this.call('transfer', body);
+    } catch (err) {
+      // Crypto Pay forbids comments for apps younger than 30 days
+      // (CANNOT_ATTACH_COMMENT, hit on prod 2026-07-25). The comment is
+      // cosmetic, so drop it and send the money rather than failing the payout.
+      // Safe to retry: the call was REJECTED (nothing processed) and the retry
+      // carries the same spend_id, which the provider dedupes anyway.
+      if (params.comment && String((err as Error).message).includes('CANNOT_ATTACH_COMMENT')) {
+        console.warn('[CryptoPay] comments not allowed yet (app < 30 days) — retrying without one');
+        return this.call('transfer', { ...body, comment: undefined });
+      }
+      throw err;
+    }
   }
 
   /**

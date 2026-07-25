@@ -85,6 +85,47 @@ describe('CryptoPayClient request contract', () => {
     stubFetch({});
     expect(await client.getPaidInvoices()).toEqual([]);
   });
+
+  it('still pays out when the app is too young to attach a comment', async () => {
+    // Real prod failure 2026-07-25: apps under 30 days old get
+    // CANNOT_ATTACH_COMMENT. The comment is cosmetic — the payout is not.
+    const calls: Array<Record<string, unknown>> = [];
+    let attempt = 0;
+    vi.stubGlobal('fetch', vi.fn(async (_url: string, init: any) => {
+      calls.push(JSON.parse(init.body));
+      attempt += 1;
+      return {
+        json: async () =>
+          attempt === 1
+            ? { ok: false, error: { code: 400, name: 'CANNOT_ATTACH_COMMENT' } }
+            : { ok: true, result: { transfer_id: 42, status: 'completed' } },
+      } as any;
+    }));
+
+    const res = await client.transfer({
+      userId: 158394554,
+      amountUsdt: '10.00',
+      spendId: 'wd-1',
+      comment: 'Withdrawal',
+    });
+
+    expect(res.transfer_id).toBe(42);
+    expect(calls).toHaveLength(2);
+    expect(calls[1].comment).toBeUndefined();
+    // Same idempotency key on the retry — the provider can never double-send.
+    expect(calls[1].spend_id).toBe('wd-1');
+    expect(calls[1].amount).toBe('10.00');
+  });
+
+  it('does not swallow other transfer errors', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => ({
+      json: async () => ({ ok: false, error: { code: 403, name: 'METHOD_DISABLED' } }),
+    } as any)));
+
+    await expect(
+      client.transfer({ userId: 1, amountUsdt: '10.00', spendId: 'wd-2', comment: 'x' }),
+    ).rejects.toThrow(/METHOD_DISABLED/);
+  });
 });
 
 describe('CryptoPayClient.fromEnv', () => {
