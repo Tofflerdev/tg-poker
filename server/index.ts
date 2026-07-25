@@ -25,6 +25,7 @@ import {
   type CreditedNotifier,
 } from "./payments/depositReconciliation.js";
 import { getWithdrawalEligibility, requestWithdrawal } from "./payments/withdrawals.js";
+import { startMoneyInvariantCheck } from "./payments/moneyInvariant.js";
 import { BOT_BANKROLL_TELEGRAM_ID } from "./payments/systemAccounts.js";
 import { buildAdminState } from "./admin/adminState.js";
 import { isValidAvatarId } from "../types/avatars.js";
@@ -560,6 +561,19 @@ setTimeout(async () => {
   } else {
     console.log('[Boot] Crypto Pay disabled (no CRYPTO_PAY_TOKEN)');
   }
+
+  // phase 6: the money invariant on a timer. Runs regardless of Crypto Pay —
+  // chips can only be minted or burned by OUR code, so the check matters even
+  // when deposits are switched off. A confirmed drift pages through Sentry.
+  startMoneyInvariantCheck((report) => {
+    if (process.env.SENTRY_DSN) {
+      Sentry.captureMessage(`Money invariant drift: ${report.driftChips} chips`, {
+        level: 'error',
+        extra: report as unknown as Record<string, unknown>,
+      });
+    }
+  });
+  console.log('[Boot] money invariant check started');
 
   // Phase 4 / Plan 04-06 / D-C2: boot-time session recovery sweep.
   // Refunds every persisted session row (currentTableId IS NOT NULL) and

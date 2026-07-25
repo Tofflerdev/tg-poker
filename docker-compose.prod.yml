@@ -51,6 +51,8 @@ services:
       WITHDRAWAL_MIN_HANDS: ${WITHDRAWAL_MIN_HANDS:-}
       WITHDRAWAL_FLAG_RATIO_PCT: ${WITHDRAWAL_FLAG_RATIO_PCT:-}
       WITHDRAWAL_FLAG_HANDS_BELOW: ${WITHDRAWAL_FLAG_HANDS_BELOW:-}
+      # phase 6: pre-ledger residue the invariant must forgive (0 on clean DBs).
+      MONEY_INVARIANT_BASELINE_CHIPS: ${MONEY_INVARIANT_BASELINE_CHIPS:-}
     volumes:
       - client-dist:/app/client-dist
       # Persist playtest session logs + generated reports on the host so they

@@ -167,6 +167,50 @@ export const AdminEconomy: React.FC<Props> = ({ state, socket }) => {
         />
       </div>
 
+      {/* phase 6: money invariant — chips must be neither minted nor burned. */}
+      {state.moneyInvariant && (
+        <Card
+          variant="neutral"
+          style={{
+            padding: 16,
+            borderColor: state.moneyInvariant.ok
+              ? undefined
+              : 'color-mix(in srgb, var(--color-action-fold) 60%, transparent)',
+          }}
+        >
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+            <div style={{ fontSize: 13, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--color-neutral)' }}>
+              Money invariant
+            </div>
+            <div
+              style={{
+                fontSize: 15,
+                fontWeight: 700,
+                color: state.moneyInvariant.ok ? 'var(--color-action-sit)' : 'var(--color-action-fold)',
+              }}
+            >
+              {state.moneyInvariant.ok
+                ? '✓ balanced'
+                : `⚠ drift ${state.moneyInvariant.driftChips > 0 ? '+' : ''}${state.moneyInvariant.driftChips} chips`}
+            </div>
+          </div>
+          <div style={{ marginTop: 10, fontSize: 13, color: 'var(--color-neutral)', display: 'flex', flexDirection: 'column', gap: 4 }}>
+            <span>
+              deposits {usd(state.moneyInvariant.depositedChips)} − withdrawals{' '}
+              {usd(state.moneyInvariant.withdrawnChips)} = {usd(state.moneyInvariant.ledgerNetChips)}
+            </span>
+            <span>
+              balances {usd(state.moneyInvariant.balancesChips)} + in play{' '}
+              {usd(state.moneyInvariant.chipsInPlay)} + baseline {usd(state.moneyInvariant.baselineChips)}
+            </span>
+            <span style={{ opacity: 0.7 }}>
+              checked {new Date(state.moneyInvariant.checkedAt).toLocaleTimeString()}
+              {!state.moneyInvariant.ok && state.moneyInvariant.confirmed ? ' · confirmed on re-check' : ''}
+            </span>
+          </div>
+        </Card>
+      )}
+
       {/* §H: House rake balance + withdraw profit via Crypto Pay transfer. */}
       <Card variant="neutral" style={{ padding: 16 }}>
         <div

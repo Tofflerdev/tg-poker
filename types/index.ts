@@ -551,6 +551,25 @@ export interface AdminState {
   depositFeeBps: number;
   // phase 5 §I: player payouts waiting for approval, oldest first.
   pendingWithdrawals: AdminWithdrawalRequest[];
+  // phase 6: last money-invariant measurement (null until the first check runs).
+  moneyInvariant: MoneyInvariantReport | null;
+}
+
+// crypto-payments-rake phase 6: deposits − withdrawals must equal every balance
+// plus the chips on tables (plus a configured baseline for pre-ledger history).
+// A non-zero `driftChips` means chips were minted or burned.
+export interface MoneyInvariantReport {
+  depositedChips: number;
+  withdrawnChips: number;
+  ledgerNetChips: number;
+  balancesChips: number;
+  chipsInPlay: number;
+  baselineChips: number;
+  driftChips: number;
+  ok: boolean;
+  /** A drift that survived a re-check — not an in-flight buy-in. */
+  confirmed: boolean;
+  checkedAt: string;
 }
 
 // ADMIN-02 / Pitfall 5: dedicated typed events for the /admin namespace.
