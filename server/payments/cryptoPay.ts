@@ -95,6 +95,20 @@ export class CryptoPayClient {
     });
   }
 
+  /**
+   * Transfers matching a `spend_id` (the API filters on it directly). This is
+   * how we settle an AMBIGUOUS transfer failure: when the HTTP call blew up we
+   * cannot know whether the provider processed it, and refunding a payout that
+   * actually went out would pay the player twice. Ask instead of assuming.
+   */
+  async getTransfersBySpendId(spendId: string): Promise<Array<{ transfer_id: number; status: string }>> {
+    const result = await this.call<{ items?: Array<{ transfer_id: number; status: string }> }>(
+      'getTransfers',
+      { spend_id: spendId, count: 10 },
+    );
+    return result?.items ?? [];
+  }
+
   private async call<T>(method: string, body?: Record<string, unknown>): Promise<T> {
     const res = await fetch(`${this.base}/${method}`, {
       method: 'POST',

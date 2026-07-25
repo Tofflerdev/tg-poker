@@ -24,6 +24,7 @@ import {
   startDepositReconciliation,
   type CreditedNotifier,
 } from "./payments/depositReconciliation.js";
+import { getWithdrawalEligibility, requestWithdrawal } from "./payments/withdrawals.js";
 import { BOT_BANKROLL_TELEGRAM_ID } from "./payments/systemAccounts.js";
 import { buildAdminState } from "./admin/adminState.js";
 import { isValidAvatarId } from "../types/avatars.js";
@@ -144,7 +145,19 @@ const io = new Server<ExtendedClientEvents, ExtendedServerEvents, DefaultEventsM
 // Phase 5 / Plan 05-04 / ADMIN-02 / D-06: mount the /admin namespace.
 // JWT-authenticated; emits full adminState snapshot on connect; targeted delta
 // events on subsequent admin actions. Player namespace at '/' is unaffected.
-setupAdminNamespace(io, { broadcastTableState: (tableId: string) => updateTableState(tableId) });
+setupAdminNamespace(io, {
+  broadcastTableState: (tableId: string) => updateTableState(tableId),
+  // phase 5 §I: an admin settled a payout — push the outcome to the player if
+  // they are online (approved: the hold is gone for good; rejected: chips back).
+  notifyWithdrawalSettled: async (telegramId, spendId, status, amountChips) => {
+    const sid = getSocketId(String(telegramId));
+    if (!sid) return;
+    const user = await UserRepository.findByTelegramId(telegramId);
+    const balance = user?.balance ?? 0;
+    io.to(sid).emit('withdrawalUpdated', { spendId, status, amountChips, balance });
+    io.to(sid).emit('balanceUpdate', balance);
+  },
+});
 
 const PORT = parseInt(process.env.PORT || "3000", 10);
 
@@ -704,6 +717,53 @@ io.on("connection", (socket) => {
       minChips: MIN_DEPOSIT_CHIPS,
       available: Boolean(cryptoPay),
     });
+  });
+
+  // ─── phase 5 §I: withdrawals ────────────────────────────────────────────
+  socket.on("getWithdrawalInfo", async () => {
+    const telegramId = socket.data.telegramId;
+    if (!telegramId) return;
+    try {
+      const e = await getWithdrawalEligibility(Number(telegramId));
+      socket.emit("withdrawalInfo", { ...e, available: Boolean(cryptoPay) });
+    } catch (err) {
+      console.error("[Withdraw] eligibility failed:", err);
+      socket.emit("withdrawalError", "Could not load withdrawal limits, try again");
+    }
+  });
+
+  socket.on("getWithdrawalHistory", async () => {
+    const telegramId = socket.data.telegramId;
+    if (!telegramId) return;
+    try {
+      const rows = await UserRepository.listWithdrawalsForUser(Number(telegramId));
+      socket.emit("withdrawalHistory", rows.map((r) => ({ ...r, createdAt: r.createdAt.toISOString() })));
+    } catch (err) {
+      console.error("[Withdraw] history failed:", err);
+    }
+  });
+
+  socket.on("requestWithdrawal", async ({ amountChips }) => {
+    const telegramId = socket.data.telegramId;
+    if (!telegramId) {
+      socket.emit("authError", { message: 'Not authenticated' } as any);
+      return;
+    }
+    try {
+      const res = await requestWithdrawal(Number(telegramId), amountChips);
+      // The hold already left the balance — push it so the UI cannot show money
+      // that is now reserved.
+      socket.emit("withdrawalRequested", res);
+      socket.emit("balanceUpdate", res.balance);
+      // Surface the new request to any admin watching the queue.
+      try {
+        (io.of('/admin') as any).emit('adminState', await buildAdminState());
+      } catch (err) {
+        console.error('[Withdraw] admin queue refresh failed:', err);
+      }
+    } catch (err) {
+      socket.emit("withdrawalError", (err as Error).message);
+    }
   });
 
   socket.on("createDeposit", async ({ amountChips }) => {

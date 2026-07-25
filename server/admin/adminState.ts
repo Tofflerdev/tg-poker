@@ -4,6 +4,7 @@ import { userStorage } from '../models/User.js';
 import { getTableAdminStatus } from './adminMutations.js';
 import { BOT_BANKROLL_TELEGRAM_ID, HOUSE_TELEGRAM_ID } from '../payments/systemAccounts.js';
 import { getDepositFeeBps } from '../payments/depositFee.js';
+import { listWithdrawalQueue } from '../payments/withdrawals.js';
 import type {
   AdminState,
   AdminTableInfo,
@@ -107,5 +108,6 @@ export async function buildAdminState(): Promise<AdminState> {
     bankrollBalance: balanceOf(BOT_BANKROLL_TELEGRAM_ID),
     houseBalance: balanceOf(HOUSE_TELEGRAM_ID),
     depositFeeBps: getDepositFeeBps(),
+    pendingWithdrawals: await listWithdrawalQueue(),
   };
 }

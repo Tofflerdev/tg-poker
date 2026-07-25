@@ -15,6 +15,7 @@ import {
   setBotsContinue,
   createBankrollDeposit,
   withdrawHouseRake,
+  settleWithdrawal,
 } from './adminMutations.js';
 import type { AdminClientEvents, AdminServerEvents } from '../../types/index.js';
 
@@ -53,6 +54,16 @@ export function adminNamespaceMiddleware(
 export interface AdminNamespaceDeps {
   /** Broadcast player-facing game state for a table (server/index.ts updateTableState). */
   broadcastTableState: (tableId: string) => void;
+  /**
+   * phase 5 §I: tell the player their payout was settled (paid out or returned)
+   * if they are online, so the wallet updates without a reload.
+   */
+  notifyWithdrawalSettled: (
+    telegramId: number,
+    spendId: string,
+    status: 'completed' | 'failed',
+    amountChips: number,
+  ) => Promise<void> | void;
 }
 
 export function setupAdminNamespace(io: Server, deps: AdminNamespaceDeps): void {
@@ -202,6 +213,41 @@ export function setupAdminNamespace(io: Server, deps: AdminNamespaceDeps): void 
         socket.emit('adminError', { code: 'WITHDRAW_FAILED', message: (err as Error).message });
       }
     });
+    // phase 5 §I: settle a queued player payout. Approve fires the Crypto Pay
+    // transfer; reject returns the held chips. Either way the player is told
+    // (deps.notifyWithdrawalSettled) and the queue snapshot is refreshed.
+    const settle = async (spendId: string, decision: 'approve' | 'reject', reason = '') => {
+      if (typeof spendId !== 'string' || spendId.length === 0) {
+        socket.emit('adminError', { code: 'INVALID_WITHDRAWAL', message: 'spendId is required' });
+        return;
+      }
+      try {
+        const res = await settleWithdrawal(adminUser, spendId, decision, reason);
+        await deps.notifyWithdrawalSettled(
+          res.telegramId,
+          spendId,
+          decision === 'approve' ? 'completed' : 'failed',
+          res.amountChips,
+        );
+        socket.emit('adminError', {
+          code: decision === 'approve' ? 'WITHDRAWAL_APPROVED' : 'WITHDRAWAL_REJECTED',
+          message:
+            decision === 'approve'
+              ? `Sent ${res.amountChips} chips to ${res.telegramId}.${res.alreadySent ? ' (already processed by Crypto Pay — confirmed, not re-sent)' : ''}`
+              : `Rejected — ${res.amountChips} chips returned to ${res.telegramId}.`,
+        });
+        adminNs.emit('adminState', await buildAdminState());
+      } catch (err) {
+        socket.emit('adminError', { code: 'WITHDRAWAL_SETTLE_FAILED', message: (err as Error).message });
+        // The queue may have changed even on failure (e.g. refunded row).
+        try {
+          socket.emit('adminState', await buildAdminState());
+        } catch { /* snapshot refresh is best-effort */ }
+      }
+    };
+    socket.on('approveWithdrawal', ({ spendId }) => settle(spendId, 'approve'));
+    socket.on('rejectWithdrawal', ({ spendId, reason }) => settle(spendId, 'reject', reason));
+
     socket.on('setBotsContinue', async ({ tableId, enabled }) => {
       if (typeof enabled !== 'boolean') {
         socket.emit('adminError', { code: 'INVALID_FLAG', message: 'enabled must be a boolean' });

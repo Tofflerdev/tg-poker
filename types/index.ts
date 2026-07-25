@@ -278,6 +278,29 @@ export interface ExtendedServerEvents extends ServerEvents {
   }) => void;
   // Pushed when the paid-invoice webhook credits the balance and the payer is online.
   depositCredited: (payload: { creditedChips: number; balance: number }) => void;
+  // crypto-payments-rake phase 5 §I: withdrawals. Limits and eligibility for the
+  // withdrawal screen — `blockedBy` is set when no amount is allowed at all.
+  withdrawalInfo: (payload: {
+    available: boolean;
+    balanceChips: number;
+    minChips: number;
+    maxAvailableChips: number;
+    remainingDailyChips: number;
+    handsSinceDeposit: number;
+    requiredHands: number;
+    blockedBy: string | null;
+  }) => void;
+  // The request was accepted and the chips are held pending admin approval.
+  withdrawalRequested: (payload: { spendId: string; amountChips: number; balance: number }) => void;
+  withdrawalError: (msg: string) => void;
+  // Pushed when an admin settles a request: paid out, or refunded back to balance.
+  withdrawalUpdated: (payload: {
+    spendId: string;
+    status: 'completed' | 'failed';
+    amountChips: number;
+    balance: number;
+  }) => void;
+  withdrawalHistory: (rows: WithdrawalHistoryRow[]) => void;
   profileData: (profile: UserProfile) => void;
   profileUpdated: (profile: UserProfile) => void;
   profileError: (msg: string) => void;
@@ -330,6 +353,11 @@ export interface ExtendedClientEvents extends ClientEvents {
   createDeposit: (payload: { amountChips: number }) => void;
   // Ask for the current commission + limits so the deposit screen can quote net chips.
   getDepositInfo: () => void;
+  // crypto-payments-rake phase 5 §I: withdrawal limits / eligibility, and the
+  // request itself (chips are held immediately, an admin settles it).
+  getWithdrawalInfo: () => void;
+  requestWithdrawal: (payload: { amountChips: number }) => void;
+  getWithdrawalHistory: () => void;
   getProfile: () => void;
   updateProfile: (data: { displayName?: string; avatarUrl?: string }) => void;
   // Plan 02-02: avatar + TOS substrate (picker UI lands in Plan 06; TOS gate in Plan 08)
@@ -487,6 +515,28 @@ export interface AdminAuditLogEntry {
   createdAt: string;       // ISO timestamp
 }
 
+// crypto-payments-rake phase 5 §I: a player payout awaiting admin settlement.
+// `flags` are advisory transit/abuse hints — they colour the row, never block it.
+export interface AdminWithdrawalRequest {
+  spendId: string;
+  telegramId: number;
+  displayName: string;
+  amountChips: number;
+  createdAt: string;
+  flags: string[];
+  handsSinceDeposit: number;
+  totalDepositedChips: number;
+}
+
+// A row of the player's own withdrawal history.
+export interface WithdrawalHistoryRow {
+  spendId: string;
+  amountChips: number;
+  status: string;
+  createdAt: string;
+  failureReason?: string;
+}
+
 export interface AdminState {
   tables: AdminTableInfo[];
   users: AdminUserInfo[];          // only users with active socket connections
@@ -499,6 +549,8 @@ export interface AdminState {
   // Crypto Pay commission in basis points (300 = 3%), observed from the last paid
   // invoice. The bankroll card quotes net chips with it — a $50 invoice funds 4850.
   depositFeeBps: number;
+  // phase 5 §I: player payouts waiting for approval, oldest first.
+  pendingWithdrawals: AdminWithdrawalRequest[];
 }
 
 // ADMIN-02 / Pitfall 5: dedicated typed events for the /admin namespace.
@@ -535,4 +587,8 @@ export interface AdminClientEvents {
   // crypto-payments-rake phase 4 §H: withdraw accumulated house rake to a Telegram
   // user via Crypto Pay transfer. `amountChips` in chips; `targetUserId` = recipient.
   withdrawHouseRake: (payload: { amountChips: number; targetUserId: number }) => void;
+  // phase 5 §I: settle a queued player payout — approve fires the Crypto Pay
+  // transfer, reject returns the held chips to the player's balance.
+  approveWithdrawal: (payload: { spendId: string }) => void;
+  rejectWithdrawal: (payload: { spendId: string; reason: string }) => void;
 }

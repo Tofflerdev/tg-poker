@@ -5,6 +5,7 @@ import { AdminLogin } from './AdminLogin';
 import { AdminTables } from './AdminTables';
 import { AdminUsers } from './AdminUsers';
 import { AdminEconomy } from './AdminEconomy';
+import { AdminWithdrawals } from './AdminWithdrawals';
 import { AdminAudit } from './AdminAudit';
 import { useAdminSocket } from './useAdminSocket';
 
@@ -21,12 +22,13 @@ import { useAdminSocket } from './useAdminSocket';
  * IS_ADMIN_PATH is true.
  */
 
-type AdminTab = 'tables' | 'users' | 'economy' | 'audit';
+type AdminTab = 'tables' | 'users' | 'economy' | 'payouts' | 'audit';
 
 const ADMIN_TABS: { id: AdminTab; label: string }[] = [
   { id: 'tables', label: 'Tables' },
   { id: 'users', label: 'Users' },
   { id: 'economy', label: 'Economy' },
+  { id: 'payouts', label: 'Payouts' },
   { id: 'audit', label: 'Audit Log' },
 ];
 
@@ -116,6 +118,7 @@ const AdminAuthenticatedShell: React.FC<ShellProps> = ({ onLogout }) => {
               {tab === 'tables' && <AdminTables state={state} socket={socket} />}
               {tab === 'users' && <AdminUsers state={state} socket={socket} />}
               {tab === 'economy' && <AdminEconomy state={state} socket={socket} />}
+              {tab === 'payouts' && <AdminWithdrawals state={state} socket={socket} />}
               {tab === 'audit' && <AdminAudit state={state} />}
             </>
           )}

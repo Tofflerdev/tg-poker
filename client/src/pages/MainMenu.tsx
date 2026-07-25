@@ -37,6 +37,7 @@ export type AppNavigateTarget =
   | 'game'
   | 'profile'
   | 'deposit'
+  | 'withdraw'
   | 'legal-tos'
   | 'legal-privacy'
   | 'legal-rg'
@@ -353,6 +354,39 @@ export const MainMenu: React.FC<MainMenuProps> = ({
             </div>
           }
           right={<ChevronRight color="var(--color-action-raise)" />}
+        />
+      </BlockCard>
+
+      {/* ─── Block 1b: Withdraw (phase 5 §I) ─────────────────── */}
+      <BlockCard
+        variant="active"
+        onClick={nav('withdraw', 'medium')}
+        ariaLabel="Withdraw — cash out chips"
+      >
+        <BlockRow
+          title="Withdraw"
+          subtitle="Cash out to USDT"
+          titleColor="var(--color-active)"
+          left={
+            <div
+              aria-hidden
+              style={{
+                width: 40,
+                height: 40,
+                borderRadius: 12,
+                display: 'grid',
+                placeItems: 'center',
+                border: '1.5px solid color-mix(in srgb, var(--color-active) 50%, transparent)',
+                background: 'color-mix(in srgb, var(--color-active) 10%, transparent)',
+                color: 'var(--color-active)',
+                fontSize: 22,
+                flexShrink: 0,
+              }}
+            >
+              🏦
+            </div>
+          }
+          right={<ChevronRight color="var(--color-active)" />}
         />
       </BlockCard>
 

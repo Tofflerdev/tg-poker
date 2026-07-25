@@ -7,6 +7,7 @@ import { TableList } from "./pages/TableList";
 import { GameRoom } from "./pages/GameRoom";
 import { ProfileSettings } from "./pages/ProfileSettings";
 import { Deposit } from "./pages/Deposit";
+import { Withdraw } from "./pages/Withdraw";
 import { Consent } from "./pages/Consent";
 import { ToS } from "./pages/legal/ToS";
 import { Privacy } from "./pages/legal/Privacy";
@@ -74,6 +75,7 @@ type AppView =
   | 'game'
   | 'profile'
   | 'deposit'
+  | 'withdraw'
   | 'consent'
   | 'legal-tos'
   | 'legal-privacy'
@@ -575,6 +577,7 @@ const App: React.FC = () => {
               target === 'game' ||
               target === 'profile' ||
               target === 'deposit' ||
+              target === 'withdraw' ||
               target === 'consent' ||
               target === 'legal-tos' ||
               target === 'legal-privacy' ||
@@ -618,6 +621,17 @@ const App: React.FC = () => {
           onBack={handleBackFromProfile}
           currentUser={currentUser}
         />
+      </>
+    );
+  }
+
+  // Withdraw view — crypto-payments-rake phase 5 §I: payout requests.
+  if (view === 'withdraw') {
+    return (
+      <>
+        {devToolbar}
+        {overlay}
+        <Withdraw socket={socket} onBack={() => setView('menu')} />
       </>
     );
   }

@@ -356,13 +356,18 @@ export class UserRepository {
   }
 
   /**
-   * §H: reserve a house rake withdrawal — guarded atomic debit of the house
-   * balance + a `pending` withdrawal ledger row keyed by `spendId` (externalId
-   * @unique). The guard (`balance >= amount`) makes it impossible to withdraw
-   * player money. Returns ok:false/'insufficient' when the house lacks funds.
-   * The actual Crypto Pay transfer happens AFTER this commits (see adminMutations).
+   * Reserve a withdrawal — guarded atomic debit + a `pending` withdrawal ledger
+   * row keyed by `spendId` (externalId @unique, also the Crypto Pay idempotency
+   * key). The guard (`balance >= amount`) makes an overdraft impossible, and
+   * holding the money at request time means it cannot be spent at a table while
+   * the request sits in the admin queue.
+   *
+   * Account-agnostic: §H house rake (phase 4) and §I player withdrawals (phase 5)
+   * both go through this, so there is exactly one debit path to reason about.
+   * The Crypto Pay transfer happens AFTER this commits.
    */
-  static async debitHouseForWithdrawal(
+  static async debitForWithdrawal(
+    telegramId: number,
     amountChips: number,
     spendId: string,
     meta: Record<string, unknown>,
@@ -370,57 +375,223 @@ export class UserRepository {
     if (!Number.isInteger(amountChips) || amountChips <= 0) return { ok: false, reason: 'bad_amount' };
     return prisma.$transaction(async (tx) => {
       const res = await tx.user.updateMany({
-        where: { telegramId: BigInt(HOUSE_TELEGRAM_ID), balance: { gte: amountChips } },
+        where: { telegramId: BigInt(telegramId), balance: { gte: amountChips } },
         data: { balance: { decrement: amountChips } },
       });
       if (res.count !== 1) return { ok: false, reason: 'insufficient' };
-      const house = await tx.user.findUnique({
-        where: { telegramId: BigInt(HOUSE_TELEGRAM_ID) },
+      const account = await tx.user.findUnique({
+        where: { telegramId: BigInt(telegramId) },
         select: { id: true, balance: true },
       });
       await tx.transaction.create({
         data: {
-          userId: house!.id,
+          userId: account!.id,
           type: 'withdrawal',
           amount: -amountChips,
-          balanceAfter: house!.balance,
+          balanceAfter: account!.balance,
           externalId: spendId,
           status: 'pending',
           meta: meta as any,
         },
       });
-      return { ok: true, newBalance: house!.balance };
+      return { ok: true, newBalance: account!.balance };
     });
   }
 
-  /** §H: mark a house withdrawal row completed (transfer succeeded). */
+  /** §H: house-scoped alias of debitForWithdrawal. */
+  static async debitHouseForWithdrawal(
+    amountChips: number,
+    spendId: string,
+    meta: Record<string, unknown>,
+  ): Promise<{ ok: boolean; reason?: string; newBalance?: number }> {
+    return this.debitForWithdrawal(HOUSE_TELEGRAM_ID, amountChips, spendId, meta);
+  }
+
+  /**
+   * Mark a withdrawal row completed (the transfer went through). Guarded on
+   * `pending`, and merges into the existing meta rather than replacing it so the
+   * request context (who asked, when, why) survives alongside the transfer id.
+   */
+  static async completeWithdrawal(spendId: string, extraMeta?: Record<string, unknown>): Promise<boolean> {
+    const row = await prisma.transaction.findUnique({ where: { externalId: spendId } });
+    if (!row) return false;
+    const prevMeta = (row.meta as Record<string, unknown> | null) ?? {};
+    const res = await prisma.transaction.updateMany({
+      where: { id: row.id, status: 'pending' },
+      data: { status: 'completed', meta: { ...prevMeta, ...(extraMeta ?? {}) } as any },
+    });
+    return res.count === 1;
+  }
+
+  /** §H alias. */
   static async completeHouseWithdrawal(spendId: string, extraMeta?: Record<string, unknown>): Promise<void> {
-    await prisma.transaction.updateMany({
-      where: { externalId: spendId, status: 'pending' },
-      data: { status: 'completed', ...(extraMeta ? { meta: extraMeta as any } : {}) },
+    await this.completeWithdrawal(spendId, extraMeta);
+  }
+
+  /**
+   * The transfer did not happen — credit the held amount back to whoever it was
+   * debited from and mark the row failed. Guarded on a still-`pending` row, so it
+   * is idempotent and can never double-refund (and never races a completion).
+   * A failed row is excluded from the money invariant.
+   *
+   * Returns true when this call performed the refund.
+   */
+  static async refundWithdrawal(spendId: string, reason?: string): Promise<boolean> {
+    return prisma.$transaction(async (tx) => {
+      const row = await tx.transaction.findUnique({ where: { externalId: spendId } });
+      if (!row || row.status !== 'pending' || row.userId === null) return false;
+      const prevMeta = (row.meta as Record<string, unknown> | null) ?? {};
+      const claim = await tx.transaction.updateMany({
+        where: { id: row.id, status: 'pending' },
+        data: {
+          status: 'failed',
+          ...(reason ? { meta: { ...prevMeta, failureReason: reason } as any } : {}),
+        },
+      });
+      if (claim.count !== 1) return false;
+      // row.amount is negative (money leaving the account) → credit back by -amount.
+      await tx.user.update({
+        where: { id: row.userId },
+        data: { balance: { increment: -row.amount } },
+      });
+      return true;
+    });
+  }
+
+  /** §H alias. */
+  static async refundHouseWithdrawal(spendId: string): Promise<void> {
+    await this.refundWithdrawal(spendId);
+  }
+
+  // ─── phase 5 §I: withdrawal policy inputs ────────────────────────────────
+
+  /**
+   * When this player's most recent deposit was credited, or null if they have
+   * never deposited. The anti-transit rule (§I) counts hands from this moment:
+   * "deposit → dump chips → withdraw" is the laundering shape we care about.
+   */
+  static async lastDepositAt(telegramId: number): Promise<Date | null> {
+    const user = await prisma.user.findUnique({
+      where: { telegramId: BigInt(telegramId) },
+      select: { id: true },
+    });
+    if (!user) return null;
+    const row = await prisma.transaction.findFirst({
+      where: { userId: user.id, type: 'deposit', status: 'completed' },
+      orderBy: { createdAt: 'desc' },
+      select: { createdAt: true },
+    });
+    return row?.createdAt ?? null;
+  }
+
+  /** Hands this player has played since `since` (all hands when null). */
+  static async countHandsSince(telegramId: number, since: Date | null): Promise<number> {
+    return prisma.handHistory.count({
+      where: {
+        telegramId: String(telegramId),
+        ...(since ? { playedAt: { gt: since } } : {}),
+      },
     });
   }
 
   /**
-   * §H: transfer failed — credit the debited amount back to the house and mark
-   * the row failed. Guarded (only a still-`pending` row) so it is idempotent and
-   * cannot double-refund. A failed row is excluded from the money invariant.
+   * Chips this player has withdrawn since `since`, counting `pending` rows as
+   * spent — a queued request must consume the daily allowance, otherwise the
+   * limit could be bypassed by stacking requests before an admin acts.
    */
-  static async refundHouseWithdrawal(spendId: string): Promise<void> {
-    await prisma.$transaction(async (tx) => {
-      const row = await tx.transaction.findUnique({ where: { externalId: spendId } });
-      if (!row || row.status !== 'pending') return;
-      const claim = await tx.transaction.updateMany({
-        where: { id: row.id, status: 'pending' },
-        data: { status: 'failed' },
-      });
-      if (claim.count !== 1) return;
-      // row.amount is negative (money leaving house) → credit back by -amount.
-      await tx.user.updateMany({
-        where: { telegramId: BigInt(HOUSE_TELEGRAM_ID) },
-        data: { balance: { increment: -row.amount } },
-      });
+  static async withdrawnChipsSince(telegramId: number, since: Date): Promise<number> {
+    const user = await prisma.user.findUnique({
+      where: { telegramId: BigInt(telegramId) },
+      select: { id: true },
     });
+    if (!user) return 0;
+    const rows = await prisma.transaction.findMany({
+      where: {
+        userId: user.id,
+        type: 'withdrawal',
+        status: { in: ['pending', 'completed'] },
+        createdAt: { gte: since },
+      },
+      select: { amount: true },
+    });
+    // Withdrawal amounts are negative deltas; report a positive magnitude.
+    return rows.reduce((sum, r) => sum + Math.abs(r.amount), 0);
+  }
+
+  /** A player's own withdrawal history, newest first (for the wallet screen). */
+  static async listWithdrawalsForUser(
+    telegramId: number,
+    limit = 20,
+  ): Promise<Array<{ spendId: string; amountChips: number; status: string; createdAt: Date; failureReason?: string }>> {
+    const user = await prisma.user.findUnique({
+      where: { telegramId: BigInt(telegramId) },
+      select: { id: true },
+    });
+    if (!user) return [];
+    const rows = await prisma.transaction.findMany({
+      where: { userId: user.id, type: 'withdrawal' },
+      orderBy: { createdAt: 'desc' },
+      take: limit,
+    });
+    return rows.map((r) => ({
+      spendId: r.externalId ?? r.id,
+      amountChips: Math.abs(r.amount),
+      status: r.status,
+      createdAt: r.createdAt,
+      failureReason: (r.meta as any)?.failureReason,
+    }));
+  }
+
+  /**
+   * The admin approval queue: pending player withdrawals, oldest first (the
+   * house's own rake withdrawals are settled inline and never queue here).
+   */
+  static async listPendingWithdrawals(limit = 50): Promise<
+    Array<{
+      spendId: string;
+      telegramId: number;
+      displayName: string;
+      amountChips: number;
+      createdAt: Date;
+      balanceAfter: number | null;
+    }>
+  > {
+    const rows = await prisma.transaction.findMany({
+      where: { type: 'withdrawal', status: 'pending', externalId: { not: null } },
+      orderBy: { createdAt: 'asc' },
+      take: limit,
+      select: {
+        externalId: true,
+        amount: true,
+        createdAt: true,
+        balanceAfter: true,
+        user: { select: { telegramId: true, displayName: true } },
+      },
+    });
+    return rows
+      .filter((r) => r.user !== null && Number(r.user!.telegramId) > 0)
+      .map((r) => ({
+        spendId: r.externalId as string,
+        telegramId: Number(r.user!.telegramId),
+        displayName: r.user!.displayName,
+        amountChips: Math.abs(r.amount),
+        createdAt: r.createdAt,
+        balanceAfter: r.balanceAfter,
+      }));
+  }
+
+  /** Total chips this player has ever deposited (for the §I transit flag). */
+  static async totalDepositedChips(telegramId: number): Promise<number> {
+    const user = await prisma.user.findUnique({
+      where: { telegramId: BigInt(telegramId) },
+      select: { id: true },
+    });
+    if (!user) return 0;
+    const agg = await prisma.transaction.aggregate({
+      where: { userId: user.id, type: 'deposit', status: 'completed' },
+      _sum: { amount: true },
+    });
+    return agg._sum.amount ?? 0;
   }
 
   static async updateBalance(telegramId: number, amount: number): Promise<number> {

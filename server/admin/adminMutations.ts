@@ -8,6 +8,7 @@ import { clampBuyIn } from '../config/tables.js';
 import { BOT_BANKROLL_TELEGRAM_ID, HOUSE_TELEGRAM_ID } from '../payments/systemAccounts.js';
 import { getCryptoPay } from '../payments/cryptoPay.js';
 import { chipsToUsdt, MIN_WITHDRAWAL_CHIPS, MIN_DEPOSIT_CHIPS } from '../payments/peg.js';
+import { approveWithdrawal, rejectWithdrawal } from '../payments/withdrawals.js';
 import * as GraceRegistry from '../GraceRegistry.js';
 import type { Server } from 'socket.io';
 import type { DefaultEventsMap } from 'socket.io';
@@ -429,6 +430,37 @@ export async function withdrawHouseRake(
     },
   );
   return { newBalance };
+}
+
+/**
+ * phase 5 §I: settle a queued player payout. The money mechanics live in
+ * payments/withdrawals.ts; this wraps them in the admin audit trail so every
+ * approval and rejection is attributable to an admin.
+ */
+export async function settleWithdrawal(
+  adminUser: string,
+  spendId: string,
+  decision: 'approve' | 'reject',
+  reason = '',
+): Promise<{ telegramId: number; amountChips: number; alreadySent?: boolean }> {
+  let outcome!: { telegramId: number; amountChips: number; alreadySent?: boolean };
+  await runWithAudit(
+    {
+      adminUser,
+      action: decision === 'approve' ? 'approveWithdrawal' : 'rejectWithdrawal',
+      targetType: 'withdrawal',
+      targetId: spendId,
+      beforeJson: { spendId, reason },
+      afterJson: null,
+    },
+    async () => {
+      outcome =
+        decision === 'approve'
+          ? await approveWithdrawal(spendId)
+          : await rejectWithdrawal(spendId, reason);
+    },
+  );
+  return outcome;
 }
 
 /**
