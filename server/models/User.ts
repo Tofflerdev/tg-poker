@@ -19,7 +19,12 @@ class UserStorage {
       profile = {
         telegramId,
         username: username || `user_${telegramId}`,
-        displayName: username || `Player ${telegramId}`,
+        // Players are known ONLY by the random alias minted in
+        // UserRepository.findOrCreate (nameGenerator.ts) — never by their
+        // Telegram @username or real name. This in-memory profile is a stats
+        // scratchpad that nothing currently renders; the placeholder keeps it
+        // that way if it is ever wired up.
+        displayName: `Player ${telegramId}`,
         totalWinnings: 0,
         handsPlayed: 0,
         handsWon: 0,

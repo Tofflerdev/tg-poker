@@ -70,7 +70,11 @@ declare global {
 }
 
 interface UseTelegramReturn {
-  user: TelegramUser | null;
+  // NOTE: deliberately no `user` here. Identity comes from the server's
+  // `authSuccess` (App.tsx `currentUser`), whose displayName is a RANDOM alias
+  // (server/utils/nameGenerator.ts) — Telegram's username, first/last name and
+  // photo are never shown to anyone. Mirroring them into client state only
+  // invited someone to render them by accident.
   initData: string | null;
   initDataRaw: WebAppInitData | null;
   isReady: boolean;
@@ -97,7 +101,6 @@ interface UseTelegramReturn {
 }
 
 export function useTelegram(): UseTelegramReturn {
-  const [user, setUser] = useState<TelegramUser | null>(null);
   const [initData, setInitData] = useState<string | null>(null);
   const [initDataRaw, setInitDataRaw] = useState<WebAppInitData | null>(null);
   const [isReady, setIsReady] = useState(false);
@@ -125,25 +128,9 @@ export function useTelegram(): UseTelegramReturn {
       setInitData(webApp.initData || '');
       setInitDataRaw(webApp.initDataUnsafe);
       
-      // Parse user data
-      if (webApp.initDataUnsafe?.user) {
-        const tgUser = webApp.initDataUnsafe.user;
-        setUser({
-          id: tgUser.id.toString(),
-          telegramId: tgUser.id,
-          username: tgUser.username,
-          // Provisional label until `authSuccess` brings the stored profile name
-          // (which the player can edit and which the server generates for new
-          // users). Telegram never sends an empty first_name, so this is safe.
-          displayName:
-            tgUser.username ??
-            [tgUser.first_name, tgUser.last_name].filter(Boolean).join(' '),
-          firstName: tgUser.first_name,
-          lastName: tgUser.last_name,
-          photoUrl: tgUser.photo_url,
-          balance: 0, // §G: real-money economy — chips only via deposits
-        });
-      }
+      // The raw initData is kept (the server HMAC-validates it), but the
+      // Telegram profile is NOT unpacked into app state: the player is known by
+      // a random alias, so first/last name, @username and photo have no use here.
 
       setIsExpanded(webApp.isExpanded || false);
       setHapticFeedback(webApp.HapticFeedback || null);
@@ -270,7 +257,6 @@ export function useTelegram(): UseTelegramReturn {
   }, []);
 
   return {
-    user,
     initData,
     initDataRaw,
     isReady,

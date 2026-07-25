@@ -125,7 +125,6 @@ const App: React.FC = () => {
   }
 
   const {
-    user,
     initData,
     isReady,
     ready,

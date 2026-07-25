@@ -1389,7 +1389,9 @@ io.on("connection", (socket) => {
       // authorId = internal DB id (matches client's currentUser.id own-message check),
       // NOT the telegram id.
       authorId: user.id,
-      authorName: user.displayName || user.username || 'Player',
+      // Never fall back to the Telegram @username: chat is public to the table
+      // and players are known only by their random alias.
+      authorName: user.displayName || 'Player',
       text,
       type: 'player' as const,
       timestamp: Date.now(),
