@@ -6,7 +6,7 @@ import type { HandHistoryDTO } from '../../../../types/index';
 const mkRow = (over: Partial<HandHistoryDTO> = {}): HandHistoryDTO => ({
   handId: 'h-1',
   tableId: 'table-standard-1',
-  tableName: '⭐ Standard Table #1',
+  tableName: 'Standard Table #1',
   playedAt: new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString(), // 3h ago
   board: ['As', 'Kd', 'Qc', 'Jh', 'Th'],
   seat: 0,
@@ -44,7 +44,7 @@ describe('HandHistoryRow (collapsed)', () => {
     const row = mkRow({ netDelta: 250, won: true });
     render(<HandHistoryRow row={row} expanded={false} onToggle={() => {}} />);
     expect(screen.getByTestId('row-time').textContent).toMatch(/h ago|m ago/);
-    expect(screen.getByTestId('row-table')).toHaveTextContent('⭐ Standard Table #1');
+    expect(screen.getByTestId('row-table')).toHaveTextContent('Standard Table #1');
     expect(screen.getByTestId('row-delta')).toHaveTextContent('+250');
     expect(screen.getByText('WIN')).toBeInTheDocument();
   });

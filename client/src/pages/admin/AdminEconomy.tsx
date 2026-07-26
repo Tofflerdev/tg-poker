@@ -1,5 +1,5 @@
 import React from 'react';
-import { Button, Card } from '../../components/ui';
+import { Button, Card, Icon } from '../../components/ui';
 import {
   ResponsiveContainer,
   BarChart,
@@ -189,9 +189,19 @@ export const AdminEconomy: React.FC<Props> = ({ state, socket }) => {
                 color: state.moneyInvariant.ok ? 'var(--color-action-sit)' : 'var(--color-action-fold)',
               }}
             >
-              {state.moneyInvariant.ok
-                ? '✓ balanced'
-                : `⚠ drift ${state.moneyInvariant.driftChips > 0 ? '+' : ''}${state.moneyInvariant.driftChips} chips`}
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+                {state.moneyInvariant.ok ? (
+                  <>
+                    <Icon name="admin-ok" size={14} variant="sit" />
+                    balanced
+                  </>
+                ) : (
+                  <>
+                    <Icon name="admin-warn" size={14} variant="fold" />
+                    {`drift ${state.moneyInvariant.driftChips > 0 ? '+' : ''}${state.moneyInvariant.driftChips} chips`}
+                  </>
+                )}
+              </span>
             </div>
           </div>
           <div style={{ marginTop: 10, fontSize: 13, color: 'var(--color-neutral)', display: 'flex', flexDirection: 'column', gap: 4 }}>

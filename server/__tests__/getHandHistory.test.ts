@@ -69,7 +69,7 @@ describe('getHandHistory socket handler', () => {
 
   it('emits handHistoryData with the rows on success', async () => {
     const sock = mockSocket('1001');
-    const fakeRows = [{ handId: 'h-1', tableId: 'table-standard-1', tableName: '⭐ Standard Table #1' }];
+    const fakeRows = [{ handId: 'h-1', tableId: 'table-standard-1', tableName: 'Standard Table #1' }];
     findForUserMock.mockResolvedValueOnce(fakeRows);
     const handler = makeHandler(sock);
     await handler();

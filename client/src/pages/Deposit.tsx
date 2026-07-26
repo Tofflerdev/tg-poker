@@ -1,6 +1,6 @@
 import React from 'react';
 import type { Socket } from 'socket.io-client';
-import { Button, Card } from '../components/ui';
+import { Button, Card, Icon } from '../components/ui';
 import { useTelegram } from '../hooks/useTelegram';
 import logoUrl from '../assets/logo.svg';
 import {
@@ -170,7 +170,13 @@ export const Deposit: React.FC<DepositProps> = ({ onBack, socket }) => {
 
         {status.kind === 'credited' ? (
           <Card variant="active" glow padding={24} style={{ textAlign: 'center' }}>
-            <div aria-hidden style={{ fontSize: 40, marginBottom: 10 }}>✅</div>
+            <Icon
+              name="deposit-success"
+              size={40}
+              variant="active"
+              glow
+              style={{ marginBottom: 10 }}
+            />
             <div style={{ fontSize: 18, fontWeight: 700, color: 'var(--color-active)' }}>
               +{status.chips.toLocaleString()} chips
             </div>

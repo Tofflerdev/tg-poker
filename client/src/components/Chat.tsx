@@ -2,6 +2,10 @@ import React, { useState, useRef, useEffect } from "react";
 import { Socket } from "socket.io-client";
 import type { ChatMessage, ExtendedServerEvents, ExtendedClientEvents, TelegramUser } from "../../../types/index";
 import { useTelegram } from "../hooks/useTelegram";
+import { Icon } from "./ui";
+
+/** Marks the client-local welcome line so it can carry the good-luck clover. */
+const WELCOME_MESSAGE_ID = "system-welcome";
 
 interface ChatProps {
   socket: Socket<ExtendedServerEvents, ExtendedClientEvents>;
@@ -36,9 +40,9 @@ const Chat: React.FC<ChatProps> = ({ socket, currentUser, tableId }) => {
       }
     };
 
-    const handleSystemMessage = (text: string) => {
+    const handleSystemMessage = (text: string, id?: string) => {
       const systemMessage: ChatMessage = {
-        id: `system-${Date.now()}`,
+        id: id ?? `system-${Date.now()}`,
         authorId: "system",
         authorName: "System",
         text,
@@ -51,8 +55,12 @@ const Chat: React.FC<ChatProps> = ({ socket, currentUser, tableId }) => {
     socket.on("chatMessage", handleChatMessage);
     socket.on("systemMessage", handleSystemMessage);
 
-    // Add welcome message
-    handleSystemMessage("Welcome to the table! Good luck 🍀");
+    // Welcome message. The clover that used to close this line is now an Icon
+    // rendered in the pill — the text itself stays plain so server-sent system
+    // messages and this one share the same rendering path. The fixed id is what
+    // marks it as the decorated one (ChatMessage is a shared type; not widening
+    // it for a single client-local flourish).
+    handleSystemMessage("Welcome to the table! Good luck", WELCOME_MESSAGE_ID);
 
     return () => {
       socket.off("chatMessage", handleChatMessage);
@@ -122,8 +130,11 @@ const Chat: React.FC<ChatProps> = ({ socket, currentUser, tableId }) => {
           if (msg.type === "system") {
             return (
               <div key={msg.id} className="flex justify-center my-2">
-                <div className="bg-white/10 text-gray-300 text-xs px-3 py-1 rounded-full italic">
+                <div className="bg-white/10 text-gray-300 text-xs px-3 py-1 rounded-full italic inline-flex items-center gap-1.5">
                   {msg.text}
+                  {msg.id === WELCOME_MESSAGE_ID && (
+                    <Icon name="chat-luck" size={13} variant="sit" />
+                  )}
                 </div>
               </div>
             );

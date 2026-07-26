@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useTelegram } from '../hooks/useTelegram';
 import type { UserProfile, TelegramUser } from '../../../types/index';
 import { Socket } from 'socket.io-client';
-import { Button, Card, TabBar } from '../components/ui';
+import { Button, Card, Icon, TabBar } from '../components/ui';
 import { AVATARS, avatarUrl, type AvatarId } from '../assets/avatars/manifest';
 import { HandHistoryList } from '../components/HandHistoryList';
 
@@ -267,16 +267,14 @@ export const ProfileSettings: React.FC<ProfileSettingsProps> = ({ socket, onBack
                 aria-label="Edit display name"
               >
                 <span>{currentUser.displayName}</span>
-                <span
-                  aria-hidden
-                  style={{
-                    fontSize: 13,
-                    color: 'var(--color-neutral)',
-                    opacity: 0.7,
-                  }}
-                >
-                  ✎
-                </span>
+                {/* 16px, not the glyph's old 13px: at 13 the raster pencil turns
+                    into a smudge. The button's aria-label carries the meaning. */}
+                <Icon
+                  name="edit-pencil"
+                  size={16}
+                  variant="neutral"
+                  style={{ opacity: 0.7 }}
+                />
               </button>
             )}
           </div>

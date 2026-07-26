@@ -17,7 +17,7 @@ export interface PredefinedTable {
 export const PREDEFINED_TABLES: PredefinedTable[] = [
   {
     id: 'table-funnel-1',
-    name: '🐣 Funnel Table',
+    name: 'Funnel Table',
     config: {
       smallBlind: 1,
       bigBlind: 2,
@@ -32,7 +32,7 @@ export const PREDEFINED_TABLES: PredefinedTable[] = [
   },
   {
     id: 'table-beginner-1',
-    name: '🌱 Beginner Table #1',
+    name: 'Beginner Table #1',
     config: {
       smallBlind: 5,
       bigBlind: 10,
@@ -47,7 +47,7 @@ export const PREDEFINED_TABLES: PredefinedTable[] = [
   },
   {
     id: 'table-beginner-2',
-    name: '🌱 Beginner Table #2',
+    name: 'Beginner Table #2',
     config: {
       smallBlind: 5,
       bigBlind: 10,
@@ -62,7 +62,7 @@ export const PREDEFINED_TABLES: PredefinedTable[] = [
   },
   {
     id: 'table-standard-1',
-    name: '⭐ Standard Table #1',
+    name: 'Standard Table #1',
     config: {
       smallBlind: 10,
       bigBlind: 20,
@@ -77,7 +77,7 @@ export const PREDEFINED_TABLES: PredefinedTable[] = [
   },
   {
     id: 'table-standard-2',
-    name: '⭐ Standard Table #2',
+    name: 'Standard Table #2',
     config: {
       smallBlind: 10,
       bigBlind: 20,
@@ -92,7 +92,7 @@ export const PREDEFINED_TABLES: PredefinedTable[] = [
   },
   {
     id: 'table-pro-1',
-    name: '🔥 Pro Table #1',
+    name: 'Pro Table #1',
     config: {
       smallBlind: 25,
       bigBlind: 50,
@@ -107,7 +107,7 @@ export const PREDEFINED_TABLES: PredefinedTable[] = [
   },
   {
     id: 'table-highstakes-1',
-    name: '💎 High Stakes',
+    name: 'High Stakes',
     config: {
       smallBlind: 100,
       bigBlind: 200,

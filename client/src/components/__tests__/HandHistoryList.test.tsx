@@ -24,7 +24,7 @@ function makeSocket() {
 const mkRow = (handId: string, over: Partial<HandHistoryDTO> = {}): HandHistoryDTO => ({
   handId,
   tableId: 'table-standard-1',
-  tableName: '⭐ Standard Table #1',
+  tableName: 'Standard Table #1',
   playedAt: new Date(Date.now() - 60_000).toISOString(),
   board: ['As', 'Kd', 'Qc', 'Jh', 'Th'],
   seat: 0,

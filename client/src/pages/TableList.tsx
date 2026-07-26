@@ -1,7 +1,7 @@
 import React from 'react';
 import type { TableInfo } from '../../../types/index';
 import { useTelegram } from '../hooks/useTelegram';
-import { Badge, Card, Button, type ActionTier } from '../components/ui';
+import { Badge, Card, Button, Icon, type ActionTier, type IconName } from '../components/ui';
 
 interface TableListProps {
   tables: TableInfo[];
@@ -42,6 +42,22 @@ const TIER_VARIANT: Record<Tier, ActionTier> = {
   Standard: 'call',
   Pro: 'raise',
   'High Stakes': 'fold',
+};
+
+/**
+ * Tier pictogram. These used to be emoji prefixed onto the table's `name` in
+ * server/config/tables.ts ('🐣 Funnel Table'), which leaked the decoration into
+ * everything else reading that string — hand history rows and the admin table
+ * list. The name is plain text again; the picture is a client-side concern
+ * derived from the same bigBlind classification as the tier colour, so icon and
+ * section header can never disagree.
+ */
+const TIER_ICON: Record<Tier, IconName> = {
+  Funnel: 'tier-funnel',
+  Beginner: 'tier-beginner',
+  Standard: 'tier-standard',
+  Pro: 'tier-pro',
+  'High Stakes': 'tier-highstakes',
 };
 
 function tierOf(t: TableInfo): Tier {
@@ -232,6 +248,7 @@ const TierSection: React.FC<TierSectionProps> = ({ tier, tables, onSelect }) => 
             key={table.id}
             table={table}
             variant={variant}
+            icon={TIER_ICON[tier]}
             onSelect={onSelect}
           />
         ))}
@@ -243,10 +260,11 @@ const TierSection: React.FC<TierSectionProps> = ({ tier, tables, onSelect }) => 
 interface TableRowProps {
   table: TableInfo;
   variant: ActionTier;
+  icon: IconName;
   onSelect: (table: TableInfo) => void;
 }
 
-const TableRow: React.FC<TableRowProps> = ({ table, variant, onSelect }) => {
+const TableRow: React.FC<TableRowProps> = ({ table, variant, icon, onSelect }) => {
   const isFull = table.playerCount >= table.maxPlayers;
   const isActive = table.status === 'playing';
 
@@ -281,6 +299,10 @@ const TableRow: React.FC<TableRowProps> = ({ table, variant, onSelect }) => {
           minHeight: 56,
         }}
       >
+        {/* Tier pictogram — 26px: the row is minHeight 56, so it reads without
+            crowding the name (the old emoji rode inline at the 14px name size) */}
+        <Icon name={icon} size={26} variant={variant} glow={isActive} />
+
         {/* Left: name + live indicator */}
         <div
           style={{

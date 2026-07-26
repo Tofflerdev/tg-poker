@@ -10,4 +10,5 @@ export { Button, type ButtonProps } from './Button';
 export { Card, type CardProps } from './Card';
 export { Tab, TabBar, type TabProps, type TabBarProps } from './Tab';
 export { Badge, type BadgeProps } from './Badge';
+export { Icon, type IconProps, type IconName } from './Icon';
 export { VARIANT_TIER, type ActionTier } from './tokens';

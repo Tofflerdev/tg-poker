@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import type { Socket } from 'socket.io-client';
-import { Card } from './ui';
+import { Card, Icon } from './ui';
 import { HandHistoryRow } from './HandHistoryRow';
 import { useHandHistory } from '../hooks/useHandHistory';
 
@@ -93,13 +93,10 @@ export const HandHistoryList: React.FC<HandHistoryListProps> = ({ socket, active
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              fontSize: 28,
-              color: 'var(--color-neutral)',
-              textShadow: '0 0 8px var(--glow-neutral)',
             }}
             aria-hidden
           >
-            ♠
+            <Icon name="history-empty" size={28} variant="neutral" glow />
           </div>
           <div
             style={{

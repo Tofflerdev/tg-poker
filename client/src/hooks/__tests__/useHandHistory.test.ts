@@ -46,7 +46,7 @@ describe('useHandHistory', () => {
     const sock = makeSocket();
     const { result } = renderHook(() => useHandHistory(sock as any, true));
     const fakeRows = [{
-      handId: 'h1', tableId: 't', tableName: '⭐', playedAt: 'iso',
+      handId: 'h1', tableId: 't', tableName: 'T', playedAt: 'iso',
       board: [], seat: 0, holeCards: [], netDelta: 0, finalChips: 0,
       showedDown: false, won: false, opponents: [],
     }];

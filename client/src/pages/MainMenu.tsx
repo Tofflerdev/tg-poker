@@ -3,7 +3,7 @@ import { Socket } from 'socket.io-client';
 import { useTelegram } from '../hooks/useTelegram';
 import type { TelegramUser, ExtendedClientEvents, ExtendedServerEvents } from '../../../types/index';
 import { ConsentBanner } from '../components/ConsentBanner';
-import { Card } from '../components/ui';
+import { Card, Icon } from '../components/ui';
 import { avatarUrl, type AvatarId } from '../assets/avatars/manifest';
 import logoUrl from '../assets/logo.svg';
 
@@ -541,13 +541,12 @@ export const MainMenu: React.FC<MainMenuProps> = ({
                 placeItems: 'center',
                 border: '1.5px solid color-mix(in srgb, var(--color-action-call) 50%, transparent)',
                 background: 'color-mix(in srgb, var(--color-action-call) 10%, transparent)',
-                color: 'var(--color-action-call)',
-                fontSize: 22,
                 flexShrink: 0,
-                textShadow: '0 0 8px var(--glow-call)',
               }}
             >
-              🃏
+              {/* fontSize/color/textShadow dropped with the emoji — the tile is
+                  just the frame now, the Icon owns its own colour and glow. */}
+              <Icon name="play-cards" size={22} variant="call" glow />
             </div>
           }
           right={<ChevronRight color="var(--color-action-call)" />}

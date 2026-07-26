@@ -1,5 +1,5 @@
 import React from 'react';
-import { Button, Card } from '../../components/ui';
+import { Button, Card, Icon } from '../../components/ui';
 import type { Socket } from 'socket.io-client';
 import type {
   AdminClientEvents,
@@ -48,9 +48,13 @@ const Flag: React.FC<{ code: string }> = ({ code }) => {
         border: '1px solid color-mix(in srgb, var(--color-action-fold) 45%, transparent)',
         background: 'color-mix(in srgb, var(--color-action-fold) 10%, transparent)',
         whiteSpace: 'nowrap',
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: 4,
       }}
     >
-      ⚑ {copy.label}
+      <Icon name="admin-flag" size={11} variant="fold" />
+      {copy.label}
     </span>
   );
 };

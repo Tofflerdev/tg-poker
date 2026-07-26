@@ -158,7 +158,7 @@ describe('HandHistoryRepository.findForUser — privacy + grouping', () => {
       .mockResolvedValueOnce([userRow({ tableId: 'table-standard-1' })])
       .mockResolvedValueOnce([userRow({ tableId: 'table-standard-1' })]);
     const result = await HandHistoryRepository.findForUser('1001');
-    expect(result[0].tableName).toBe('⭐ Standard Table #1');
+    expect(result[0].tableName).toBe('Standard Table #1');
   });
 
   it('falls back to raw tableId when tableId is unknown (defensive)', async () => {
