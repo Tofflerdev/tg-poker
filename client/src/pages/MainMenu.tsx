@@ -8,20 +8,27 @@ import { avatarUrl, type AvatarId } from '../assets/avatars/manifest';
 import logoUrl from '../assets/logo.svg';
 
 /**
- * MainMenu — Neon Strip redesign (Plan 02-04).
+ * MainMenu — Neon Strip, "player badge" layout.
  *
  * Layout (top→bottom, mobile-first):
- *   1. NightRiver logo header (Plan 02-03 asset)
- *   2. Four Card blocks in locked order (D-16):
- *        Deposit → Tables → Daily Bonus → Profile
- *   3. Footer legal links (ToS · Privacy · Responsible Gaming)
+ *   1. NightRiver wordmark, small and centered — the player is already inside
+ *      the app, so the logo is a marker, not the hero.
+ *   2. Identity hero: 96px avatar + name, the whole block is the entry to
+ *      Profile. The standalone Profile card is gone — the avatar replaces it.
+ *   3. Balance at display scale (monospace amber, the same treatment
+ *      SeatsDisplay gives stacks at the table).
+ *   4. Deposit / Withdraw as two equal neon buttons directly under the
+ *      balance — money and the actions on it read as one unit.
+ *   5. Play Now card.
+ *   6. Footer legal links (ToS · Privacy · Responsible Gaming)
+ *
+ * Only the arrangement changed from the Plan 02-04 four-card stack; every
+ * color, radius, border and glow still comes from the Neon Strip tokens via
+ * `<Card variant>` / `VARIANT_TIER`.
  *
  * Avatar rendering uses `avatarUrl(currentUser.avatarId)` via the Plan 02-02
  * manifest resolver. Telegram `photo_url` / legacy `avatarUrl` is NOT rendered
  * (D-15). Initial-letter fallback fires when avatarId is missing (D-14).
- *
- * All block styling routes through `<Card variant>` from `../components/ui`;
- * no inline NEON literal maps remain here.
  *
  * AppView navigation uses a single `onNavigate(view)` prop going forward so
  * Plan 02-08 can extend with `consent` / `legal-*` variants without reshaping
@@ -61,25 +68,46 @@ interface MainMenuProps {
   onTosAccepted: () => void;
 }
 
+// Tap feedback + keyboard focus ring. Inline styles can't express :active /
+// :focus-visible, so the interactive states live in one injected sheet —
+// same pattern SeatsDisplay uses for its keyframes.
+const MENU_CSS = `
+.nr-tap {
+  -webkit-tap-highlight-color: transparent;
+  transition: transform .1s;
+}
+.nr-tap:active { transform: scale(0.97); }
+.nr-tap:focus-visible {
+  outline: 2px solid var(--color-active);
+  outline-offset: 3px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .nr-tap { transition: none; }
+  .nr-tap:active { transform: none; }
+}
+`;
+
 // Avatar sub-component with initial-letter fallback (D-14, D-15).
-const MenuAvatar: React.FC<{ user: TelegramUser }> = ({ user }) => {
-  const src = avatarUrl(user.avatarId as AvatarId | undefined);
-  const initial = (user.displayName || user.firstName || '?').trim().charAt(0).toUpperCase();
+// `size` drives every dimension so the 96px hero and any future compact use
+// share one recipe.
+const MenuAvatar: React.FC<{ user: TelegramUser | null; size: number }> = ({ user, size }) => {
+  const src = avatarUrl(user?.avatarId as AvatarId | undefined);
+  const initial = (user?.displayName || user?.firstName || '?').trim().charAt(0).toUpperCase();
+  const ring = {
+    width: size,
+    height: size,
+    borderRadius: 999,
+    border: '2px solid color-mix(in srgb, var(--color-active) 55%, transparent)',
+    boxShadow: `0 0 ${Math.round(size / 4.5)}px var(--glow-call)`,
+    flexShrink: 0,
+  } satisfies React.CSSProperties;
 
   if (src) {
     return (
       <img
         src={src}
-        alt={user.displayName || user.firstName}
-        style={{
-          width: 48,
-          height: 48,
-          borderRadius: 999,
-          objectFit: 'cover',
-          border: '1.5px solid color-mix(in srgb, var(--color-active) 55%, transparent)',
-          boxShadow: '0 0 10px var(--glow-call)',
-          flexShrink: 0,
-        }}
+        alt=""
+        style={{ ...ring, objectFit: 'cover', display: 'block' }}
       />
     );
   }
@@ -88,23 +116,80 @@ const MenuAvatar: React.FC<{ user: TelegramUser }> = ({ user }) => {
     <div
       aria-hidden
       style={{
-        width: 48,
-        height: 48,
-        borderRadius: 999,
+        ...ring,
         display: 'grid',
         placeItems: 'center',
         background: 'color-mix(in srgb, var(--color-active) 12%, transparent)',
-        border: '1.5px solid color-mix(in srgb, var(--color-active) 55%, transparent)',
         color: 'var(--color-active)',
-        boxShadow: '0 0 10px var(--glow-call)',
-        fontSize: 20,
+        fontSize: Math.round(size * 0.42),
         fontWeight: 700,
-        flexShrink: 0,
         textShadow: '0 0 6px var(--glow-call)',
       }}
     >
       {initial}
     </div>
+  );
+};
+
+// Thousands groups separated by a 0.22em gap instead of a full monospace
+// space — at display size a real space splits the figure into two numbers.
+// The readable value is exposed once, on the balance block's aria-label.
+const GroupedDigits: React.FC<{ value: number }> = ({ value }) => (
+  <>
+    {value
+      .toLocaleString('en-US')
+      .split(',')
+      .map((group, i) => (
+        <React.Fragment key={i}>
+          {i > 0 && <span style={{ display: 'inline-block', width: '0.22em' }} />}
+          {group}
+        </React.Fragment>
+      ))}
+  </>
+);
+
+// Deposit / Withdraw: bare neon rectangles, no Card wrapper — the same
+// transparent-with-inner-glow recipe as the GameControls action buttons.
+const MoneyButton: React.FC<{
+  tier: 'raise' | 'call';
+  glyph: string;
+  label: string;
+  ariaLabel: string;
+  onClick: () => void;
+}> = ({ tier, glyph, label, ariaLabel, onClick }) => {
+  const color = tier === 'raise' ? 'var(--color-action-raise)' : 'var(--color-action-call)';
+  const glow = tier === 'raise' ? 'var(--glow-raise)' : 'var(--glow-call)';
+  return (
+    <button
+      type="button"
+      aria-label={ariaLabel}
+      onClick={onClick}
+      className="nr-tap"
+      style={{
+        height: 64,
+        borderRadius: 12,
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 4,
+        background: 'transparent',
+        border: `1.5px solid color-mix(in srgb, ${color} 55%, transparent)`,
+        boxShadow: `inset 0 0 12px ${glow}`,
+        color,
+        textShadow: `0 0 8px ${glow}`,
+        fontSize: 13.5,
+        fontWeight: 700,
+        letterSpacing: '0.06em',
+        textTransform: 'uppercase',
+        cursor: 'pointer',
+      }}
+    >
+      <span aria-hidden style={{ fontSize: 17, lineHeight: 1 }}>
+        {glyph}
+      </span>
+      {label}
+    </button>
   );
 };
 
@@ -133,7 +218,7 @@ const BlockCard: React.FC<{
           }
         : undefined
     }
-    className={onClick ? 'active:scale-[0.98]' : undefined}
+    className={onClick ? 'nr-tap' : undefined}
     style={{
       cursor: onClick ? 'pointer' : 'default',
       transition: 'transform .1s',
@@ -181,9 +266,10 @@ const BlockRow: React.FC<{
   title: string;
   subtitle?: string;
   titleColor: string;
+  titleSize?: number;
   right?: React.ReactNode;
   left?: React.ReactNode;
-}> = ({ title, subtitle, titleColor, right, left }) => (
+}> = ({ title, subtitle, titleColor, titleSize = 16, right, left }) => (
   <div
     style={{
       display: 'flex',
@@ -197,7 +283,7 @@ const BlockRow: React.FC<{
       <div
         style={{
           color: titleColor,
-          fontSize: 16,
+          fontSize: titleSize,
           fontWeight: 700,
           letterSpacing: '0.04em',
           textTransform: 'uppercase',
@@ -269,7 +355,6 @@ export const MainMenu: React.FC<MainMenuProps> = ({
   };
 
   const displayName = user?.displayName || user?.firstName || 'Player';
-  const balanceFormatted = user ? user.balance.toLocaleString() : '—';
 
   return (
     <div
@@ -286,19 +371,21 @@ export const MainMenu: React.FC<MainMenuProps> = ({
         margin: '0 auto',
       }}
     >
-      {/* ─── Header: NightRiver logo ─────────────────────────── */}
+      <style>{MENU_CSS}</style>
+
+      {/* ─── Header: NightRiver wordmark, deliberately small ──── */}
       <header
         style={{
           display: 'flex',
           justifyContent: 'center',
           alignItems: 'center',
-          padding: '8px 0 14px',
+          padding: '2px 0 0',
         }}
       >
         <img
           src={logoUrl}
           alt="NightRiver"
-          style={{ height: 40, width: 'auto', maxWidth: '100%' }}
+          style={{ height: 30, width: 'auto', maxWidth: '100%', opacity: 0.85 }}
         />
       </header>
 
@@ -323,74 +410,116 @@ export const MainMenu: React.FC<MainMenuProps> = ({
         />
       )}
 
-      {/* ─── Block 1: Deposit (first-position per D-16 / DEPOSIT-01) ─ */}
-      <BlockCard
-        variant="raise"
-        onClick={nav('deposit', 'medium')}
-        ariaLabel="Deposit — add chips"
+      {/* ─── Identity hero: avatar + name, the entry to Profile ─
+          Replaces the standalone Profile card — the avatar is the link. */}
+      <button
+        type="button"
+        aria-label="Profile and settings"
+        onClick={nav('profile', 'light')}
+        className="nr-tap"
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          gap: 10,
+          padding: '4px 0 0',
+          background: 'transparent',
+          border: 'none',
+          cursor: 'pointer',
+          color: 'inherit',
+          width: '100%',
+        }}
       >
-        <BlockRow
-          title="Deposit"
-          subtitle="Add chips with USDT"
-          titleColor="var(--color-action-raise)"
-          left={
-            <div
-              aria-hidden
-              style={{
-                width: 40,
-                height: 40,
-                borderRadius: 12,
-                display: 'grid',
-                placeItems: 'center',
-                border: '1.5px solid color-mix(in srgb, var(--color-action-raise) 50%, transparent)',
-                background: 'color-mix(in srgb, var(--color-action-raise) 10%, transparent)',
-                color: 'var(--color-action-raise)',
-                fontSize: 22,
-                flexShrink: 0,
-                textShadow: '0 0 8px var(--glow-raise)',
-              }}
-            >
-              💰
-            </div>
-          }
-          right={<ChevronRight color="var(--color-action-raise)" />}
-        />
-      </BlockCard>
+        <MenuAvatar user={user} size={96} />
+        <span
+          style={{
+            fontSize: 15,
+            fontWeight: 700,
+            letterSpacing: '0.06em',
+            textTransform: 'uppercase',
+            color: '#e0f7fa',
+            maxWidth: '100%',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+          }}
+        >
+          {displayName}
+        </span>
+        <span
+          aria-hidden
+          style={{
+            fontFamily: 'monospace',
+            fontSize: 11,
+            letterSpacing: '0.1em',
+            color: 'var(--color-neutral)',
+            opacity: 0.7,
+          }}
+        >
+          Profile and stats ›
+        </span>
+      </button>
 
-      {/* ─── Block 1b: Withdraw (phase 5 §I) ─────────────────── */}
-      <BlockCard
-        variant="active"
-        onClick={nav('withdraw', 'medium')}
-        ariaLabel="Withdraw — cash out chips"
+      {/* ─── Balance: the largest object on the screen ────────── */}
+      <div
+        role="group"
+        aria-label={user ? `Balance ${user.balance.toLocaleString('en-US')} chips` : 'Balance unavailable'}
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          gap: 6,
+          padding: '2px 0 4px',
+        }}
       >
-        <BlockRow
-          title="Withdraw"
-          subtitle="Cash out to USDT"
-          titleColor="var(--color-active)"
-          left={
-            <div
-              aria-hidden
-              style={{
-                width: 40,
-                height: 40,
-                borderRadius: 12,
-                display: 'grid',
-                placeItems: 'center',
-                border: '1.5px solid color-mix(in srgb, var(--color-active) 50%, transparent)',
-                background: 'color-mix(in srgb, var(--color-active) 10%, transparent)',
-                color: 'var(--color-active)',
-                fontSize: 22,
-                flexShrink: 0,
-              }}
-            >
-              🏦
-            </div>
-          }
-          right={<ChevronRight color="var(--color-active)" />}
-        />
-      </BlockCard>
+        <span
+          aria-hidden
+          style={{
+            fontFamily: 'monospace',
+            fontWeight: 700,
+            fontSize: 58,
+            lineHeight: 1,
+            letterSpacing: '-0.01em',
+            color: 'var(--color-chip)',
+            textShadow: '0 0 14px var(--glow-raise)',
+          }}
+        >
+          {user ? <GroupedDigits value={user.balance} /> : '—'}
+        </span>
+        <span
+          aria-hidden
+          style={{
+            fontFamily: 'monospace',
+            fontSize: 12,
+            letterSpacing: '0.14em',
+            textTransform: 'uppercase',
+            color: 'var(--color-chip)',
+            opacity: 0.6,
+          }}
+        >
+          chips
+        </span>
+      </div>
 
-      {/* ─── Block 2: Tables ─────────────────────────────────── */}
+      {/* ─── Money actions: equal weight, directly under the sum ─ */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+        <MoneyButton
+          tier="raise"
+          glyph="＋"
+          label="Deposit"
+          ariaLabel="Deposit — add chips"
+          onClick={nav('deposit', 'medium')}
+        />
+        <MoneyButton
+          tier="call"
+          glyph="↑"
+          label="Withdraw"
+          ariaLabel="Withdraw — cash out chips"
+          onClick={nav('withdraw', 'medium')}
+        />
+      </div>
+
+      {/* ─── Tables ──────────────────────────────────────────── */}
       <BlockCard
         variant="call"
         onClick={nav('tables', 'medium')}
@@ -400,6 +529,7 @@ export const MainMenu: React.FC<MainMenuProps> = ({
           title="Play Now"
           subtitle="Browse tables and join a seat"
           titleColor="var(--color-action-call)"
+          titleSize={18}
           left={
             <div
               aria-hidden
@@ -422,30 +552,6 @@ export const MainMenu: React.FC<MainMenuProps> = ({
           }
           right={<ChevronRight color="var(--color-action-call)" />}
         />
-      </BlockCard>
-
-      {/* ─── Block 3: Profile ────────────────────────────────── */}
-      <BlockCard
-        variant="active"
-        onClick={nav('profile', 'light')}
-        ariaLabel="Profile and settings"
-      >
-        {user ? (
-          <BlockRow
-            title={displayName}
-            subtitle={`${balanceFormatted} chips`}
-            titleColor="var(--color-active)"
-            left={<MenuAvatar user={user} />}
-            right={<ChevronRight color="var(--color-active)" />}
-          />
-        ) : (
-          <BlockRow
-            title="Profile"
-            subtitle="Settings and stats"
-            titleColor="var(--color-active)"
-            right={<ChevronRight color="var(--color-active)" />}
-          />
-        )}
       </BlockCard>
 
       {/* Spacer to push footer down when there's vertical room */}
