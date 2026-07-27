@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { Socket } from "socket.io-client";
 import { GameState, ExtendedClientEvents, ExtendedServerEvents } from "../../../types/index";
 import { useTelegram } from "../hooks/useTelegram";
@@ -42,6 +42,52 @@ const TOKEN = {
   call:  { color: 'var(--color-action-call)',  glow: 'var(--glow-call)' },
   raise: { color: 'var(--color-action-raise)', glow: 'var(--glow-raise)' },
 } as const;
+
+/* Must match the dock-fade-* animation duration in styles/neon.css. */
+const FADE_MS = 160;
+
+/**
+ * Bottom dock shell. Owns the panel chrome (background, border, safe-area
+ * padding, vertical centering) and cross-fades its contents when `stateKey`
+ * changes. The reserved height lives on the `.dock-slot` wrapper in GameRoom —
+ * this panel is bottom-anchored inside it and may overflow upward over the
+ * felt, so the table above never re-lays-out. See .dock-slot in neon.css.
+ *
+ * `stateKey` deliberately ignores within-state churn (countdown ticks, the
+ * name of whoever is thinking) so those update in place without a fade.
+ */
+const Dock: React.FC<{ stateKey: string; children: React.ReactNode }> = ({ stateKey, children }) => {
+  const [outgoing, setOutgoing] = useState<{ key: string; node: React.ReactNode } | null>(null);
+  const [renderedKey, setRenderedKey] = useState(stateKey);
+  const lastNode = useRef<React.ReactNode>(children);
+
+  // Derived-state update during render: snapshot the previous contents in the
+  // same commit that swaps them in, so the fade-out starts on the first frame.
+  if (stateKey !== renderedKey) {
+    setOutgoing({ key: renderedKey, node: lastNode.current });
+    setRenderedKey(stateKey);
+  }
+  lastNode.current = children;
+
+  useEffect(() => {
+    if (!outgoing) return;
+    const t = setTimeout(() => setOutgoing(null), FADE_MS);
+    return () => clearTimeout(t);
+  }, [outgoing]);
+
+  return (
+    <div className="dock-panel">
+      {outgoing && (
+        <div key={`out-${outgoing.key}`} className="dock-layer dock-layer--out" aria-hidden="true">
+          {outgoing.node}
+        </div>
+      )}
+      <div key={`in-${stateKey}`} className="dock-layer dock-layer--in">
+        {children}
+      </div>
+    </div>
+  );
+};
 
 const GameControls: React.FC<Props> = ({ socket, gameState, mySeat }) => {
   const [raiseAmount, setRaiseAmount] = useState(20);
@@ -92,10 +138,7 @@ const GameControls: React.FC<Props> = ({ socket, gameState, mySeat }) => {
     }
   }, [isMyTurn, minRaise]);
 
-  /* ── Safe-area bottom padding (Android nav bar + iOS home indicator) ── */
-  const safeBottom: React.CSSProperties = {
-    paddingBottom: 'max(env(safe-area-inset-bottom, 0px), 12px)',
-  };
+  /* Safe-area bottom padding + panel chrome now live on <Dock> / .dock-panel. */
 
   /* ── blind-debt phase 2: post now / wait for BB toggle.
      Shown whenever my debt is unpaid and I'm not dealt in — both between hands
@@ -140,10 +183,8 @@ const GameControls: React.FC<Props> = ({ socket, gameState, mySeat }) => {
     const eligiblePlayers = gameState.seats.filter(p => p && p.chips > 0).length;
 
     return (
-      <div
-        className="text-center backdrop-blur-md border-t border-white/5"
-        style={{ ...safeBottom, background: 'rgba(10,10,14,0.85)', padding: '14px 16px' }}
-      >
+      <Dock stateKey={`status:${gameState.stage}`}>
+        <div className="text-center" style={{ padding: '12px 16px' }}>
         {gameState.stage === 'showdown' && (
           <div
             className="mb-2 font-bold text-base tracking-wide"
@@ -177,7 +218,8 @@ const GameControls: React.FC<Props> = ({ socket, gameState, mySeat }) => {
             Show Cards
           </Button>
         )}
-      </div>
+        </div>
+      </Dock>
     );
   }
 
@@ -186,19 +228,18 @@ const GameControls: React.FC<Props> = ({ socket, gameState, mySeat }) => {
      ═══════════════════════════════════════════ */
   if (!myPlayer || !isMyTurn || myPlayer.folded || myPlayer.allIn) {
     return (
-      <div
-        className="text-center backdrop-blur-md border-t border-white/5"
-        style={{ ...safeBottom, background: 'rgba(10,10,14,0.85)', padding: '14px 16px' }}
-      >
-        {/* blind-debt phase 2: a mid-hand joiner sits cardless through this hand —
-            let them pick post/wait before the next one starts. */}
-        {showBlindDebtToggle && renderBlindDebtToggle()}
-        <div className="text-sm" style={{ color: '#546e7a' }}>
-          {gameState.currentPlayer !== null
-            ? `${gameState.seats[gameState.currentPlayer]?.displayName || gameState.seats[gameState.currentPlayer]?.id.slice(0, 4)} is thinking...`
-            : "Waiting..."}
+      <Dock stateKey="idle">
+        <div className="text-center" style={{ padding: '12px 16px' }}>
+          {/* blind-debt phase 2: a mid-hand joiner sits cardless through this hand —
+              let them pick post/wait before the next one starts. */}
+          {showBlindDebtToggle && renderBlindDebtToggle()}
+          <div className="text-sm" style={{ color: '#546e7a' }}>
+            {gameState.currentPlayer !== null
+              ? `${gameState.seats[gameState.currentPlayer]?.displayName || gameState.seats[gameState.currentPlayer]?.id.slice(0, 4)} is thinking...`
+              : "Waiting..."}
+          </div>
         </div>
-      </div>
+      </Dock>
     );
   }
 
@@ -237,10 +278,7 @@ const GameControls: React.FC<Props> = ({ socket, gameState, mySeat }) => {
      ═══════════════════════════════════════════ */
   if (isMobile && showBetPanel) {
     return (
-      <div
-        className="border-t border-white/5"
-        style={{ ...safeBottom, background: 'rgba(10,10,14,0.95)' }}
-      >
+      <Dock stateKey="bet">
         {/* Presets */}
         <div className="flex gap-2 px-4 pt-3 pb-2">
           {[
@@ -340,7 +378,7 @@ const GameControls: React.FC<Props> = ({ socket, gameState, mySeat }) => {
             +
           </Button>
         </div>
-      </div>
+      </Dock>
     );
   }
 
@@ -349,10 +387,7 @@ const GameControls: React.FC<Props> = ({ socket, gameState, mySeat }) => {
      ═══════════════════════════════════════════ */
   if (isMobile) {
     return (
-      <div
-        className="border-t border-white/5"
-        style={{ ...safeBottom, background: 'rgba(10,10,14,0.92)' }}
-      >
+      <Dock stateKey="action">
         {/* Three main buttons */}
         <div className="flex gap-2.5 px-4 pt-3 pb-1.5">
           {/* Fold */}
@@ -420,7 +455,7 @@ const GameControls: React.FC<Props> = ({ socket, gameState, mySeat }) => {
             <span style={{ opacity: 0.5, fontSize: 11, fontWeight: 600 }}>{myChips}</span>
           </Button>
         </div>
-      </div>
+      </Dock>
     );
   }
 
@@ -428,10 +463,8 @@ const GameControls: React.FC<Props> = ({ socket, gameState, mySeat }) => {
      DESKTOP — Full layout
      ═══════════════════════════════════════════ */
   return (
-    <div
-      className="border-t border-white/5"
-      style={{ background: 'rgba(10,10,14,0.90)', padding: '14px 20px 20px' }}
-    >
+    <Dock stateKey="desktop">
+      <div style={{ padding: '14px 20px 6px' }}>
       {/* Raise controls */}
       <div
         className="mb-3 flex items-center gap-3"
@@ -562,7 +595,8 @@ const GameControls: React.FC<Props> = ({ socket, gameState, mySeat }) => {
           All-In
         </Button>
       </div>
-    </div>
+      </div>
+    </Dock>
   );
 };
 

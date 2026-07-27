@@ -201,8 +201,15 @@ export const GameRoom: React.FC<GameRoomProps> = ({
           </div>
         </div>
 
-        {/* Game Controls — docked at bottom */}
-        <div className="w-full z-20">
+        {/*
+          Game Controls — docked at bottom in a slot of CONSTANT height
+          (.dock-slot, styles/neon.css). The table area above is flex-1, and on
+          mobile the felt is sized to exactly that leftover space — so a dock
+          that grew/shrank with its contents rescaled the whole table on every
+          turn. The slot pins that height; the panel inside is bottom-anchored
+          and overflows upward over the felt for the rare tall states.
+        */}
+        <div className="dock-slot w-full z-20">
           <GameControls
             socket={socket}
             gameState={gameState}

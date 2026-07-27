@@ -25,3 +25,83 @@
   --glow-sit: rgba(76, 175, 80, 0.35);
   --glow-neutral: rgba(176, 190, 197, 0.15);
 }
+
+/* ── Action dock ────────────────────────────────────────────────────────────
+   The dock reserves a CONSTANT height so the table above it never re-lays-out
+   when the controls swap state. This matters because the mobile table sizes
+   itself as min(idealHeight, availableHeight) (Table.tsx) — the ideal height
+   always exceeds what's available, so the felt is exactly the leftover space
+   and every dock height change rescaled the whole table ("bouncing picture").
+
+   The panel is bottom-anchored inside that reserved slot and is free to grow
+   UPWARD over the felt for the rare tall states (Show Cards on showdown, the
+   blind-debt toggle) — those overflow instead of pushing the table.
+
+   Reserve = the mobile my-turn bar (12 + 56 + 6 + 38 + 6 = 118) and the
+   desktop full layout (14 + 60 + 12 + 58 + 20 = 164), plus safe-area bottom.
+   ──────────────────────────────────────────────────────────────────────── */
+:root {
+  --dock-safe-bottom: max(env(safe-area-inset-bottom, 0px), 12px);
+  --dock-h: calc(118px + var(--dock-safe-bottom));
+}
+
+/* Matches MOBILE_BREAKPOINT in hooks/useIsMobile.ts */
+@media (min-width: 768px) {
+  :root {
+    --dock-h: calc(164px + var(--dock-safe-bottom));
+  }
+}
+
+.dock-slot {
+  position: relative;
+  height: var(--dock-h);
+  flex: none;
+}
+
+.dock-panel {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  min-height: var(--dock-h);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding-bottom: var(--dock-safe-bottom);
+  background: rgba(10, 10, 14, 0.92);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+/* Cross-fade between dock states: the outgoing snapshot overlays the incoming
+   one and fades out, so the dark bar itself never blinks — only its contents. */
+.dock-layer--out {
+  position: absolute;
+  inset: 0;
+  padding-bottom: var(--dock-safe-bottom);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  pointer-events: none;
+  animation: dock-fade-out 160ms ease forwards;
+}
+
+.dock-layer--in {
+  animation: dock-fade-in 160ms ease;
+}
+
+@keyframes dock-fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+@keyframes dock-fade-out {
+  from { opacity: 1; }
+  to   { opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dock-layer--in { animation: none; }
+  .dock-layer--out { display: none; }
+}
