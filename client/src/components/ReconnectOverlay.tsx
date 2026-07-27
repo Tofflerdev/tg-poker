@@ -12,7 +12,8 @@ import type { ExtendedServerEvents, ExtendedClientEvents } from '../../../types/
  * 'disconnect' event. A duration, not a deadline: nothing to clock-sync.
  *
  * Sub-views:
- *   - reconnecting  — counting down, with a manual reload as the escape hatch
+ *   - reconnecting  — SEATED only: counting down the held seat, manual reload escape
+ *   - offline       — NOT seated: a plain "connection lost" banner, no clock
  *   - vacated       — window ran out; the seat was cashed out while away
  *   - replaced      — logged in elsewhere (D-A3, instantaneous, bypasses debounce)
  *
@@ -21,12 +22,23 @@ import type { ExtendedServerEvents, ExtendedClientEvents } from '../../../types/
  * nothing to dismiss. Sitting out is now an invisible chip-protection step, not a
  * dead end the player has to click out of.
  *
+ * `isSeated` gates everything seat-shaped. A player idling in the menu (or with the
+ * app backgrounded) drops the socket exactly like a seated player does, but has no
+ * seat to hold and no chips at stake — the server's disconnect handler does nothing
+ * for them (GraceRegistry.arm runs only for a seated telegramId). Showing them the
+ * countdown and then "Removed from table — chips returned" described events that
+ * never happened; reported from prod on 2026-07-27. Unseated disconnects now get the
+ * non-blocking banner and never reach a terminal sub-view.
+ *
  * Pure consumer of socket lifecycle events:
  *   'disconnect' → debounce, then show     'connect' → dismiss
  *   'tableJoined' → dismiss (server pushed a snapshot — D-A2)
  *   'replacedBySession' → replaced view
  *
- * Pitfall 5 (rapid disconnect/connect flicker) is closed by the debounce ref.
+ * Pitfall 5 (rapid disconnect/connect flicker) is closed by the debounce ref, plus a
+ * socket.connected re-check when the debounce fires: a backgrounded WebView freezes
+ * timers and runs them all on resume, so the debounce can elapse "instantly" against
+ * a transport that is already back.
  */
 
 export const RECONNECT_OVERLAY_DEBOUNCE_MS = 1500;
@@ -37,6 +49,11 @@ export interface ReconnectOverlayProps {
   socket: Socket<ExtendedServerEvents, ExtendedClientEvents>;
   /** Seat-holding window from the server's tableJoined; null until seated. */
   reconnectWindowMs?: number | null;
+  /**
+   * Is the player actually sitting at a table right now? Only then is there a seat
+   * being held, a countdown worth showing, and a possible "vacated" ending.
+   */
+  isSeated?: boolean;
   /** Callback for the "Back to Tables" button in the vacated sub-view. */
   onDismissExpired?: () => void;
 }
@@ -44,12 +61,14 @@ export interface ReconnectOverlayProps {
 type OverlayState =
   | { kind: 'hidden' }
   | { kind: 'reconnecting'; expiresAt: number }
+  | { kind: 'offline' }
   | { kind: 'vacated' }
   | { kind: 'replaced' };
 
 export function ReconnectOverlay({
   socket,
   reconnectWindowMs,
+  isSeated = false,
   onDismissExpired,
 }: ReconnectOverlayProps): JSX.Element | null {
   const [overlayState, setOverlayState] = useState<OverlayState>({ kind: 'hidden' });
@@ -58,12 +77,17 @@ export function ReconnectOverlay({
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const graceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const tickRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  // Read the freshest window from the closure-captured disconnect callback.
+  // Read the freshest window/seat from the closure-captured disconnect callback.
   const windowRef = useRef<number>(reconnectWindowMs ?? DEFAULT_RECONNECT_WINDOW_MS);
+  const seatedRef = useRef<boolean>(isSeated);
 
   useEffect(() => {
     windowRef.current = reconnectWindowMs ?? DEFAULT_RECONNECT_WINDOW_MS;
   }, [reconnectWindowMs]);
+
+  useEffect(() => {
+    seatedRef.current = isSeated;
+  }, [isSeated]);
 
   const clearAllTimers = useCallback(() => {
     if (debounceRef.current) {
@@ -89,6 +113,17 @@ export function ReconnectOverlay({
       }
       debounceRef.current = setTimeout(() => {
         debounceRef.current = null;
+        // A backgrounded WebView freezes timers and fires them all on resume, so this
+        // can run against a transport that reconnected in the meantime.
+        if (socket.connected) return;
+
+        // Nothing seated → nothing held → no clock and no terminal state. Just say the
+        // connection dropped.
+        if (!seatedRef.current) {
+          setOverlayState({ kind: 'offline' });
+          return;
+        }
+
         const graceMs = windowRef.current;
         const startedAt = Date.now();
         // Sync tickNow to the moment the overlay opens so the first render shows the
@@ -111,7 +146,9 @@ export function ReconnectOverlay({
       // The transport is back. App.tsx re-authenticates on this same event, which is
       // what actually restores the session and the seat.
       clearAllTimers();
-      setOverlayState((prev) => (prev.kind === 'reconnecting' ? { kind: 'hidden' } : prev));
+      setOverlayState((prev) =>
+        prev.kind === 'reconnecting' || prev.kind === 'offline' ? { kind: 'hidden' } : prev
+      );
     };
 
     const onTableJoined = () => {
@@ -167,6 +204,58 @@ export function ReconnectOverlay({
     cursor: 'pointer',
     boxShadow: '0 0 8px var(--glow-call)',
   };
+
+  if (overlayState.kind === 'offline') {
+    // Not seated: nothing is at stake, so this must not take the screen hostage the
+    // way the seated countdown does. A top-docked neutral banner — the menu stays
+    // readable, and the moment the transport returns it disappears by itself.
+    return (
+      <div
+        data-testid="reconnect-banner-offline"
+        role="status"
+        style={{
+          position: 'fixed',
+          top: 'max(env(safe-area-inset-top), 12px)',
+          left: 12,
+          right: 12,
+          zIndex: 1000,
+          background: 'rgba(10,10,14,0.9)',
+          backdropFilter: 'blur(12px)',
+          WebkitBackdropFilter: 'blur(12px)',
+          border: '1.5px solid rgba(176,190,197,0.6)',
+          borderRadius: 14,
+          boxShadow: '0 0 12px rgba(176,190,197,0.25)',
+          padding: '10px 12px',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 12,
+          fontFamily: 'sans-serif',
+        }}
+      >
+        <div style={{ flex: 1, color: 'var(--color-neutral)', fontSize: 13, lineHeight: 1.4 }}>
+          Connection lost — reconnecting…
+        </div>
+        <button
+          type="button"
+          data-testid="reconnect-banner-reload"
+          onClick={() => window.location.reload()}
+          style={{
+            background: 'transparent',
+            border: '1.5px solid rgba(176,190,197,0.6)',
+            color: 'var(--color-neutral)',
+            borderRadius: 10,
+            minWidth: 44,
+            minHeight: 44,
+            padding: '0 12px',
+            cursor: 'pointer',
+          }}
+          className="active:scale-95"
+        >
+          Reload
+        </button>
+      </div>
+    );
+  }
 
   if (overlayState.kind === 'reconnecting') {
     const remainingSec = Math.ceil(Math.max(0, overlayState.expiresAt - tickNow) / 1000);

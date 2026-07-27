@@ -292,7 +292,7 @@ const settlePendingExits = async (tableId: string): Promise<void> => {
       } else {
         // Nobody to tell right now (they dropped, or expiry vacated them while away).
         // Park it so auth delivers the news instead of the balance just changing.
-        ExitNotices.record(telegramId, { tableId, refunded });
+        ExitNotices.record(telegramId, { tableId, refunded, reason });
       }
       console.log(`[Exit] settled telegramId=${telegramId} tableId=${tableId} reason=${reason} refunded=${refunded}`);
     } catch (err) {
@@ -691,7 +691,9 @@ io.on("connection", (socket) => {
           tableId: notice.tableId,
           refunded: notice.refunded,
           balance: user.balance,
-          reason: 'disconnected',
+          // The parked reason, not a hardcoded 'disconnected': pressing leave mid-hand
+          // and then closing the app used to come back as "you were away too long".
+          reason: notice.reason,
         });
       }
       console.log("[Auth] Success for:", user.username || user.displayName || user.telegramId,
@@ -1442,7 +1444,13 @@ io.on("connection", (socket) => {
         console.error('[Disconnect] failed to mark disconnectedAt:', err);
       }
 
-      GraceRegistry.arm(telegramId, seatedTable.id);
+      // A player with an exit already in flight is only still seated because the
+      // refund waits for the hand boundary — they pressed leave and are sitting in
+      // the menu. Arming a seat-holding window for them would end in a vacate notice
+      // ("you were away too long") for a seat they had already given up.
+      if (!PendingExits.isPending(telegramId)) {
+        GraceRegistry.arm(telegramId, seatedTable.id);
+      }
       updateTableState(seatedTable.id);
     }
 

@@ -162,7 +162,7 @@ async function onExpire(telegramId: string): Promise<void> {
     const result = await UserRepository.refundCurrentChips(telegramId);
     const refunded = result?.refunded ?? 0;
     // They are not connected (that is what expiry means), so park the notice for auth.
-    ExitNotices.record(telegramId, { tableId, refunded });
+    ExitNotices.record(telegramId, { tableId, refunded, reason: 'disconnected' });
     console.info('[Grace] expired telegramId=%s — vacated, refunded %d', telegramId, refunded);
   } catch (err) {
     console.error('[Grace] refund failed for telegramId=%s:', telegramId, err);

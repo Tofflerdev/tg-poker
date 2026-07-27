@@ -508,6 +508,10 @@ const App: React.FC = () => {
       <ReconnectOverlay
         socket={socket}
         reconnectWindowMs={reconnectWindowMs}
+        // Only a seated player has a seat being held: without this, idling in the
+        // menu (or backgrounding the app) showed the seat countdown and then
+        // "Removed from table — chips returned" for a table they were never at.
+        isSeated={currentTableId !== null}
         onDismissExpired={() => {
           setView('menu');
           setCurrentTableId(null);

@@ -145,6 +145,60 @@ describe('reconnect resume (exit-reconnect B1/B4)', () => {
     });
   });
 
+  /**
+   * Reported from prod 2026-07-27: leaving the phone idle (or backgrounding the app)
+   * on the main menu dropped the socket, and the app then told a player who had never
+   * sat down that their seat was being held and, later, that they had been removed
+   * from the table and their chips returned. App gates the whole story on
+   * `isSeated={currentTableId !== null}` now.
+   */
+  it('an idle disconnect in the menu shows no seat countdown and no "removed from table"', async () => {
+    render(<App />);
+    act(() => { socketMock._trigger('authSuccess', authOk); });
+    await waitFor(() => expect(menuShown()).toBeInTheDocument());
+
+    // Fake timers only from here: the debounce + the (unwanted) window both live in
+    // the overlay, and waitFor above needed real ones.
+    vi.useFakeTimers();
+    try {
+      socketMock.connected = false;
+      act(() => { socketMock._trigger('disconnect'); });
+      // Two minutes away — past the 120 s seat-holding window the seated path uses.
+      act(() => { vi.advanceTimersByTime(1500 + 120_000 + 1000); });
+
+      expect(screen.queryByTestId('reconnect-overlay')).not.toBeInTheDocument();
+      expect(screen.queryByTestId('reconnect-overlay-vacated')).not.toBeInTheDocument();
+      // What they do get: a plain, non-blocking "connection lost" banner over a menu
+      // that is still there.
+      expect(screen.getByTestId('reconnect-banner-offline')).toBeInTheDocument();
+      expect(menuShown()).toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('a seated player still gets the seat countdown on the same idle disconnect', async () => {
+    render(<App />);
+    act(() => {
+      socketMock._trigger('tableJoined', {
+        tableId: 'table-funnel-1', seat: 0, state: gameState, reconnectWindowMs: 120_000,
+      });
+    });
+    act(() => { socketMock._trigger('authSuccess', authOk); });
+    await waitFor(() => expect(tableShown()).toBeInTheDocument());
+
+    vi.useFakeTimers();
+    try {
+      socketMock.connected = false;
+      act(() => { socketMock._trigger('disconnect'); });
+      act(() => { vi.advanceTimersByTime(1500); });
+      // There IS a seat being held here, so the countdown is the truth.
+      expect(screen.getByTestId('reconnect-overlay')).toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('still lands in the menu when there is no seat to restore', async () => {
     render(<App />);
     act(() => { socketMock._trigger('authSuccess', authOk); });

@@ -14,9 +14,18 @@
  * Pattern source: server/GraceRegistry.ts (singleton-as-module + __resetForTests).
  */
 
+import type { ExitReason } from './PendingExits.js';
+
 export interface ExitNotice {
   tableId: string;
   refunded: number;
+  /**
+   * Why the seat was given up. Carried through because the wording differs: the
+   * auth handler used to hardcode 'disconnected', so a player who pressed LEAVE
+   * mid-hand and then closed the app was told on their return that they had been
+   * away too long and were removed — an event that never happened.
+   */
+  reason: ExitReason;
 }
 
 const notices = new Map<string /* telegramId */, ExitNotice>();
@@ -24,8 +33,8 @@ const notices = new Map<string /* telegramId */, ExitNotice>();
 /** Park a notice for a player who was not connected when their exit settled. */
 export function record(telegramId: string, notice: ExitNotice): void {
   notices.set(telegramId, notice);
-  console.info('[Exit] notice parked telegramId=%s tableId=%s refunded=%d',
-    telegramId, notice.tableId, notice.refunded);
+  console.info('[Exit] notice parked telegramId=%s tableId=%s refunded=%d reason=%s',
+    telegramId, notice.tableId, notice.refunded, notice.reason);
 }
 
 /** Read and remove the notice (auth handler drains it exactly once). */

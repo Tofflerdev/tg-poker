@@ -196,7 +196,9 @@ describe('GraceRegistry — single reconnect window (exit-reconnect D)', () => {
       GraceRegistry.arm('42', 'table-funnel-1');
       await vi.advanceTimersByTimeAsync(GraceRegistry.RECONNECT_WINDOW_MS);
 
-      expect(ExitNotices.take('42')).toEqual({ tableId: 'table-funnel-1', refunded: 78 });
+      expect(ExitNotices.take('42')).toEqual({
+        tableId: 'table-funnel-1', refunded: 78, reason: 'disconnected',
+      });
     });
 
     it('NEVER vacates mid-hand — hands over to the deferred-exit path instead', async () => {
