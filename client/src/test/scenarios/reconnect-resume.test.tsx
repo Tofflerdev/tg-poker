@@ -199,6 +199,51 @@ describe('reconnect resume (exit-reconnect B1/B4)', () => {
     }
   });
 
+  /**
+   * The ghost table. A server restart (every deploy) wipes the in-memory tables and
+   * SessionRecovery refunds the stacks, so the reconnecting client gets authSuccess
+   * with NO tableJoined. The client used to keep view='game' and currentTableId
+   * anyway — B1 protects a restored seat, but here there is none — leaving the player
+   * on a frozen board. The next dropped socket then ran the seated story for a seat
+   * the server had no record of: prod logs for the 2026-07-27 report show the
+   * "your seat is held" countdown and "Removed from table" with not one
+   * "[Grace] armed" line behind them.
+   */
+  it('drops a table the server no longer confirms on re-auth', async () => {
+    render(<App />);
+    act(() => {
+      socketMock._trigger('tableJoined', {
+        tableId: 'table-funnel-1', seat: 0, state: gameState, reconnectWindowMs: 120_000,
+      });
+    });
+    act(() => { socketMock._trigger('authSuccess', authOk); });
+    await waitFor(() => expect(tableShown()).toBeInTheDocument());
+
+    // Reconnect after a restart: the transport comes back, the client re-authenticates,
+    // and the server says nothing about a table.
+    act(() => { socketMock._trigger('disconnect'); });
+    act(() => { socketMock._trigger('connect'); });
+    act(() => { socketMock._trigger('authSuccess', authOk); });
+
+    await waitFor(() => {
+      expect(menuShown()).toBeInTheDocument();
+      expect(tableShown()).not.toBeInTheDocument();
+    });
+
+    // And with the ghost gone, a later drop is an unseated drop: banner, no countdown.
+    vi.useFakeTimers();
+    try {
+      socketMock.connected = false;
+      act(() => { socketMock._trigger('disconnect'); });
+      act(() => { vi.advanceTimersByTime(1500 + 120_000 + 1000); });
+      expect(screen.queryByTestId('reconnect-overlay')).not.toBeInTheDocument();
+      expect(screen.queryByTestId('reconnect-overlay-vacated')).not.toBeInTheDocument();
+      expect(screen.getByTestId('reconnect-banner-offline')).toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('still lands in the menu when there is no seat to restore', async () => {
     render(<App />);
     act(() => { socketMock._trigger('authSuccess', authOk); });

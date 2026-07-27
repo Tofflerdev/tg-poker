@@ -174,6 +174,16 @@ const App: React.FC = () => {
   const [reconnectWindowMs, setReconnectWindowMs] = useState<number | null>(null);
   const [exitNotice, setExitNotice] = useState<ExitNotice>(null);
 
+  // Did the server send a resume snapshot (tableJoined) for the auth now in flight?
+  // The server emits it BEFORE authSuccess when — and only when — the player still
+  // holds a seat, so its absence at authSuccess time is the server saying "you are
+  // not at a table". Without this the client kept a table that no longer existed
+  // (e.g. after a server restart wiped the in-memory tables and SessionRecovery
+  // refunded the stack): view stayed 'game' on a frozen board, and the next dropped
+  // socket ran the whole seated story — "your seat is held", then "Removed from
+  // table" — for a seat the server had no record of.
+  const resumedSeatRef = React.useRef(false);
+
   // Initialize Telegram UI
   useEffect(() => {
     if (isReady) {
@@ -198,6 +208,9 @@ const App: React.FC = () => {
     if (!isReady) return;
 
     const authenticate = () => {
+      // A fresh auth round: until the server proves otherwise with a tableJoined,
+      // assume no seat.
+      resumedSeatRef.current = false;
       // Try to authenticate with Telegram initData
       if (initData) {
         socket.emit("auth", { initData });
@@ -235,7 +248,18 @@ const App: React.FC = () => {
       // tableJoined resume snapshot BEFORE authSuccess, so forcing 'menu' here threw
       // the seat away and dropped the player at the main menu — where pressing
       // "join" bought a fresh stack and destroyed the held one.
-      setView((prev) => (prev === 'game' ? prev : 'menu'));
+      //
+      // But B1 only protects a seat the server just CONFIRMED. No snapshot means no
+      // seat, and holding on to a stale one is its own bug (see resumedSeatRef) — so
+      // in that case the table state is dropped along with the view.
+      if (resumedSeatRef.current) {
+        setView((prev) => (prev === 'game' ? prev : 'menu'));
+      } else {
+        setCurrentTableId(null);
+        setMySeat(null);
+        setReconnectWindowMs(null);
+        setView('menu');
+      }
       hapticFeedback?.notificationOccurred('success');
       if (userData.analyticsId) identifyAnalytics(userData.analyticsId);
     });
@@ -263,6 +287,9 @@ const App: React.FC = () => {
 
     // Table joined
     socket.on("tableJoined", (payload) => {
+      // The server confirms a seat: either a fresh join or the resume snapshot that
+      // authSuccess (below) checks for.
+      resumedSeatRef.current = true;
       setCurrentTableId(payload.tableId);
       setGameState(payload.state);
       // exit-reconnect B6: take the seat from the payload — the server computed it
@@ -283,8 +310,11 @@ const App: React.FC = () => {
 
     // Table left
     socket.on("tableLeft", () => {
+      resumedSeatRef.current = false;
       setCurrentTableId(null);
       setMySeat(null);
+      // Stale seat-holding window: it belonged to the table just left.
+      setReconnectWindowMs(null);
       setView('menu');
     });
 

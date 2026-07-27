@@ -128,6 +128,32 @@ describe('ReconnectOverlay', () => {
     expect(screen.getByTestId('reconnect-overlay-vacated')).toBeInTheDocument();
   });
 
+  /**
+   * Reported from prod 2026-07-27 (screenshot at 12:47): the player was still looking
+   * at "Removed from table" while the server logs showed their socket had reconnected
+   * and re-authenticated several times over. The vacated view is a client-side GUESS
+   * (a timer that ran out offline) — once the transport is back the server answers
+   * within a couple hundred ms, so the guess must not outlive the reconnect.
+   */
+  it('clears the vacated view when the transport comes back — the server decides now', () => {
+    const sock = makeMockSocket();
+    render(<ReconnectOverlay socket={sock as any} reconnectWindowMs={120_000} isSeated />);
+    act(() => { sock._trigger('disconnect'); });
+    act(() => { vi.advanceTimersByTime(1500 + 120_000 + 100); });
+    expect(screen.getByTestId('reconnect-overlay-vacated')).toBeInTheDocument();
+
+    act(() => { sock._trigger('connect'); });
+    expect(screen.queryByTestId('reconnect-overlay-vacated')).not.toBeInTheDocument();
+  });
+
+  it('keeps the replaced view on connect — that verdict came from the server', () => {
+    const sock = makeMockSocket();
+    render(<ReconnectOverlay socket={sock as any} reconnectWindowMs={120_000} isSeated />);
+    act(() => { sock._trigger('replacedBySession'); });
+    act(() => { sock._trigger('connect'); });
+    expect(screen.getByTestId('reconnect-overlay-replaced')).toBeInTheDocument();
+  });
+
   it('has no sat-out dead end — returning inside the window just re-seats the player', () => {
     const sock = makeMockSocket();
     render(<ReconnectOverlay socket={sock as any} reconnectWindowMs={120_000} isSeated />);

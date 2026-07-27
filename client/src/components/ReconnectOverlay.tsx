@@ -145,10 +145,16 @@ export function ReconnectOverlay({
     const onConnect = () => {
       // The transport is back. App.tsx re-authenticates on this same event, which is
       // what actually restores the session and the seat.
+      //
+      // 'vacated' clears too, and that matters: it is a GUESS (a client-side timer
+      // ran out while offline), and the moment the socket is back the server settles
+      // the question within a couple of hundred milliseconds — tableJoined if the
+      // seat is still there, exitCompleted → ExitToast if it really was cashed out.
+      // Leaving the guess on screen stranded reconnected players on a dead end that
+      // only a button press could clear (reported from prod 2026-07-27).
+      // 'replaced' stays: that one is the server's own word, not a timer.
       clearAllTimers();
-      setOverlayState((prev) =>
-        prev.kind === 'reconnecting' || prev.kind === 'offline' ? { kind: 'hidden' } : prev
-      );
+      setOverlayState((prev) => (prev.kind === 'replaced' ? prev : { kind: 'hidden' }));
     };
 
     const onTableJoined = () => {
