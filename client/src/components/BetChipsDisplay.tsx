@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { getChipColor } from "./PokerChip";
 import { Player } from "../../../types/index";
-import { BET_POSITIONS_DESKTOP, BET_POSITIONS_MOBILE } from "./seatLayout";
+import { BET_POSITIONS_DESKTOP, BET_POSITIONS_MOBILE, myBetAnchor } from "./seatLayout";
 
 interface BetChipsDisplayProps {
   seats: (Player | null)[];
@@ -9,6 +9,8 @@ interface BetChipsDisplayProps {
   stage: string;
   lastRoundBets: number[];
   isMobile?: boolean;
+  /** Container height in px — my own bet anchor is derived from it (myBetAnchor). */
+  tableHeight?: number;
 }
 
 const POT_CENTER = { left: 50, top: 50 };
@@ -66,7 +68,11 @@ const BetStack: React.FC<{
   amount: number;
   position: { left: number; top: number };
   moveToPot: boolean;
-}> = ({ amount, position, moveToPot }) => {
+  /** 'bottom' pins `position.top` to the stack's bottom edge, so a taller stack
+      grows upward instead of down — used for my own seat, whose cards sit just
+      below it. Collecting to the pot re-centres either way. */
+  anchor?: 'center' | 'bottom';
+}> = ({ amount, position, moveToPot, anchor = 'center' }) => {
   if (amount <= 0) return null;
 
   const chips = calculateChips(amount, 5);
@@ -80,6 +86,7 @@ const BetStack: React.FC<{
 
   const targetLeft = moveToPot ? POT_CENTER.left : position.left;
   const targetTop = moveToPot ? POT_CENTER.top : position.top;
+  const translateY = !moveToPot && anchor === 'bottom' ? '-100%' : '-50%';
 
   return (
     <div
@@ -87,7 +94,7 @@ const BetStack: React.FC<{
       style={{
         left: `${targetLeft}%`,
         top: `${targetTop}%`,
-        transform: `translate(-50%, -50%) scale(${moveToPot ? 0.3 : 1})`,
+        transform: `translate(-50%, ${translateY}) scale(${moveToPot ? 0.3 : 1})`,
         zIndex: 15,
         transition: moveToPot
           ? `left ${MOVE_DURATION}ms ease-in-out, top ${MOVE_DURATION}ms ease-in-out, opacity ${MOVE_DURATION}ms ease-in, transform ${MOVE_DURATION}ms ease-in-out`
@@ -124,10 +131,12 @@ const BetChipsDisplay: React.FC<BetChipsDisplayProps> = ({
   stage,
   lastRoundBets,
   isMobile = false,
+  tableHeight = 0,
 }) => {
   const totalSeats = 6;
   const rotationOffset = mySeat !== null ? mySeat : 0;
   const betPositions = isMobile ? BET_POSITIONS_MOBILE : BET_POSITIONS_DESKTOP;
+  const myPosition = myBetAnchor(isMobile, tableHeight);
 
   const prevStageRef = useRef(stage);
 
@@ -193,7 +202,8 @@ const BetChipsDisplay: React.FC<BetChipsDisplayProps> = ({
         if (bet <= 0) return null;
 
         const visualIndex = (seatIndex - rotationOffset + totalSeats) % totalSeats;
-        const position = betPositions[visualIndex];
+        const isMine = visualIndex === 0;
+        const position = isMine ? myPosition : betPositions[visualIndex];
 
         return (
           <BetStack
@@ -201,6 +211,7 @@ const BetChipsDisplay: React.FC<BetChipsDisplayProps> = ({
             amount={bet}
             position={position}
             moveToPot={moveToPot}
+            anchor={isMine ? 'bottom' : 'center'}
           />
         );
       })}

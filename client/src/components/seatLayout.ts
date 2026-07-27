@@ -96,7 +96,10 @@ export const DEALER_POSITIONS_MOBILE: OverlayPos[] = [
 /* Bet stacks — on the betting line, a step further toward the pot than the
    dealer button so the two never collide. */
 export const BET_POSITIONS_DESKTOP: OverlayPos[] = [
-  { left: 50, top: 61 },  // 0: bottom centre (me) — raised to clear the larger my-seat
+  // 0: bottom centre (me). `top` is overridden by myBetAnchor(); `left` is off
+  // centre because the desktop corridor between the blinds/rake info line and
+  // my hole cards is only ~40px — dead centre the stack lands on that text.
+  { left: 60, top: 61 },
   { left: 27, top: 58 },  // 1: bottom left
   { left: 27, top: 40 },  // 2: top left
   { left: 50, top: 34 },  // 3: top centre
@@ -105,10 +108,44 @@ export const BET_POSITIONS_DESKTOP: OverlayPos[] = [
 ];
 
 export const BET_POSITIONS_MOBILE: OverlayPos[] = [
-  { left: 50, top: 70 },  // 0: bottom centre (me) — raised to clear the larger my-seat
+  { left: 50, top: 70 },  // 0: bottom centre (me) — overridden by myBetAnchor()
   { left: 36, top: 62 },  // 1: bottom left
   { left: 37, top: 36 },  // 2: left mid
   { left: 50, top: 23 },  // 3: top centre
   { left: 63, top: 36 },  // 4: right mid
   { left: 64, top: 62 },  // 5: bottom right
 ];
+
+/** Gap between my bet stack and the top edge of my hole cards. */
+const MY_BET_GAP_PX = { mobile: 12, desktop: 16 };
+
+/**
+ * Bet anchor for the bottom-centre seat (me), as a % of the container — but
+ * derived from pixels.
+ *
+ * My seat card is a fixed pixel height anchored to the bottom of the table,
+ * while bet positions are percentages, so a constant % drifts into the cards as
+ * the table gets shorter. Measured with BET_POSITIONS_MOBILE[0].top = 70:
+ * 4px of clearance on a 502px-tall table, 11px of overlap on a 442px one (and
+ * ~6px worse again once the stack is five chips high).
+ *
+ * The returned `top` is where the stack's BOTTOM edge goes — BetStack anchors
+ * seat 0 by its bottom, so the gap to the cards doesn't depend on chip count;
+ * a tall stack grows upward toward the pot instead of down onto the cards.
+ */
+export function myBetAnchor(isMobile: boolean, tableHeight: number): OverlayPos {
+  const base = isMobile ? BET_POSITIONS_MOBILE[0] : BET_POSITIONS_DESKTOP[0];
+  if (!tableHeight) return base;
+
+  const { aSize, stageH } = seatGeometry(isMobile, true);
+  // Mirrors SEAT_POSITIONS_*[0] (translate(-50%,-100%) → `top` is the seat's
+  // bottom edge) and the cards' offset inside the seat card in SeatsDisplay.
+  const seatBottomPct = isMobile ? 0.95 : 0.94;
+  const cardsTopPx = seatBottomPct * tableHeight - stageH + Math.round(aSize * 0.05);
+  const gap = isMobile ? MY_BET_GAP_PX.mobile : MY_BET_GAP_PX.desktop;
+  const top = ((cardsTopPx - gap) / tableHeight) * 100;
+
+  // Guard rails for degenerate table sizes: never climb into the pot/community
+  // block (~60% down) and never drop off the bottom of the felt.
+  return { left: base.left, top: Math.min(Math.max(top, 62), 88) };
+}

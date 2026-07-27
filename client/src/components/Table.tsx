@@ -175,6 +175,7 @@ const Table: React.FC<TableProps> = ({
               stage={stage}
               lastRoundBets={lastRoundBets}
               isMobile={isMobile}
+              tableHeight={dimensions.height}
             />
 
             {/* Payout chips animation */}
