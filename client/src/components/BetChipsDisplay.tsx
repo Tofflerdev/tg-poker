@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import { getChipColor } from "./PokerChip";
+import FeltOverlay from "./FeltOverlay";
 import { Player } from "../../../types/index";
 import { BET_POSITIONS_DESKTOP, BET_POSITIONS_MOBILE, myBetAnchor } from "./seatLayout";
 
@@ -89,18 +90,16 @@ const BetStack: React.FC<{
   const translateY = !moveToPot && anchor === 'bottom' ? '-100%' : '-50%';
 
   return (
-    <div
-      className="absolute pointer-events-none"
-      style={{
-        left: `${targetLeft}%`,
-        top: `${targetTop}%`,
-        transform: `translate(-50%, ${translateY}) scale(${moveToPot ? 0.3 : 1})`,
-        zIndex: 15,
-        transition: moveToPot
-          ? `left ${MOVE_DURATION}ms ease-in-out, top ${MOVE_DURATION}ms ease-in-out, opacity ${MOVE_DURATION}ms ease-in, transform ${MOVE_DURATION}ms ease-in-out`
-          : 'none',
-        opacity: moveToPot ? 0 : 1,
-      }}
+    <FeltOverlay
+      left={targetLeft}
+      top={targetTop}
+      align={`translate(-50%, ${translateY}) scale(${moveToPot ? 0.3 : 1})`}
+      zIndex={15}
+      opacity={moveToPot ? 0 : 1}
+      transition={moveToPot
+        ? `transform ${MOVE_DURATION}ms ease-in-out, opacity ${MOVE_DURATION}ms ease-in`
+        : 'none'}
+      contentTransition={moveToPot ? `transform ${MOVE_DURATION}ms ease-in-out` : 'none'}
     >
       <div
         className="text-center mb-0.5"
@@ -119,7 +118,7 @@ const BetStack: React.FC<{
           <MiniChip key={index} value={chipValue} index={index} total={chips.length} />
         ))}
       </div>
-    </div>
+    </FeltOverlay>
   );
 };
 

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import { getChipColor } from "./PokerChip";
+import FeltOverlay from "./FeltOverlay";
 import { ShowdownResult } from "../../../types/index";
 
 interface PayoutChipsDisplayProps {
@@ -95,18 +96,14 @@ const PayoutStack: React.FC<{
   const currentTop = moveToSeat ? targetPosition.top : startPosition.top;
 
   return (
-    <div
-      className="absolute pointer-events-none"
-      style={{
-        left: `${currentLeft}%`,
-        top: `${currentTop}%`,
-        transform: 'translate(-50%, -50%)',
-        zIndex: 15,
-        transition: moveToSeat
-          ? `left ${MOVE_DURATION}ms ease-in-out, top ${MOVE_DURATION}ms ease-in-out, opacity ${MOVE_DURATION * 0.4}ms ease-in ${MOVE_DURATION * 0.6}ms`
-          : 'none',
-        opacity: moveToSeat ? 0 : 1,
-      }}
+    <FeltOverlay
+      left={currentLeft}
+      top={currentTop}
+      zIndex={15}
+      opacity={moveToSeat ? 0 : 1}
+      transition={moveToSeat
+        ? `transform ${MOVE_DURATION}ms ease-in-out, opacity ${MOVE_DURATION * 0.4}ms ease-in ${MOVE_DURATION * 0.6}ms`
+        : 'none'}
     >
       <div
         className="text-center mb-0.5"
@@ -125,7 +122,7 @@ const PayoutStack: React.FC<{
           <MiniChip key={index} value={chipValue} index={index} total={chips.length} />
         ))}
       </div>
-    </div>
+    </FeltOverlay>
   );
 };
 

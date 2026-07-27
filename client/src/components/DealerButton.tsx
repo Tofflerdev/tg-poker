@@ -1,5 +1,6 @@
 import React from "react";
 import dealerButtonImg from "../assets/dealer-button.svg";
+import FeltOverlay from "./FeltOverlay";
 import { DEALER_POSITIONS_DESKTOP, DEALER_POSITIONS_MOBILE } from "./seatLayout";
 
 interface DealerButtonProps {
@@ -25,14 +26,11 @@ const DealerButton: React.FC<DealerButtonProps> = ({
   const pos = positions[visualIndex];
 
   return (
-    <div
-      className="absolute transition-all duration-700 ease-in-out pointer-events-none"
-      style={{
-        left: `${pos.left}%`,
-        top: `${pos.top}%`,
-        transform: "translate(-50%, -50%)",
-        zIndex: 25,
-      }}
+    <FeltOverlay
+      left={pos.left}
+      top={pos.top}
+      zIndex={25}
+      transition="transform 700ms ease-in-out"
     >
       <img
         src={dealerButtonImg}
@@ -45,7 +43,7 @@ const DealerButton: React.FC<DealerButtonProps> = ({
           userSelect: "none",
         }}
       />
-    </div>
+    </FeltOverlay>
   );
 };
 
