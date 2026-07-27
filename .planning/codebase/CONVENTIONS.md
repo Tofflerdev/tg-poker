@@ -76,7 +76,8 @@ Observed ordering (not enforced, but consistent):
 - `pages/` — top-level screens (`MainMenu`, `TableList`, `GameRoom`, `ProfileSettings`)
 - `components/` — reusable presentational components (flat directory, no subfolders)
 - `hooks/` — custom React hooks
-- `assets/cards/` — card image PNGs
+- `public/cards/` — card image PNGs (static, outside the Vite asset pipeline;
+  build them with `scripts/build-cards.ps1`, resolve URLs via `components/cardSrc.ts`)
 - `styles/telegram.css` — single global stylesheet entry (Tailwind import + CSS custom props)
 
 ## Shared Types

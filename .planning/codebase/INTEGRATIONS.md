@@ -29,7 +29,7 @@
   - Repository layer: `server/db/UserRepository.ts`
 
 **File Storage:**
-- Local filesystem only (card assets bundled in `client/src/assets/cards/`)
+- Local filesystem only (card assets served statically from `client/public/cards/`)
 - No external object store (S3 / GCS / etc.) detected
 
 **Caching:**

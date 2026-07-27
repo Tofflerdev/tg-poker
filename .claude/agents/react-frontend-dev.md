@@ -15,7 +15,8 @@ You are working on a Telegram Mini App for Texas Hold'em poker. The frontend liv
 - `client/src/pages/` — GameRoom, MainMenu, ProfileSettings, TableList
 - `client/src/components/` — Table, Card, GameControls, Chat, SeatsDisplay, PotDisplay, etc.
 - `client/src/hooks/useTelegram.ts` — Telegram WebApp SDK hook
-- `client/src/assets/cards/` — Card images (PNG)
+- `client/public/cards/` — Card images (52 + back, PNG 160x224), served statically;
+  URLs are built in `client/src/components/cardSrc.ts`, never hardcoded in components
 - Shared types imported from `../../types/index.ts`
 
 Communication with the server is **Socket.io only** — no REST API for game logic.

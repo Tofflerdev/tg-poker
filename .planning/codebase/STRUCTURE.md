@@ -28,7 +28,7 @@ tg-poker/
 │   ├── index.html
 │   ├── vite.config.ts
 │   ├── package.json         # Separate from root — client has its own deps
-│   └── src/
+│   ├── src/
 │       ├── index.tsx        # ReactDOM mount
 │       ├── App.tsx          # Router + single socket + view state machine (410 lines)
 │       ├── pages/
@@ -41,14 +41,16 @@ tg-poker/
 │       │   ├── SeatsDisplay.tsx     # 6 seats around table (neon-strip design)
 │       │   ├── GameControls.tsx     # Fold/Check/Call/Raise/AllIn buttons
 │       │   ├── Card.tsx, AnimatedCard.tsx, HandDisplay.tsx
+│       │   ├── cardSrc.ts            # /cards/ URL builder + art version (cache-bust)
 │       │   ├── CommunityCards.tsx, PotDisplay.tsx, DealerButton.tsx
 │       │   ├── BetChipsDisplay.tsx, PayoutChipsDisplay.tsx, PokerChip.tsx
 │       │   ├── Chat.tsx, DailyBonusButton.tsx
 │       │   └── DevToolbar.tsx       # Dev-only, lazy-loaded, tree-shaken in prod
 │       ├── hooks/
 │       │   └── useTelegram.ts       # Telegram WebApp SDK wrapper
-│       ├── assets/cards/            # PNG card images (52 + back)
 │       └── styles/telegram.css      # Telegram-themed CSS utilities
+│   └── public/cards/        # PNG card images (52 + back, 160x224), served as-is
+│                            # by nginx — outside the Vite asset pipeline
 │
 ├── types/
 │   ├── index.ts             # Shared types: Player, GameState, Pot, socket events, Telegram (261 lines)

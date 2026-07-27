@@ -33,7 +33,11 @@ client/           — Frontend (React + Vite)
   src/pages/      — GameRoom, MainMenu, ProfileSettings, TableList
   src/components/ — Table, Card, GameControls, Chat, SeatsDisplay, PotDisplay, etc.
   src/hooks/useTelegram.ts — Telegram WebApp SDK hook
-  src/assets/cards/ — Card images (PNG)
+  public/cards/   — Card images (52 + back, PNG 160x224) — served as static files,
+                    NOT imported by Vite; URLs built in src/components/cardSrc.ts
+
+scripts/build-cards.ps1 — regenerates public/cards/ from the suit silhouettes
+scripts/build-icons.ps1 — regenerates public/icons/ masks
 
 types/index.ts    — Shared types (Player, GameState, Pot, socket events, Telegram types)
 prisma/schema.prisma — DB schema (single `User` model)
