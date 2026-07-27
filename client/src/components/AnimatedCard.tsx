@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { cardSrc, CARD_RADIUS_RATIO } from "./cardSrc";
 
 interface AnimatedCardProps {
   code?: string; // например "AS", "10H", "KD" или пустая строка
@@ -61,9 +62,7 @@ const AnimatedCard: React.FC<AnimatedCardProps> = ({
     }
   }, [animationClass, onAnimationEnd]);
 
-  const src = showFront && code
-    ? `/cards/${code.toUpperCase()}.png`
-    : "/cards/back.png";
+  const src = cardSrc(showFront ? code : undefined);
 
   return (
     <div
@@ -83,7 +82,7 @@ const AnimatedCard: React.FC<AnimatedCardProps> = ({
         style={{
           width: '100%',
           height: '100%',
-          borderRadius: 6,
+          borderRadius: size * CARD_RADIUS_RATIO,
           boxShadow: "0 2px 8px rgba(0,0,0,0.4)",
           objectFit: 'cover',
           backfaceVisibility: 'hidden',
