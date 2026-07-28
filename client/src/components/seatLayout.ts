@@ -40,14 +40,18 @@ export const SEAT_POSITIONS_DESKTOP: SeatAnchor[] = [
   { left: '96%', top: '70%', align: 'translate(-85%, -50%)',  ax: 85, ay: 50 },
 ];
 
-// Mobile: vertical table
+/* Mobile: vertical table.
+   Tuned for the tall felt (5% top margin — see SEAT_MARGIN_TOP_PCT in Table.tsx)
+   that reaches up into the space the old chrome header used to occupy. Seat 3
+   sits at 1.2% so its avatar clears the screen edge by ~8px; the side seats are
+   the old 37/73 values remapped from the 10-90 felt band onto the new 5-90 one. */
 export const SEAT_POSITIONS_MOBILE: SeatAnchor[] = [
-  { left: '50%', top: '95%', align: 'translate(-50%, -100%)', ax: 50, ay: 100 },
-  { left: '4%',  top: '73%', align: 'translate(-5%, -50%)',   ax: 5,  ay: 50 },
-  { left: '4%',  top: '37%', align: 'translate(-5%, -50%)',   ax: 5,  ay: 50 },
-  { left: '50%', top: '5%',  align: 'translate(-50%, 0%)',    ax: 50, ay: 0 },
-  { left: '96%', top: '37%', align: 'translate(-95%, -50%)',  ax: 95, ay: 50 },
-  { left: '96%', top: '73%', align: 'translate(-95%, -50%)',  ax: 95, ay: 50 },
+  { left: '50%', top: '95%',  align: 'translate(-50%, -100%)', ax: 50, ay: 100 },
+  { left: '4%',  top: '72%',  align: 'translate(-5%, -50%)',   ax: 5,  ay: 50 },
+  { left: '4%',  top: '34%',  align: 'translate(-5%, -50%)',   ax: 5,  ay: 50 },
+  { left: '50%', top: '1.2%', align: 'translate(-50%, 0%)',    ax: 50, ay: 0 },
+  { left: '96%', top: '34%',  align: 'translate(-95%, -50%)',  ax: 95, ay: 50 },
+  { left: '96%', top: '72%',  align: 'translate(-95%, -50%)',  ax: 95, ay: 50 },
 ];
 
 /** Seat-card pixel geometry. "My seat" (visualIndex 0) is larger; same layout. */
@@ -86,11 +90,11 @@ export const DEALER_POSITIONS_DESKTOP: OverlayPos[] = [
 
 export const DEALER_POSITIONS_MOBILE: OverlayPos[] = [
   { left: 63, top: 84 },  // 0: bottom centre (me)
-  { left: 31, top: 67 },  // 1: bottom left
-  { left: 31, top: 33 },  // 2: left mid
-  { left: 40, top: 20 },  // 3: top centre
-  { left: 69, top: 33 },  // 4: right mid
-  { left: 69, top: 67 },  // 5: bottom right
+  { left: 31, top: 66 },  // 1: bottom left
+  { left: 31, top: 29 },  // 2: left mid
+  { left: 40, top: 16 },  // 3: top centre
+  { left: 69, top: 29 },  // 4: right mid
+  { left: 69, top: 66 },  // 5: bottom right
 ];
 
 /* Bet stacks — on the betting line, a step further toward the pot than the
@@ -109,11 +113,15 @@ export const BET_POSITIONS_DESKTOP: OverlayPos[] = [
 
 export const BET_POSITIONS_MOBILE: OverlayPos[] = [
   { left: 50, top: 70 },  // 0: bottom centre (me) — overridden by myBetAnchor()
-  { left: 36, top: 62 },  // 1: bottom left
-  { left: 37, top: 36 },  // 2: left mid
-  { left: 50, top: 23 },  // 3: top centre
-  { left: 63, top: 36 },  // 4: right mid
-  { left: 64, top: 62 },  // 5: bottom right
+  { left: 36, top: 60 },  // 1: bottom left
+  { left: 37, top: 33 },  // 2: left mid
+  // 3: top centre — kept a little lower than the 19% the felt remap implies.
+  // The seat card above it is a fixed pixel height while this is a percentage,
+  // so on short viewports the stack drifts up into the seat (same mismatch
+  // myBetAnchor() solves for seat 0); 22% keeps it clear down to 640px tall.
+  { left: 50, top: 22 },
+  { left: 63, top: 33 },  // 4: right mid
+  { left: 64, top: 60 },  // 5: bottom right
 ];
 
 /** Gap between my bet stack and the top edge of my hole cards. */

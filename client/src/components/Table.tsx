@@ -73,9 +73,14 @@ const Table: React.FC<TableProps> = ({
     }
   }, [communityCards, stage, lastRoundBets]);
 
-  // Seat margin percentages
+  /* Seat margins — the dead band around the felt where the seat cards live.
+     Mobile is deliberately asymmetric: GameRoom no longer keeps a chrome header
+     in the flow (the back/chat buttons float over the felt), so the felt is
+     pulled up to 5% and the top seat hugs the screen edge. The bottom keeps its
+     10% because my seat card is much taller and the dock sits right below. */
   const SEAT_MARGIN_X_PCT = isMobile ? 0.08 : 0.10;
-  const SEAT_MARGIN_Y_PCT = isMobile ? 0.10 : 0.15;
+  const SEAT_MARGIN_TOP_PCT = isMobile ? 0.05 : 0.15;
+  const SEAT_MARGIN_BOTTOM_PCT = isMobile ? 0.10 : 0.15;
 
   useEffect(() => {
     const updateDimensions = () => {
@@ -87,7 +92,8 @@ const Table: React.FC<TableProps> = ({
           const availableHeight = offsetHeight;
           const tableWidth = offsetWidth * (1 - 2 * SEAT_MARGIN_X_PCT);
           const idealHeight = tableWidth * (7 / 4); // portrait ratio
-          const idealTotalHeight = idealHeight / (1 - 2 * SEAT_MARGIN_Y_PCT);
+          const idealTotalHeight =
+            idealHeight / (1 - SEAT_MARGIN_TOP_PCT - SEAT_MARGIN_BOTTOM_PCT);
           // Constrain to available height
           const totalHeight = Math.min(idealTotalHeight, availableHeight);
           setDimensions({ width: offsetWidth, height: totalHeight });
@@ -95,7 +101,8 @@ const Table: React.FC<TableProps> = ({
           // Desktop: horizontal table
           const tableWidth = offsetWidth * (1 - 2 * SEAT_MARGIN_X_PCT);
           const tableHeight = tableWidth * (4 / 7);
-          const totalHeight = tableHeight / (1 - 2 * SEAT_MARGIN_Y_PCT);
+          const totalHeight =
+            tableHeight / (1 - SEAT_MARGIN_TOP_PCT - SEAT_MARGIN_BOTTOM_PCT);
           setDimensions({ width: offsetWidth, height: totalHeight });
         }
       }
@@ -138,8 +145,8 @@ const Table: React.FC<TableProps> = ({
               style={{
                 left: `${SEAT_MARGIN_X_PCT * 100}%`,
                 right: `${SEAT_MARGIN_X_PCT * 100}%`,
-                top: `${SEAT_MARGIN_Y_PCT * 100}%`,
-                bottom: `${SEAT_MARGIN_Y_PCT * 100}%`,
+                top: `${SEAT_MARGIN_TOP_PCT * 100}%`,
+                bottom: `${SEAT_MARGIN_BOTTOM_PCT * 100}%`,
                 borderRadius: feltBorderRadius,
                 background: "radial-gradient(ellipse at center, var(--poker-felt) 0%, var(--poker-felt-dark) 100%)",
               }}

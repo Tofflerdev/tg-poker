@@ -111,7 +111,7 @@ export const GameRoom: React.FC<GameRoomProps> = ({
   // in App.tsx, which emits joinTable with seat -1.
 
   return (
-    <div className="h-[100dvh] bg-gradient-to-b from-[#0d1b0f] to-[#1a2e1a] flex flex-col overflow-hidden">
+    <div className="relative h-[100dvh] bg-gradient-to-b from-[#0d1b0f] to-[#1a2e1a] flex flex-col overflow-hidden">
       {/*
         Chrome header (D-24 / D-25 / UI-04):
         - Top-left table/phase label REMOVED outright (pot at center, phase self-evident).
@@ -119,10 +119,23 @@ export const GameRoom: React.FC<GameRoomProps> = ({
         - Back-to-menu affordance retained as small top-left chrome button (ui/Button variant="neutral").
         - Chat button retained at top-right (chrome affordance, not a data label).
         Safe-area paddingTop so the back button is reachable under Telegram header.
+
+        The row is OVERLAID (absolute) rather than stacked above the felt: as a
+        flow row it ate ~52px at the top of a portrait screen for two icon
+        buttons, and the table — which is sized to whatever is left over — lost
+        all of it. Floating it lets the felt reach the screen edge. The wrapper
+        is click-through; only the buttons take pointer events.
       */}
       <div
-        className="flex justify-between items-center px-3 md:px-4 py-2 md:py-3 text-white z-10"
-        style={{ paddingTop: 'max(env(safe-area-inset-top, 0px), 8px)' }}
+        className="absolute top-0 left-0 right-0 flex justify-between items-start text-white z-30 pointer-events-none"
+        style={{
+          // Inset written inline, not as px-3: telegram.css declares an unlayered
+          // `* { margin: 0; padding: 0 }`, which outranks Tailwind's @layer
+          // utilities — the px-3/py-2 that used to be here never applied.
+          paddingTop: 'max(env(safe-area-inset-top, 0px), 8px)',
+          paddingLeft: 12,
+          paddingRight: 12,
+        }}
       >
         <Button
           variant="neutral"
@@ -133,6 +146,7 @@ export const GameRoom: React.FC<GameRoomProps> = ({
           }}
           aria-label="Back to menu"
           style={{
+            pointerEvents: 'auto',
             minHeight: 0,
             width: 44,
             height: 44,
@@ -154,6 +168,7 @@ export const GameRoom: React.FC<GameRoomProps> = ({
           onClick={() => setIsChatOpen(true)}
           aria-label="Open chat"
           style={{
+            pointerEvents: 'auto',
             minHeight: 0,
             width: 44,
             height: 44,
@@ -170,10 +185,14 @@ export const GameRoom: React.FC<GameRoomProps> = ({
         </Button>
       </div>
 
-      {/* Main Game Area */}
-      <div className="flex-1 flex flex-col relative min-h-0">
+      {/* Main Game Area. Its own safe-area padding now that the chrome header
+          floats and no longer pushes the felt clear of a notch. */}
+      <div
+        className="flex-1 flex flex-col relative min-h-0"
+        style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }}
+      >
         {/* Table */}
-        <div className={`flex-1 flex items-center justify-center overflow-hidden min-h-0 ${isMobile ? 'px-2 py-1' : 'p-4'}`}>
+        <div className={`flex-1 flex items-center justify-center overflow-hidden min-h-0 ${isMobile ? 'px-2' : 'p-4'}`}>
           {/* Relative container so ActionBubbleLayer's absolute inset:0 resolves to the table area. */}
           <div style={{ position: 'relative', width: '100%', height: '100%' }}>
             <Table
