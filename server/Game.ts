@@ -941,7 +941,9 @@ export default class Game {
     // Если все игроки в all-in (или остался только один, кто может действовать),
     // автоматически доигрываем до showdown
     if (allPlayersAllIn) {
-      this.runOutBoard();
+      // Осознанно без await: раннаут тикает своими таймерами, а nextStage()
+      // синхронный. Ошибки внутри ловит сама runOutBoard().
+      void this.runOutBoard();
       return;
     }
 
@@ -972,14 +974,40 @@ export default class Game {
     this.startTurnTimer();
   }
 
-  // Автоматически доигрывает борд до конца (когда все игроки all-in)
+  // Автоматически доигрывает борд до конца (когда все игроки all-in).
+  //
+  // Единственный вызывающий (nextStage) дождаться её не может — раннаут живёт
+  // между таймерами, — поэтому бросок отсюда никуда не всплывал: он уходил в
+  // unhandled rejection, а стол вставал навсегда (currentPlayer уже null,
+  // ходовых таймеров нет, onShowdown не сработал → Table.scheduleNextHand()
+  // никто не позовёт). Ловим здесь и закрываем раздачу вручную.
   private async runOutBoard() {
+    // Признак «поты уже разошлись по стекам» — от него зависит, возвращать ли
+    // вклады при аварии. Выставляется ровно там, где showdown() отработал целиком.
+    let distributed = false;
+    try {
+      await this.dealOutRemainingStreets(() => { distributed = true; });
+    } catch (err) {
+      this.abortHandAfterFailure(err, distributed);
+    }
+  }
+
+  private async dealOutRemainingStreets(onDistributed: () => void) {
     this.currentPlayer = null;
     this.stopTurnTimer();
-    
+
     const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
     const notify = () => {
         if (this.onStateChange) this.onStateChange();
+    };
+
+    // Клиент проигрывает анимацию сбора фишек в пот на каждой смене стадии,
+    // у которой lastRoundBets непустые. При раннауте стадий несколько, а раунд
+    // торговли был один — поэтому ставки должны «доехать» только до первой
+    // смены стадии, а дальше обнуляются, иначе одна и та же анимация повторится
+    // на каждой оставшейся улице.
+    const clearLastRoundBets = () => {
+        this.lastRoundBets = Array(6).fill(0);
     };
 
     // Выкладываем оставшиеся карты с задержкой
@@ -988,6 +1016,7 @@ export default class Game {
         this.flop();
         this.stage = 'flop';
         notify();
+        clearLastRoundBets();
     }
 
     if (this.stage === 'flop') {
@@ -995,6 +1024,7 @@ export default class Game {
         this.turn();
         this.stage = 'turn';
         notify();
+        clearLastRoundBets();
     }
 
     if (this.stage === 'turn') {
@@ -1002,6 +1032,7 @@ export default class Game {
         this.river();
         this.stage = 'river';
         notify();
+        clearLastRoundBets();
     }
 
     await delay(1000);
@@ -1009,10 +1040,78 @@ export default class Game {
     // Переходим к showdown
     this.stage = 'showdown';
     const result = this.showdown();
+    onDistributed();
     notify();
+    clearLastRoundBets();
 
     if (this.onShowdown) {
         this.onShowdown(result);
+    }
+  }
+
+  /**
+   * Аварийное завершение раздачи: раздача аннулируется, стол продолжает жить.
+   *
+   * `distributed` — дошли ли до выплат. Если нет, вклады возвращаются владельцам,
+   * иначе банк просто сгорит. Мёртвые вклады возвращаются тому, кто ещё сидит за
+   * столом (долг блайнда постится «мёртвым», а игрок остаётся на месте); вклады
+   * ушедших вернуть некому — они форфейтятся, как и при обычном уходе посреди
+   * раздачи, и сумма пишется в лог.
+   */
+  private abortHandAfterFailure(err: unknown, distributed: boolean) {
+    console.error(
+      `[Game] all-in run-out failed (table=${this.tableId}, hand=${this.currentHandId ?? '-'}, ` +
+      `stage=${this.stage}, distributed=${distributed}):`,
+      err
+    );
+
+    this.stopTurnTimer();
+    this.currentPlayer = null;
+    this.currentBet = 0;
+    this.lastRoundBets = Array(6).fill(0);
+
+    if (!distributed) {
+      let forfeited = 0;
+      for (const d of this.deadContributions) {
+        const owner = this.seats.find(p => p?.id === d.playerId);
+        if (owner) owner.chips += d.amount;
+        else forfeited += d.amount;
+      }
+      this.deadContributions = [];
+
+      for (const p of this.seats) {
+        if (!p) continue;
+        p.chips += p.totalBet;
+        p.bet = 0;
+        p.totalBet = 0;
+      }
+
+      this.pots = [];
+      this.stage = 'showdown';
+      // Раздача не состоялась — истории и netDelta по ней быть не должно.
+      this.currentHandId = null;
+      // Клиент рисует это как раздачу без победителей; пустые results/winners он
+      // уже переваривает (их же отдаёт ветка win-by-fold).
+      this.lastShowdown = { results: [], potResults: [], winners: [] };
+
+      if (forfeited > 0) {
+        console.error(
+          `[Game] table=${this.tableId}: ${forfeited} фишек ушедших игроков сгорели при аннулировании раздачи`
+        );
+      }
+    }
+
+    // Стол оживает только через onShowdown → handleTableShowdown → scheduleNextHand().
+    // Если упало уже ПОСЛЕ выплат (в рассылке), onShowdown может сработать дважды:
+    // лишний showdown-эмит клиенту безобиден, а вот молча оставить стол мёртвым — нет.
+    try {
+      this.onStateChange?.();
+      if (this.lastShowdown) this.onShowdown?.(this.lastShowdown);
+    } catch (notifyErr) {
+      console.error(
+        `[Game] table=${this.tableId}: рассылка аварийного завершения раздачи не удалась:`,
+        notifyErr
+      );
     }
   }
 
