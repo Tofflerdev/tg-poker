@@ -97,6 +97,19 @@ class UserStorage {
   }
 
   /**
+   * Overwrite the cached balance with an authoritative DB value.
+   *
+   * The cache is only refreshed on auth, so every path that moves money in the
+   * User row outside a socket handler (deposit credit, withdrawal hold/settle)
+   * must call this — otherwise the stale copy gates a buy-in against a balance
+   * the player topped up minutes ago. No-op when the user has no live session.
+   */
+  setBalance(telegramId: string, balance: number): void {
+    const user = this.users.get(telegramId);
+    if (user) user.balance = balance;
+  }
+
+  /**
    * Get all connected users count
    */
   getConnectedCount(): number {

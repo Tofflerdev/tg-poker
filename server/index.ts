@@ -155,6 +155,7 @@ setupAdminNamespace(io, {
     if (!sid) return;
     const user = await UserRepository.findByTelegramId(telegramId);
     const balance = user?.balance ?? 0;
+    userStorage.setBalance(String(telegramId), balance);
     io.to(sid).emit('withdrawalUpdated', { spendId, status, amountChips, balance });
     io.to(sid).emit('balanceUpdate', balance);
   },
@@ -251,6 +252,11 @@ const notifyDepositCredited: CreditedNotifier = async ({ telegramId, creditedChi
     }
     return;
   }
+  // Keep the session cache in lock-step with the row. Without this the credit
+  // only exists in the DB and in the client's UI: the cached balance the
+  // joinTable pre-check reads stays at its pre-deposit value, so a player who
+  // just topped up is told "Insufficient balance" until they restart the app.
+  userStorage.setBalance(String(telegramId), balance);
   // Push the fresh balance to the payer if they are online.
   const sid = getSocketId(String(telegramId));
   if (sid) io.to(sid).emit('depositCredited', { creditedChips, balance });
@@ -770,6 +776,7 @@ io.on("connection", (socket) => {
       // The hold already left the balance — push it so the UI cannot show money
       // that is now reserved.
       socket.emit("withdrawalRequested", res);
+      userStorage.setBalance(telegramId, res.balance);
       socket.emit("balanceUpdate", res.balance);
       // Surface the new request to any admin watching the queue.
       try {
@@ -1061,7 +1068,15 @@ io.on("connection", (socket) => {
     if (tableInfo) {
       const cfg = tableInfo.config;
       const effectiveBuyIn = clampBuyIn(buyInAmount, cfg);
-      if (user.balance < effectiveBuyIn) {
+      // Gate on the row, not on the session cache. The cache is written at auth
+      // and refreshed by whoever moves money; a single missed refresh here reads
+      // as "Insufficient balance" over a balance the player can see is enough,
+      // with an app restart as the only cure. The DB is the one copy that cannot
+      // be stale. (The real guard is still the atomic debit further down.)
+      const current = await UserRepository.findByTelegramId(user.telegramId);
+      if (current) user.balance = current.balance;
+      const balance = current?.balance ?? user.balance;
+      if (balance < effectiveBuyIn) {
         socket.emit("tableError", `Insufficient balance. Buy-in for this table is ${cfg.minBuyIn}–${cfg.maxBuyIn}.`);
         return;
       }
