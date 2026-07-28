@@ -11,9 +11,9 @@ interface AnimatedCardProps {
   faceDown?: boolean; // показывать рубашкой вверх
 }
 
-const AnimatedCard: React.FC<AnimatedCardProps> = ({ 
-  code, 
-  size = 60, 
+const AnimatedCard: React.FC<AnimatedCardProps> = ({
+  code,
+  size = 60,
   style,
   animate = null,
   delay = 0,
@@ -22,56 +22,61 @@ const AnimatedCard: React.FC<AnimatedCardProps> = ({
 }) => {
   const [isFlipping, setIsFlipping] = useState(false);
   const [showFront, setShowFront] = useState(!faceDown);
-  const [animationClass, setAnimationClass] = useState('');
+
+  // Раздача — чистый CSS, и класс висит уже на первом рендере: вместе с
+  // animation-delay и fill-mode: both карта всё время задержки держит стартовый
+  // кадр (opacity 0, за пределами стола). Если вешать класс из setTimeout, карта
+  // успевает отрисоваться на своём месте, потом пропасть — и только потом лететь.
+  const [animationClass, setAnimationClass] = useState(() =>
+    animate === 'deal' ? 'card-deal' : ''
+  );
+  // Задержку фиксируем на монтировании, чтобы перерендеры родителя не дёргали
+  // уже запущенную анимацию.
+  const [animationDelay] = useState(delay);
 
   useEffect(() => {
-    if (!animate) return;
+    // 'deal' стартует сам, от CSS-задержки
+    if (!animate || animate === 'deal') return;
 
     const timer = setTimeout(() => {
-      switch (animate) {
-        case 'deal':
-          setAnimationClass('card-deal');
-          break;
-        case 'flip':
-          setIsFlipping(true);
-          setTimeout(() => {
-            setShowFront(prev => !prev);
-            setTimeout(() => {
-              setIsFlipping(false);
-              onAnimationEnd?.();
-            }, 150);
-          }, 150);
-          break;
-        case 'win':
-          setAnimationClass('card-win');
-          break;
+      if (animate === 'win') {
+        setAnimationClass('card-win');
+        return;
       }
+      // flip
+      setIsFlipping(true);
+      setTimeout(() => {
+        setShowFront(prev => !prev);
+        setTimeout(() => {
+          setIsFlipping(false);
+          onAnimationEnd?.();
+        }, 150);
+      }, 150);
     }, delay);
 
     return () => clearTimeout(timer);
   }, [animate, delay, onAnimationEnd]);
 
-  // Сброс анимации после её завершения
-  useEffect(() => {
-    if (animationClass) {
-      const timer = setTimeout(() => {
-        setAnimationClass('');
-        onAnimationEnd?.();
-      }, 500);
-      return () => clearTimeout(timer);
-    }
-  }, [animationClass, onAnimationEnd]);
+  const handleAnimationEnd = (e: React.AnimationEvent<HTMLDivElement>) => {
+    if (e.target !== e.currentTarget) return;
+    // card-deal оставляем висеть: его конечный кадр совпадает с обычным
+    // состоянием карты, а снятие класса дало бы лишний перерендер.
+    if (e.animationName === 'card-win') setAnimationClass('');
+    onAnimationEnd?.();
+  };
 
   const src = cardSrc(showFront ? code : undefined);
 
   return (
     <div
       className={`card-container ${animationClass}`}
+      onAnimationEnd={handleAnimationEnd}
       style={{
         width: size,
         height: size * 1.4,
         perspective: '1000px',
         display: 'inline-block',
+        animationDelay: animationClass ? `${animationDelay}ms` : undefined,
         ...style,
       }}
     >

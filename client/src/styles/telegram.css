@@ -373,7 +373,9 @@ body {
 }
 
 .card-deal {
-  animation: card-deal 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+  /* both, а не forwards: карта должна держать стартовый кадр (opacity 0)
+     всё время animation-delay, иначе она мигнёт на своём месте до вылета */
+  animation: card-deal 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) both;
 }
 
 .card-flipping {
