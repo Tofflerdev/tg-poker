@@ -5,6 +5,7 @@ import GameControls from "../components/GameControls";
 import Chat from "../components/Chat";
 import { Button } from "../components/ui";
 import { ActionBubbleLayer } from "../components/ActionBubbleLayer";
+import LeaveTableModal from "../components/LeaveTableModal";
 import type { GameState, ShowdownResult, TelegramUser, ExtendedServerEvents, ExtendedClientEvents, ActionBubbleEvent } from "../../../types/index";
 import { useTelegram } from "../hooks/useTelegram";
 import { useIsMobile } from "../hooks/useIsMobile";
@@ -28,32 +29,33 @@ export const GameRoom: React.FC<GameRoomProps> = ({
   currentUser,
   onLeaveTable,
 }) => {
-  const { showBackButton, hideBackButton, setHeaderColor, showConfirm, hapticFeedback } = useTelegram();
+  const { showBackButton, hideBackButton, setHeaderColor, hapticFeedback } = useTelegram();
   const isMobile = useIsMobile();
   const [isMyTurn, setIsMyTurn] = useState(false);
   const [lastStage, setLastStage] = useState(gameState.stage);
   const [isChatOpen, setIsChatOpen] = useState(false);
+  // Leaving is confirmed through our own bottom sheet (LeaveTableModal) rather
+  // than Telegram's showConfirm: the system dialog spoke the client's locale and
+  // wore native chrome that had nothing to do with the felt.
+  const [isLeaveOpen, setIsLeaveOpen] = useState(false);
   // Phase 3 / Plan 03-03: imperative handle wired into ActionBubbleLayer so
   // the socket 'actionBubble' listener can push events without re-subscribing
   // on every re-render. See useEffect below for subscription lifecycle.
   const bubblePushRef = React.useRef<((evt: ActionBubbleEvent) => void) | null>(null);
 
+  // My own seat, when seated — the leave sheet quotes the stack being returned.
+  const me = mySeat !== null ? gameState.seats[mySeat] : null;
+
   // Handle back button and header
   useEffect(() => {
     setHeaderColor("#1a472a");
 
-    showBackButton(() => {
-      showConfirm("Покинуть стол?", (confirmed) => {
-        if (confirmed) {
-          onLeaveTable();
-        }
-      });
-    });
+    showBackButton(() => setIsLeaveOpen(true));
 
     return () => {
       hideBackButton();
     };
-  }, [showBackButton, hideBackButton, setHeaderColor, showConfirm, onLeaveTable]);
+  }, [showBackButton, hideBackButton, setHeaderColor]);
 
   // Track turn changes for haptic feedback
   useEffect(() => {
@@ -139,11 +141,7 @@ export const GameRoom: React.FC<GameRoomProps> = ({
       >
         <Button
           variant="neutral"
-          onClick={() => {
-            showConfirm("Покинуть стол?", (confirmed) => {
-              if (confirmed) onLeaveTable();
-            });
-          }}
+          onClick={() => setIsLeaveOpen(true)}
           aria-label="Back to menu"
           style={{
             pointerEvents: 'auto',
@@ -265,6 +263,21 @@ export const GameRoom: React.FC<GameRoomProps> = ({
             </div>
           </div>
         </div>
+      )}
+
+      {isLeaveOpen && (
+        <LeaveTableModal
+          stack={me ? me.chips : null}
+          inHand={
+            !!me && !me.folded &&
+            gameState.stage !== 'waiting' && gameState.stage !== 'showdown'
+          }
+          onConfirm={() => {
+            setIsLeaveOpen(false);
+            onLeaveTable();
+          }}
+          onCancel={() => setIsLeaveOpen(false)}
+        />
       )}
     </div>
   );
