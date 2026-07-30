@@ -39,10 +39,14 @@ else
     echo "unchanged."
 fi
 
-# Step 4: Prune unused images
+# Step 4: Prune unused images + trim BuildKit cache. `image prune` does NOT
+# touch the build cache — without the builder prune it grows by hundreds of MB
+# per deploy (three npm ci stages) and eventually fills the disk. Keep 2 GB so
+# rebuilds still hit warm layers on this 1 GB box.
 echo ""
 echo "[4/4] Cleaning up..."
 docker image prune -f
+docker builder prune -f --reserved-space 2g
 
 echo ""
 echo "✅ Update complete!"
