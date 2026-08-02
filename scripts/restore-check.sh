@@ -28,7 +28,16 @@ fi
 [ -r "$KEYFILE" ] || { echo "нет ключа: $KEYFILE" >&2; exit 2; }
 command -v age >/dev/null || { echo "age не установлен" >&2; exit 2; }
 
-export MSYS_NO_PATHCONV=1   # git-bash on Windows otherwise mangles /-paths
+# `age` on Windows is a native .exe and cannot see git-bash's /c/... paths, so
+# hand it Windows ones. (Do NOT reach for MSYS_NO_PATHCONV=1 here — that turns
+# OFF the translation this needs, which is exactly how this bit broke once.)
+if command -v cygpath >/dev/null 2>&1; then
+    ARCHIVE_NATIVE=$(cygpath -w "$ARCHIVE")
+    KEYFILE_NATIVE=$(cygpath -w "$KEYFILE")
+else
+    ARCHIVE_NATIVE="$ARCHIVE"
+    KEYFILE_NATIVE="$KEYFILE"
+fi
 
 START=$(date +%s)
 cleanup() { docker rm -f "$CONTAINER" >/dev/null 2>&1 || true; }
@@ -52,12 +61,26 @@ docker exec "$CONTAINER" pg_isready -U "$PG_USER" -d "$PG_DB" >/dev/null
 
 echo "[2/4] расшифровываю и восстанавливаю…"
 # pg_restore reads the custom-format archive from stdin, so the decrypted dump
-# exists only in the pipe. Errors are echoed but not fatal: --clean on a fresh
-# database always complains about dropping things that were never there.
-age -d -i "$KEYFILE" "$ARCHIVE" \
+# exists only in the pipe. A non-zero exit is not fatal by itself: --clean on a
+# fresh database always complains about dropping things that were never there.
+age -d -i "$KEYFILE_NATIVE" "$ARCHIVE_NATIVE" \
     | docker exec -i "$CONTAINER" \
         pg_restore -U "$PG_USER" -d "$PG_DB" --clean --if-exists --no-owner \
-    || echo "  (pg_restore вернул ненулевой код — смотри сообщения выше; на пустой базе это обычно безобидные DROP-ошибки)"
+    || echo "  (pg_restore вернул ненулевой код — смотри сообщения выше)"
+
+# …which is why tolerating that exit code needs a hard check behind it. Without
+# one, a drill where age failed and pg_restore read an empty stream prints the
+# reassuring DROP-errors line and calls it a day — a restore check that passes
+# on a restore that did not happen is worse than no check at all.
+ROWS=$(docker exec -i "$CONTAINER" psql -U "$PG_USER" -d "$PG_DB" -X -t -A \
+        -c 'SELECT count(*) FROM users' 2>/dev/null | tr -dc '0-9') || true
+if [ -z "$ROWS" ] || [ "$ROWS" = "0" ]; then
+    echo
+    echo "❌ ВОССТАНОВЛЕНИЕ ПРОВАЛИЛОСЬ: после pg_restore таблицы users нет или она пуста."
+    echo "   Смотри сообщения выше — типично это age (не тот ключ / не нашёл файл)"
+    echo "   или битый архив. Успехом это не считается."
+    exit 1
+fi
 
 echo "[3/4] сверка — восстановленная база:"
 docker exec -i "$CONTAINER" psql -U "$PG_USER" -d "$PG_DB" -X <<'SQL'
