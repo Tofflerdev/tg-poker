@@ -188,13 +188,14 @@ docker compose -f docker-compose.prod.yml up -d --build
 
 ## Database backups
 
-Hourly encrypted dump → Cloudflare R2, plus one daily copy into the owner's
+Hourly encrypted dump → Backblaze B2, plus one daily copy into the owner's
 Telegram DM. Full rationale and the restore drill: `plans/db-backup-plan.md`.
 
 - Script: `/opt/tg-poker/backup.sh` (in the repo, runs on the **host**, not in a container)
 - Schedule: `/etc/cron.d/tgp-backup` — every hour at **:17**
 - Local copies: `/opt/tg-poker/backups/*.dump.age`, kept 48 h; log `backups/backup.log`
-- Remote: `r2:tgp-backups/hourly/` (7-day lifecycle) and `daily/` (90-day)
+- Remote: `b2:tgp-backups/hourly/` (7 days) and `daily/` (90 days) — retention is
+  applied by the script, not by bucket lifecycle rules
 - Encryption: `age`, **public key only on the server** (`BACKUP_AGE_RECIPIENT` in `.env`).
   The private key lives with the owner — without it every backup is noise, including
   the owner's own. Losing it loses the backups.
@@ -203,7 +204,7 @@ Telegram DM. Full rationale and the restore drill: `plans/db-backup-plan.md`.
 # One-time server setup
 apt-get install -y age
 curl https://rclone.org/install.sh | bash
-rclone config                      # remote "r2": type s3, provider Cloudflare
+rclone config create b2 b2 account=<keyID> key=<applicationKey>
 chmod 600 /root/.config/rclone/rclone.conf
 mkdir -p /opt/tg-poker/backups && chmod 700 /opt/tg-poker/backups
 install -m 644 /opt/tg-poker/scripts/tgp-backup.cron /etc/cron.d/tgp-backup
@@ -211,8 +212,8 @@ install -m 644 /opt/tg-poker/scripts/tgp-backup.cron /etc/cron.d/tgp-backup
 # Run it by hand (same code path as cron)
 bash /opt/tg-poker/backup.sh && tail -5 /opt/tg-poker/backups/backup.log
 
-# What is in R2 right now
-rclone ls r2:tgp-backups/hourly | tail -5
+# What is on the remote right now
+rclone ls b2:tgp-backups/hourly | tail -5
 ```
 
 Failures alert the owner over Telegram. A cron that never fires cannot alert, so
@@ -221,7 +222,7 @@ the **daily DM is the heartbeat**: no morning file = backups are dead, go look.
 **Restore** (see also the cheat sheet at the end of the backup plan):
 
 ```bash
-rclone copy r2:tgp-backups/hourly/db-YYYYMMDD-HHMM.dump.age .
+rclone copy b2:tgp-backups/hourly/db-YYYYMMDD-HHMM.dump.age .
 age -d -i tgp-backup.key db-YYYYMMDD-HHMM.dump.age > restore.dump
 docker compose -f docker-compose.prod.yml cp restore.dump postgres:/tmp/r.dump
 docker compose -f docker-compose.prod.yml exec -T postgres \

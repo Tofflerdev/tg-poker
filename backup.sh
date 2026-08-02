@@ -5,10 +5,14 @@
 # Runs on the HOST (not inside a container), once an hour from
 # /etc/cron.d/tgp-backup. Rationale for every step: plans/db-backup-plan.md.
 #
-#   pg_dump -Fc  →  age (public key)  →  local dir (48h)  →  Cloudflare R2
-#   once a day (BACKUP_DAILY_HOUR_UTC): a second copy under daily/ in R2 plus
+#   pg_dump -Fc  →  age (public key)  →  local dir (48h)  →  Backblaze B2
+#   once a day (BACKUP_DAILY_HOUR_UTC): a second copy under daily/ in B2 plus
 #   the file itself to the owner's Telegram DM. That daily message doubles as
 #   the heartbeat — no morning file in the DM means backups have stopped.
+#
+# Retention on the remote is done HERE, not by bucket lifecycle rules: it is one
+# fewer thing configured in a web UI that nobody will remember, it shows up in
+# this log, and it keeps the script portable across storage providers.
 #
 # The dump never touches the disk unencrypted: pg_dump is piped straight into
 # age. Only the *public* key lives on this box, so whoever takes the server
@@ -29,6 +33,10 @@ export PATH
 # cron does not reliably export HOME, and rclone would then look for its config
 # in the wrong place — point at it explicitly.
 export RCLONE_CONFIG="${RCLONE_CONFIG:-/root/.config/rclone/rclone.conf}"
+# B2 keeps every version of a file: a plain `rclone delete` only writes a hide
+# marker, so the bytes stay and the bucket grows forever while `rclone ls` shows
+# a tidy 7 days. Retention here is meant literally. Other backends ignore this.
+export RCLONE_B2_HARD_DELETE=true
 
 STEP="startup"
 
@@ -102,9 +110,11 @@ trap 'on_error $LINENO' ERR
 BOT_TOKEN="$(env_get BOT_TOKEN)"
 TG_CHAT_ID="$(env_get BACKUP_TG_CHAT_ID)"
 AGE_RECIPIENT="$(env_get BACKUP_AGE_RECIPIENT)"
-R2_REMOTE="$(env_get BACKUP_R2_REMOTE)"; R2_REMOTE="${R2_REMOTE:-r2:tgp-backups}"
+REMOTE="$(env_get BACKUP_REMOTE)"; REMOTE="${REMOTE:-b2:tgp-backups}"
 DAILY_HOUR="$(env_get BACKUP_DAILY_HOUR_UTC)"; DAILY_HOUR="${DAILY_HOUR:-03}"
 KEEP_HOURS="$(env_get BACKUP_LOCAL_RETENTION_HOURS)"; KEEP_HOURS="${KEEP_HOURS:-48}"
+KEEP_HOURLY_DAYS="$(env_get BACKUP_REMOTE_HOURLY_DAYS)"; KEEP_HOURLY_DAYS="${KEEP_HOURLY_DAYS:-7}"
+KEEP_DAILY_DAYS="$(env_get BACKUP_REMOTE_DAILY_DAYS)"; KEEP_DAILY_DAYS="${KEEP_DAILY_DAYS:-90}"
 PG_USER="$(env_get POSTGRES_USER)"; PG_USER="${PG_USER:-poker}"
 PG_DB="$(env_get POSTGRES_DB)"; PG_DB="${PG_DB:-poker_db}"
 
@@ -152,19 +162,19 @@ STEP="локальный ретеншен"
 find "$BACKUP_DIR" -maxdepth 1 -name 'db-*.dump.age' -mmin "+$((KEEP_HOURS * 60))" -delete
 find "$BACKUP_DIR" -maxdepth 1 -name '*.part' -mmin +180 -delete
 
-# --- 4. upload to R2 ---------------------------------------------------------
+# --- 4. upload to the remote -------------------------------------------------
 
-STEP="rclone → ${R2_REMOTE}/hourly"
-rclone copy --no-traverse "$OUT" "${R2_REMOTE}/hourly/"
-log "uploaded to ${R2_REMOTE}/hourly/${NAME}"
+STEP="rclone → ${REMOTE}/hourly"
+rclone copy --no-traverse "$OUT" "${REMOTE}/hourly/"
+log "uploaded to ${REMOTE}/hourly/${NAME}"
 
 # --- 5. once a day: daily/ copy + the file into the owner's DM ---------------
 
 HOUR="$(date -u '+%H')"
 if [ "$HOUR" = "$DAILY_HOUR" ]; then
-    STEP="rclone → ${R2_REMOTE}/daily"
-    rclone copy --no-traverse "$OUT" "${R2_REMOTE}/daily/"
-    log "uploaded to ${R2_REMOTE}/daily/${NAME}"
+    STEP="rclone → ${REMOTE}/daily"
+    rclone copy --no-traverse "$OUT" "${REMOTE}/daily/"
+    log "uploaded to ${REMOTE}/daily/${NAME}"
 
     STEP="telegram sendDocument"
     if [ -n "$BOT_TOKEN" ] && [ -n "$TG_CHAT_ID" ]; then
@@ -183,6 +193,15 @@ if [ "$HOUR" = "$DAILY_HOUR" ]; then
         log "telegram not configured — daily DM skipped"
     fi
 fi
+
+# --- 6. remote retention -----------------------------------------------------
+# Last, deliberately: this hour's backup is already safe by now, so a failure
+# here alerts about a storage-growth problem without ever costing us a backup.
+
+STEP="ретеншен на ${REMOTE}"
+rclone delete --min-age "${KEEP_HOURLY_DAYS}d" "${REMOTE}/hourly/"
+rclone delete --min-age "${KEEP_DAILY_DAYS}d" "${REMOTE}/daily/"
+log "remote retention applied (hourly ${KEEP_HOURLY_DAYS}d, daily ${KEEP_DAILY_DAYS}d)"
 
 STEP="done"
 log "=== backup $NAME ok ==="
