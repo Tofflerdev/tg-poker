@@ -1,0 +1,5 @@
+# Shell scripts run on the Linux VPS. Windows checkouts have core.autocrlf=true,
+# and a CRLF shebang there means `bash: /opt/tg-poker/backup.sh: bad interpreter`.
+*.sh text eol=lf
+# Same story for /etc/cron.d files — cron silently ignores a line ending in ^M.
+*.cron text eol=lf

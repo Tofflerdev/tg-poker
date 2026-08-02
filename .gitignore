@@ -13,9 +13,20 @@ prod-check.png
 screenshots/
 .claude/settings.local.json
 
+# Playwright MCP session artifacts (screenshots, snapshots, console logs)
+.playwright-mcp/
+
 # Playtest bot data (raw session logs + generated reports)
 sessions/
 reports/
 
 # Internal audit notes (not for the repo)
 AUDIT.md
+
+# Encrypted DB dumps + their log (the repo IS /opt/tg-poker on prod, so without
+# this every hourly dump would show up in `git status` and block `git pull`).
+backups/
+
+# age private key — must never live on the server, let alone in git.
+*.key
+

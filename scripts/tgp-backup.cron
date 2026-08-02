@@ -1,0 +1,13 @@
+# TG Poker — hourly encrypted Postgres backup (see plans/db-backup-plan.md).
+#
+# Install on the VPS:
+#   mkdir -p /opt/tg-poker/backups && chmod 700 /opt/tg-poker/backups
+#   install -m 644 /opt/tg-poker/scripts/tgp-backup.cron /etc/cron.d/tgp-backup
+#
+# Minute 17, not 0: deploys and everyone else's "on the hour" jobs cluster at :00
+# on a 1 GB box. The backups/ directory must exist before the first tick, or the
+# redirect below fails and the script never starts.
+SHELL=/bin/bash
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
+17 * * * * root /bin/bash /opt/tg-poker/backup.sh >> /opt/tg-poker/backups/cron.log 2>&1
