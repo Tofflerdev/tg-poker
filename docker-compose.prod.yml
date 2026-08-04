@@ -31,6 +31,15 @@ services:
       JWT_SECRET: ${JWT_SECRET}
       ADMIN_USER: ${ADMIN_USER}
       ADMIN_PASS: ${ADMIN_PASS}
+      # Error tracking. Empty DSN = Sentry.init is skipped entirely (graceful).
+      # Without this line the money-invariant alert (server/index.ts) reaches
+      # nothing but the container log, however neatly SENTRY_DSN sits in .env.
+      SENTRY_DSN: ${SENTRY_DSN:-}
+      # Product analytics, same deal: empty key = PostHog is never constructed.
+      # POSTHOG_HOST only matters for a self-hosted instance; the code defaults
+      # to app.posthog.com when it is empty.
+      POSTHOG_API_KEY: ${POSTHOG_API_KEY:-}
+      POSTHOG_HOST: ${POSTHOG_HOST:-}
       # Playtest bots: set RECORD_SESSIONS=1 in .env to record sessions/*.jsonl
       RECORD_SESSIONS: ${RECORD_SESSIONS:-}
       # crypto-payments-rake phase 4 §D: Crypto Pay deposits. Empty token disables
