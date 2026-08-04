@@ -28,6 +28,9 @@ services:
       PORT: 3000
       DATABASE_URL: postgresql://${POSTGRES_USER:-poker}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-poker_db}
       BOT_TOKEN: ${BOT_TOKEN}
+      # Socket.io + /api/admin/login allowlist. Defaults to this box's own
+      # domain, which is what both boxes want; override only to allow several.
+      CORS_ORIGIN: ${CORS_ORIGIN:-https://${DOMAIN:?set DOMAIN in .env}}
       JWT_SECRET: ${JWT_SECRET}
       ADMIN_USER: ${ADMIN_USER}
       ADMIN_PASS: ${ADMIN_PASS}
@@ -95,8 +98,26 @@ services:
     ports:
       - "80:80"
       - "443:443"
+    environment:
+      # `:?` and not `:-` on purpose: an empty DOMAIN renders `server_name ;` and
+      # a cert path of /etc/letsencrypt/live//fullchain.pem, nginx refuses to
+      # start and the site is down. Failing the compose command outright is the
+      # cheaper failure.
+      DOMAIN: ${DOMAIN:?set DOMAIN in .env — the nginx template needs it}
+      # Narrows envsubst to variable names matching this regex. The image passes
+      # envsubst an explicit name list either way — with no filter the list is
+      # every env var in the container — and envsubst only ever touches names on
+      # that list, so nginx's own $host / $uri / $remote_addr survive regardless.
+      # The filter is insurance against the one case that would bite: an env var
+      # named like an nginx variable (lowercase `host`, `scheme`, …). Cheap, and
+      # it states the intent — exactly one thing in this template is templated.
+      NGINX_ENVSUBST_FILTER: DOMAIN
     volumes:
-      - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      # The DIRECTORY, not a single file: the image renders every *.template in
+      # here into conf.d/ at start-up. Mounting a directory also sidesteps the
+      # inode trap that a bind-mounted single file has — `git pull` replaces the
+      # file and the running container keeps reading the old inode.
+      - ./nginx:/etc/nginx/templates:ro
       - client-dist:/usr/share/nginx/html:ro
       - /etc/letsencrypt:/etc/letsencrypt:ro
     depends_on:

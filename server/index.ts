@@ -104,10 +104,24 @@ const rateLimitSweep = setInterval(() => {
 }, 60 * 1000);
 rateLimitSweep.unref?.();
 
-// CORS: allow all in dev, restrict in production
+// CORS: allow all in dev, restrict in production.
+//
+// The allowlist comes from CORS_ORIGIN (comma-separated) because the live box
+// and the test stand run the same image from the same main on DIFFERENT
+// domains — a literal here would lock both to one of them. Falls back to the
+// stand's domain so an older .env keeps working unchanged.
+const configuredOrigins = (process.env.CORS_ORIGIN ?? '')
+  .split(',')
+  .map((origin) => origin.trim())
+  .filter(Boolean);
+
 const CORS_ORIGIN = process.env.NODE_ENV === 'production'
-  ? ["https://tgp.isgood.host"]
+  ? (configuredOrigins.length > 0 ? configuredOrigins : ["https://tgp.isgood.host"])
   : ["http://localhost:5173", "http://127.0.0.1:5173", "http://localhost:3000"];
+
+// Printed because a wrong allowlist fails silently from the server's side: the
+// browser blocks the socket and the login POST, and the log shows nothing at all.
+console.log(`[Boot] CORS allowlist: ${CORS_ORIGIN.join(', ')}`);
 
 // Phase 5 / Plan 05-03 / ADMIN-01 / Pitfall 1: register JSON body parser BEFORE
 // any POST handlers. (Existing GET handlers don't need a body parser.)

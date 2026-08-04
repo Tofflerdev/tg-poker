@@ -84,9 +84,24 @@ PORT=3000
 DOMAIN=tgp.isgood.host
 ```
 
+**`DOMAIN` is required** — nginx renders its config from `nginx/default.conf.template`
+at container start-up and needs the name for `server_name` and for the Let's Encrypt
+certificate paths. `CORS_ORIGIN` defaults to `https://$DOMAIN`; set it explicitly
+(comma-separated) only to allow more than one origin. Compose refuses to start with
+`DOMAIN` unset rather than rendering a config nginx cannot load.
+
+The live box and the test stand run this same repo on different domains — that is
+why neither the config nor the CORS allowlist hardcodes a name any more.
+
 To change a value: edit `.env`, then restart:
 ```bash
 docker compose -f docker-compose.prod.yml up -d
+```
+
+`DOMAIN` is read while the container starts, so changing it needs nginx recreated:
+```bash
+docker compose -f docker-compose.prod.yml up -d --force-recreate nginx
+docker compose -f docker-compose.prod.yml exec nginx cat /etc/nginx/conf.d/default.conf  # what is actually serving
 ```
 
 ---
