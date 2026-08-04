@@ -21,9 +21,15 @@ BEFORE=$(git rev-parse HEAD)
 git pull origin main
 AFTER=$(git rev-parse HEAD)
 
-# Step 2: Rebuild and restart services
+# Step 2: Rebuild and restart services.
+# SENTRY_RELEASE tags every Sentry event with the commit actually deployed, so a
+# new issue points at the deploy that introduced it. Exported (not written to
+# .env) because it changes on every run; a shell variable takes precedence over
+# .env in compose substitution.
 echo ""
 echo "[2/4] Rebuilding services..."
+export SENTRY_RELEASE=$(git rev-parse --short HEAD)
+echo "release: ${SENTRY_RELEASE}"
 docker compose -f docker-compose.prod.yml up -d --build
 
 # Step 3: nginx.conf is bind-mounted as a single FILE, and git pull replaces it

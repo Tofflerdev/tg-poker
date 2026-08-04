@@ -35,6 +35,10 @@ services:
       # Without this line the money-invariant alert (server/index.ts) reaches
       # nothing but the container log, however neatly SENTRY_DSN sits in .env.
       SENTRY_DSN: ${SENTRY_DSN:-}
+      # Commit sha, exported by update.sh at deploy time — tags every event with
+      # the deploy it came from. A manual `up -d` leaves it empty, which only
+      # costs the tag.
+      SENTRY_RELEASE: ${SENTRY_RELEASE:-}
       # Product analytics, same deal: empty key = PostHog is never constructed.
       # POSTHOG_HOST only matters for a self-hosted instance; the code defaults
       # to app.posthog.com when it is empty.

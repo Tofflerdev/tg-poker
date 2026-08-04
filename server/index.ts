@@ -58,7 +58,13 @@ if (process.env.SENTRY_DSN) {
   Sentry.init({
     dsn: process.env.SENTRY_DSN,
     environment: process.env.NODE_ENV ?? 'development',
-    release: process.env.npm_package_version,
+    // npm_package_version alone was always undefined in prod: the container
+    // starts via `exec node dist/server/index.js` (docker-entrypoint.sh), not
+    // through npm, so every event arrived untagged and "which deploy broke it"
+    // had no answer. update.sh now exports the commit sha. `||` and not `??`
+    // on purpose — compose passes an unset key through as an EMPTY STRING,
+    // which `??` would happily accept as the release.
+    release: process.env.SENTRY_RELEASE || process.env.npm_package_version,
     beforeSend: (event) => scrubSentryEvent(event as unknown as Record<string, unknown>) as any,
   });
   console.log('[Boot] Sentry initialized');
@@ -227,6 +233,16 @@ app.post('/api/crypto/webhook', async (req, res) => {
   }
   res.status(200).end();
 });
+
+// Errors thrown inside the routes above never reached Sentry: Express catches
+// them into its own default handler, which answers 500 and reports nothing.
+// Must sit AFTER every route and before any other error middleware — that is
+// how Express orders error handlers. Process-level crashes (uncaughtException,
+// unhandledRejection) need nothing here; @sentry/node captures those through
+// its default integrations.
+if (process.env.SENTRY_DSN) {
+  Sentry.setupExpressErrorHandler(app);
+}
 
 /**
  * Resolve the live socketId for a telegramId.
