@@ -81,12 +81,20 @@ SSL, бэкапы, крон, переменные. Забытый бэкап н�
       `/etc/nginx/templates/*.template` и кладёт результат в `conf.d/`. Переименовать в
       `nginx/default.conf.template`, монтировать **каталог** `./nginx` в
       `/etc/nginx/templates`, подставлять `${DOMAIN}`.
-      ⚠️ **Обязательно задать `NGINX_ENVSUBST_FILTER: DOMAIN`** — иначе envsubst съест
-      и `$host`, `$uri`, `$remote_addr`, `$http_upgrade` и остальные переменные самого
-      nginx, которых в конфиге около двадцати, и прокси развалится.
+      `NGINX_ENVSUBST_FILTER: DOMAIN` — сузить подстановку до одного имени.
+      Переменные самого nginx (`$host`, `$uri`, `$remote_addr`) уцелеют и без фильтра:
+      скрипт образа передаёт `envsubst` явный список имён переменных окружения,
+      а `envsubst` со списком другие `$...` не трогает. Фильтр нужен на случай
+      переменной окружения, названной как переменная nginx (строчными).
 - [ ] Проверить **на стенде**: с `DOMAIN=tgp.isgood.host` итоговый конфиг обязан совпасть
       с нынешним. `docker compose exec nginx cat /etc/nginx/conf.d/default.conf` —
       сравнивать то, что **внутри контейнера**, а не на хосте.
+      Локально то же самое проверяется без деплоя:
+      `docker run --rm -e DOMAIN=... -e NGINX_ENVSUBST_FILTER=DOMAIN -v ./nginx:/etc/nginx/templates:ro
+      --entrypoint /bin/sh nginx:alpine -c "/docker-entrypoint.d/20-envsubst-on-templates.sh; cat /etc/nginx/conf.d/default.conf"`.
+      ⚠️ Штатный entrypoint запускает init-скрипты, **только если команда — `nginx`**;
+      с любой другой командой шаблоны молча не обработаются, и вы получите стоковый
+      конфиг образа, приняв его за свой.
 
 Побочная выгода: монтирование каталога вместо одиночного файла снимает грабли с inode —
 `git pull` больше не подменяет файл под работающим контейнером.
