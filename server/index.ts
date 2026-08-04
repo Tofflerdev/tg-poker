@@ -57,7 +57,12 @@ assertSafeBootOrExit();
 if (process.env.SENTRY_DSN) {
   Sentry.init({
     dsn: process.env.SENTRY_DSN,
-    environment: process.env.NODE_ENV ?? 'development',
+    // Which STAND this is, not which mode the code runs in — the two questions
+    // only look alike. A staging box runs NODE_ENV=production on purpose (CORS,
+    // the dev-auth ban, assertSafeBootOrExit all hang off it), so NODE_ENV alone
+    // would label every stand "production" and leave nothing to filter alerts by.
+    // `||` for the same reason as below: compose hands over an empty string.
+    environment: process.env.SENTRY_ENVIRONMENT || process.env.NODE_ENV || 'development',
     // npm_package_version alone was always undefined in prod: the container
     // starts via `exec node dist/server/index.js` (docker-entrypoint.sh), not
     // through npm, so every event arrived untagged and "which deploy broke it"

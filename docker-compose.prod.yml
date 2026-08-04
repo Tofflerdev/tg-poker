@@ -39,6 +39,10 @@ services:
       # the deploy it came from. A manual `up -d` leaves it empty, which only
       # costs the tag.
       SENTRY_RELEASE: ${SENTRY_RELEASE:-}
+      # Which stand this is: `production` on the live box, `staging` on a test
+      # one. Deliberately NOT derived from NODE_ENV, which is production
+      # everywhere by design. Empty falls back to NODE_ENV.
+      SENTRY_ENVIRONMENT: ${SENTRY_ENVIRONMENT:-}
       # Product analytics, same deal: empty key = PostHog is never constructed.
       # POSTHOG_HOST only matters for a self-hosted instance; the code defaults
       # to app.posthog.com when it is empty.
