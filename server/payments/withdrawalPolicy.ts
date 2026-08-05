@@ -32,9 +32,13 @@ export interface WithdrawalPolicy {
   /** Rolling 24h payout cap per player ($500 — plan §I). */
   dailyLimitChips: number;
   /**
-   * Hands required since the last deposit before a payout is allowed. Plan value
-   * is 50; kept at 0 while on testnet so the transfer path can be exercised
-   * without grinding hands first. RAISE THIS TO 50 BEFORE THE REAL LAUNCH.
+   * Hands required since the last deposit before a payout is allowed. DROPPED
+   * 2026-08-05 — stays 0, including at launch. It never bought what it promised:
+   * a HandHistory row is written for every occupied seat (sitting out included),
+   * so the counter is farmable for free, and the transit flow it targeted cashes
+   * out through an account that never deposited — which skips the check outright.
+   * Churn is already priced by the 3% deposit fee the player pays. The switch
+   * stays wired so it can be turned on from env if real abuse appears.
    */
   minHandsSinceDeposit: number;
   /** Flag (not a block) when a payout eats most of a barely-played deposit. */
