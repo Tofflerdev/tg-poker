@@ -1,6 +1,8 @@
 # Deployment Guide — TG Poker
 
-**Stack:** Node.js + PostgreSQL + nginx + Docker | **VPS OS:** Ubuntu 22.04
+**Stack:** Node.js + PostgreSQL + nginx + Docker | **VPS OS:** Ubuntu (22.04 on the
+stand, 26.04 on the live box — the install below derives the codename from
+`/etc/os-release`, and Docker publishes both)
 
 **Two boxes run this repo, from the same `main`.** They share the code, the
 compose file and the nginx template, and differ only in `.env` — the domain, the
