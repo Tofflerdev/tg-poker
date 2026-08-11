@@ -137,7 +137,10 @@ SSL, бэкапы, крон, переменные. Забытый бэкап н�
 
 - [ ] VPS, Docker, клон репозитория, сертификат + renewal-hooks — всё по `DEPLOY.md`.
 - [ ] `.env` **писать руками**, не копировать со стенда (см. фазу 0). Полный список ключей —
-      фаза C.
+      фаза C; заготовка с плейсхолдерами и предупреждениями — `.env.production.example`
+      (`cp .env.production.example .env`). ⚠️ Прежний `cp .env.production .env` из
+      `DEPLOY.md` был нерабочим: файл в `.gitignore` и на свежем клоне отсутствует —
+      исправлено 2026-08-11 вместе с ревизией `DEPLOY.md`.
 - [ ] `docker compose -f docker-compose.prod.yml up -d --build`, дождаться `Healthy`.
 
 ### A3. Бэкапы на боевой машине
