@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Socket } from 'socket.io-client';
 import { Button, Card } from '../components/ui';
+import { LEGAL_VERSION } from './legal/legalMeta';
 import type { ExtendedClientEvents, ExtendedServerEvents } from '../../../types/index';
 
 /**
@@ -12,9 +13,11 @@ import type { ExtendedClientEvents, ExtendedServerEvents } from '../../../types/
  * whose `tosAcceptedAt` is null. Single combined checkbox + Accept button
  * covering Terms of Service, Privacy Policy, and Responsible Gaming.
  *
- * On Accept: emits `acceptTos` with `version: '1.0'`. Server validates auth
- * and payload, writes `tosAcceptedAt = now()` + `tosVersion = '1.0'` to the
- * User row, then emits `tosAccepted`. App.tsx's listener updates
+ * On Accept: emits `acceptTos` with the current `LEGAL_VERSION` (see
+ * pages/legal/legalMeta.ts — the documents and this gate must always send the
+ * same version, or the stored consent misrepresents what was agreed to). Server
+ * validates auth and payload, writes `tosAcceptedAt = now()` + `tosVersion` to
+ * the User row, then emits `tosAccepted`. App.tsx's listener updates
  * `currentUser.tosAcceptedAt` and transitions the view to 'menu'.
  *
  * No skip button. No "remind me later". This is a gate.
@@ -49,7 +52,7 @@ export const Consent: React.FC<ConsentProps> = ({ socket, onAccept, onViewLegal 
   const handleAccept = () => {
     if (!agreed || submitting) return;
     setSubmitting(true);
-    socket.emit('acceptTos', { version: '1.0' });
+    socket.emit('acceptTos', { version: LEGAL_VERSION });
   };
 
   return (
@@ -91,7 +94,8 @@ export const Consent: React.FC<ConsentProps> = ({ socket, onAccept, onViewLegal 
               textAlign: 'center',
             }}
           >
-            Before you play, please review and accept our terms.
+            NightRiver is a real-money poker app for players 18 and over. Please
+            review and accept our terms before you play.
           </p>
 
           {/* Inline links to full legal pages (D-27) */}
@@ -141,7 +145,8 @@ export const Consent: React.FC<ConsentProps> = ({ socket, onAccept, onViewLegal 
               }}
             />
             <span>
-              I agree to the Terms, Privacy Policy, and Responsible Gaming guidelines.
+              I am 18 or over, and I agree to the Terms, Privacy Policy, and
+              Responsible Gaming guidelines.
             </span>
           </label>
 

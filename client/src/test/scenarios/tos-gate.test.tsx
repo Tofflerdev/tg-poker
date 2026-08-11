@@ -25,7 +25,9 @@ describe('Scenario: ToS gate', () => {
     expect(accept.disabled).toBe(true);
   });
 
-  it('checking the checkbox + clicking Accept emits acceptTos with version 1.0', () => {
+  // The literal is deliberate: bumping LEGAL_VERSION must be a conscious act that
+  // updates this test too, because the version is what the consent record stores.
+  it('checking the checkbox + clicking Accept emits acceptTos with version 2.0', () => {
     const socket = makeSocket();
     render(<Consent socket={socket as any} onAccept={vi.fn()} onViewLegal={vi.fn()} />);
 
@@ -36,7 +38,7 @@ describe('Scenario: ToS gate', () => {
     const accept = screen.getByRole('button', { name: /accept & continue/i });
     fireEvent.click(accept);
 
-    expect(socket.emit).toHaveBeenCalledWith('acceptTos', { version: '1.0' });
+    expect(socket.emit).toHaveBeenCalledWith('acceptTos', { version: '2.0' });
   });
 
   it('on tosAccepted server ack, onAccept prop is invoked', () => {
