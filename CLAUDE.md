@@ -62,6 +62,24 @@ npx prisma db push             # Push schema to DB
 npx prisma migrate dev         # Create migration
 ```
 
+## Branching & Deployment Flow
+
+**Do not commit feature work to `main`, and never deploy `main` straight to the live
+box.** Two boxes run this repo from the same `main`: the stand `tgp.isgood.host`
+(testnet money) and the live box `nightriver.isgood.host` (real money). Full
+procedure in `DEPLOY.md`; the rule in short:
+
+1. **Branch** off `main` for every feature or fix.
+2. **Merge** into `main` and push when the work is ready to deploy.
+3. **Deploy to the stand first** — `ssh root@tgp.isgood.host`, `cd /opt/tg-poker && bash update.sh`.
+4. **Wait for the owner** to check it by hand on the stand and say go. This is a
+   human gate; it is not satisfied by green tests or by the change looking small.
+5. **Then deploy to the live box** — same command on `nightriver.isgood.host`.
+
+⚠️ Both boxes pull the same `main`, so the gate is timing, not branching: the moment
+a merge lands, the live box is one `update.sh` away from shipping it and no tooling
+prevents that. Do not run `update.sh` on the live box without step 4.
+
 ## Environment Variables
 
 See `.env.example`:

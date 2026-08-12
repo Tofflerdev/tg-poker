@@ -10,13 +10,13 @@ Crypto Pay token, the bot, and `SENTRY_ENVIRONMENT`. Nothing below hardcodes a
 domain; commands use `$DOMAIN`, which you set once per shell:
 
 ```bash
-DOMAIN=tgp.isgood.host      # the test stand
-# DOMAIN=<live domain>      # the live box
+DOMAIN=tgp.isgood.host          # the test stand
+# DOMAIN=nightriver.isgood.host # the live box
 ```
 
 | | Live box | Test stand |
 |---|---|---|
-| Domain | its own | `tgp.isgood.host` |
+| Domain | `nightriver.isgood.host` | `tgp.isgood.host` |
 | Crypto Pay | mainnet app | testnet app |
 | `SENTRY_ENVIRONMENT` | `production` | `staging` |
 | `BACKUP_REMOTE` | `b2:tgp-backups/prod` | `b2:tgp-backups/staging` |
@@ -25,9 +25,30 @@ Launching the live box is a checklist of its own: `plans/mainnet-cutover-plan.md
 
 ---
 
-## Routine deploy (both boxes)
+## How a change reaches the live box
 
-Push to GitHub, then:
+**Feature work never happens on `main`, and `main` never goes straight to the live
+box.** The order is fixed and step 4 is a person, not a test suite:
+
+1. **Branch.** Every feature or fix starts on its own branch off `main`.
+2. **Merge.** When the work is ready to deploy, merge into `main` and push.
+3. **Deploy to the stand** — `tgp.isgood.host`, and only there.
+4. **The owner checks it by hand on the stand and confirms.** Nothing reaches the
+   live box without that confirmation, however small the change looks.
+5. **Deploy to the live box** — `nightriver.isgood.host`.
+
+> ⚠️ **Both boxes pull the same `main`, so this gate is timing, not branching.**
+> The moment a merge lands, the live box is one `update.sh` away from shipping it,
+> and nothing in the tooling stops that. The stand being "one commit behind" is not
+> a safety mechanism — the discipline is.
+
+Money makes the gate cheap by comparison: the live box holds real balances and a
+real Crypto Pay wallet, and the stand exists precisely so a bad deploy meets
+testnet chips first.
+
+## Routine deploy (one box)
+
+Push to GitHub, then — with `$DOMAIN` set to the box you actually mean:
 
 ```bash
 ssh root@$DOMAIN
