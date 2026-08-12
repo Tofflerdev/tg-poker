@@ -8,6 +8,7 @@ import { clampBuyIn } from '../config/tables.js';
 import { BOT_BANKROLL_TELEGRAM_ID, HOUSE_TELEGRAM_ID } from '../payments/systemAccounts.js';
 import { getCryptoPay } from '../payments/cryptoPay.js';
 import { chipsToUsdt, MIN_WITHDRAWAL_CHIPS, MIN_DEPOSIT_CHIPS } from '../payments/peg.js';
+import { describeDepositInvoice } from '../payments/depositFee.js';
 import { approveWithdrawal, rejectWithdrawal } from '../payments/withdrawals.js';
 import * as GraceRegistry from '../GraceRegistry.js';
 import type { Server } from 'socket.io';
@@ -352,7 +353,7 @@ export async function createBankrollDeposit(
       const invoice = await cryptoPay.createInvoice({
         amountUsdt: chipsToUsdt(amountChips),
         payload: String(BOT_BANKROLL_TELEGRAM_ID),
-        description: `Bankroll deposit ${amountChips} chips`,
+        description: describeDepositInvoice('Bankroll deposit', amountChips),
       });
       await UserRepository.createPendingDeposit(BOT_BANKROLL_TELEGRAM_ID, amountChips, invoice.invoiceId);
       result = { invoiceId: invoice.invoiceId, payUrl: invoice.payUrl, amountChips };
