@@ -2,75 +2,71 @@
 <!--
   NightRiver — primary in-app logo (icon + wordmark composite).
   Style: Neon Strip — dark surface, cyan/amber neon accents, soft glow.
-  Mark: crescent moon above a curving river (two-stroke horizontal sweep),
-        with a stylized spade cut-out in the moon to read as poker-night.
+  Mark: cyan crescent moon cradling an amber spade, above a river sweep with
+        two amber reflections — same mark as favicon.svg and the bot avatar.
   Wordmark: "NightRiver" — geometric sans, title case, cyan with amber highlight
             on "River" to match the chip-count amber in the game UI.
   Viewbox 512×128, transparent background so it works on dark surfaces.
-  See .planning/phases/02-design-system-rollout-avatars/02-03-PLAN.md.
+
+  The spade used to be cut OUT of the moon via a mask (see git history). It never
+  rendered: the mask carved the spade from the dark disc that bites the crescent,
+  i.e. it removed dark from dark. It is a painted amber shape now, which is also
+  what keeps the mark readable at avatar sizes.
+
+  The icon block is the 512-unit mark scaled by 0.29 into the 128-unit slot, so
+  the two files stay one drawing. Its glow filters are separate from the wordmark
+  ones: blur radii live in user units, and inside a 0.29 scale the wordmark's
+  stdDeviation would collapse to nothing.
 -->
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 128" width="512" height="128" role="img" aria-label="NightRiver">
   <defs>
-    <!-- cyan neon glow filter -->
+    <!-- wordmark glows (unscaled, 128-unit space) -->
     <filter id="glow-cyan" x="-20%" y="-20%" width="140%" height="140%">
       <feGaussianBlur stdDeviation="1.8" result="blur"/>
-      <feMerge>
-        <feMergeNode in="blur"/>
-        <feMergeNode in="SourceGraphic"/>
-      </feMerge>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
     </filter>
-    <!-- amber neon glow filter -->
     <filter id="glow-amber" x="-20%" y="-20%" width="140%" height="140%">
       <feGaussianBlur stdDeviation="1.8" result="blur"/>
-      <feMerge>
-        <feMergeNode in="blur"/>
-        <feMergeNode in="SourceGraphic"/>
-      </feMerge>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
     </filter>
-    <!-- gradient for the river sweep -->
-    <linearGradient id="river-grad" x1="0" y1="0" x2="1" y2="0">
-      <stop offset="0%"   stop-color="#00e5ff" stop-opacity="0.15"/>
-      <stop offset="45%"  stop-color="#00e5ff" stop-opacity="1"/>
-      <stop offset="100%" stop-color="#00e5ff" stop-opacity="0.15"/>
+    <!-- icon glows (512-unit space, scaled down with the mark) -->
+    <filter id="nr-glow-cyan" x="-35%" y="-35%" width="170%" height="170%">
+      <feGaussianBlur stdDeviation="7" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="nr-glow-amber" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur stdDeviation="5" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <linearGradient id="nr-river" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%"   stop-color="#00e5ff" stop-opacity="0.08"/>
+      <stop offset="46%"  stop-color="#00e5ff" stop-opacity="1"/>
+      <stop offset="100%" stop-color="#00e5ff" stop-opacity="0.08"/>
     </linearGradient>
-    <!-- spade silhouette clipped out of the moon -->
-    <mask id="moon-mask">
-      <rect x="0" y="0" width="128" height="128" fill="white"/>
-      <!-- spade cut-out: classic pip silhouette, scaled down -->
-      <path d="M 58 46 C 58 38, 50 35, 45 42 C 40 49, 44 56, 50 58 L 52 64 L 64 64 L 66 58 C 72 56, 76 49, 71 42 C 66 35, 58 38, 58 46 Z"
-            transform="translate(-2 -2)" fill="black"/>
+    <!-- crescent = disc minus an offset disc; the bite holds the spade -->
+    <mask id="nr-moon">
+      <circle cx="250" cy="192" r="124" fill="#fff"/>
+      <circle cx="304" cy="192" r="104" fill="#000"/>
     </mask>
   </defs>
 
-  <!-- ICON block (0..128) -->
-  <g transform="translate(8 8)">
-    <!-- Crescent moon: cyan neon outline, spade cut out -->
-    <g filter="url(#glow-cyan)">
-      <!-- outer ring of crescent: full disc then inner eclipse -->
-      <g mask="url(#moon-mask)">
-        <!-- full disc -->
-        <circle cx="58" cy="48" r="28"
-                fill="none" stroke="#00e5ff" stroke-width="3"/>
-        <!-- inner "eclipse" arc that carves the crescent -->
-        <circle cx="68" cy="44" r="24" fill="#0a0a0e"/>
-      </g>
+  <!-- ICON block (0..128): the 512 mark at 0.29, no background plate -->
+  <g transform="translate(-18.7 -17.7) scale(0.29)">
+    <g filter="url(#nr-glow-cyan)">
+      <rect width="512" height="512" fill="#00e5ff" mask="url(#nr-moon)"/>
     </g>
-
-    <!-- River sweep: two curving strokes under the moon -->
-    <g filter="url(#glow-cyan)">
-      <path d="M 4 94 C 28 82, 52 106, 76 94 S 112 82, 116 94"
-            fill="none" stroke="url(#river-grad)" stroke-width="3"
-            stroke-linecap="round"/>
-      <path d="M 4 104 C 28 94, 52 116, 76 104 S 112 94, 116 104"
-            fill="none" stroke="url(#river-grad)" stroke-width="2"
-            stroke-linecap="round" opacity="0.7"/>
+    <g filter="url(#nr-glow-amber)" transform="translate(318 192)">
+      <path d="M 0 -50 C 20 -22, 48 -10, 48 12 C 48 32, 30 42, 15 35 C 12 34, 10 33, 8 31
+               C 9 40, 13 48, 20 54 L -20 54 C -13 48, -9 40, -8 31 C -10 33, -12 34, -15 35
+               C -30 42, -48 32, -48 12 C -48 -10, -20 -22, 0 -50 Z" fill="#ffab00"/>
     </g>
-
-    <!-- small amber reflection dots on the river (poker-chip echo) -->
-    <g filter="url(#glow-amber)">
-      <circle cx="34" cy="98"  r="1.6" fill="#ffab00"/>
-      <circle cx="60" cy="102" r="1.6" fill="#ffab00"/>
-      <circle cx="88" cy="98"  r="1.6" fill="#ffab00"/>
+    <g filter="url(#nr-glow-cyan)">
+      <path d="M 68 412 C 156 376, 234 446, 302 412 S 420 376, 446 412"
+            fill="none" stroke="url(#nr-river)" stroke-width="16" stroke-linecap="round"/>
+    </g>
+    <g filter="url(#nr-glow-amber)">
+      <circle cx="182" cy="424" r="7" fill="#ffab00"/>
+      <circle cx="326" cy="424" r="7" fill="#ffab00"/>
     </g>
   </g>
 
