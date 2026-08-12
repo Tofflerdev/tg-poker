@@ -2,6 +2,8 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import {
   DEFAULT_DEPOSIT_FEE_BPS,
   depositFeeChips,
+  describeDepositInvoice,
+  formatFeePercent,
   getDepositFeeBps,
   getDepositFeeInfo,
   netDepositChips,
@@ -76,6 +78,30 @@ describe('deposit fee', () => {
     };
     const info = await refreshFeeFromHistory(client as any);
     expect(info).toMatchObject({ bps: 400, source: 'observed' });
+  });
+
+  /**
+   * Regression: the 2026-08-12 mainnet smoke minted an invoice reading
+   * "Deposit 2000 chips" and credited 1940. The invoice text is the last thing a
+   * player reads before paying, so it must quote what the deposit screen quotes.
+   */
+  it('describes an invoice in NET chips, never the gross amount', () => {
+    expect(describeDepositInvoice('Deposit', 2000)).toBe(
+      'Deposit $20.00 → 1,940 chips (after 3% Crypto Pay fee)',
+    );
+    expect(describeDepositInvoice('Bankroll deposit', 2000)).toContain('1,940 chips');
+  });
+
+  it('follows the observed rate into the invoice text', () => {
+    observeDepositFee(10_000, 400); // 4%
+    expect(describeDepositInvoice('Deposit', 2000)).toBe(
+      'Deposit $20.00 → 1,920 chips (after 4% Crypto Pay fee)',
+    );
+  });
+
+  it('formats the rate the way the client does', () => {
+    expect(formatFeePercent(300)).toBe('3%');
+    expect(formatFeePercent(275)).toBe('2.75%');
   });
 
   it('survives an API failure by keeping the default rate', async () => {

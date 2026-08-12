@@ -235,7 +235,7 @@ export const Withdraw: React.FC<WithdrawProps> = ({ onBack, socket }) => {
               Request submitted — {status.chips.toLocaleString()} chips held
             </p>
             <p style={{ margin: '6px 0 0', color: '#9fb2b8', fontSize: 13 }}>
-              It is reviewed manually. The USDT arrives in your Telegram wallet once approved.
+              It is reviewed manually. The USDT arrives in your CryptoBot balance once approved.
             </p>
           </Card>
         )}
@@ -251,7 +251,7 @@ export const Withdraw: React.FC<WithdrawProps> = ({ onBack, socket }) => {
               }}
             >
               {status.status === 'completed'
-                ? `Paid out — ${usd(status.chips)} sent to your Telegram wallet.`
+                ? `Paid out — ${usd(status.chips)} sent to your CryptoBot balance.`
                 : `Returned — ${status.chips.toLocaleString()} chips are back on your balance.`}
             </p>
           </Card>

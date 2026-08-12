@@ -18,7 +18,7 @@ import { SessionRecorder } from "./bot/SessionRecorder.js";
 import { UserRepository } from "./db/UserRepository.js";
 import { getCryptoPay, type CryptoPayWebhookUpdate } from "./payments/cryptoPay.js";
 import { MIN_DEPOSIT_CHIPS, chipsToUsdt } from "./payments/peg.js";
-import { getDepositFeeInfo, refreshFeeFromHistory } from "./payments/depositFee.js";
+import { describeDepositInvoice, getDepositFeeInfo, refreshFeeFromHistory } from "./payments/depositFee.js";
 import {
   creditPaidInvoice,
   startDepositReconciliation,
@@ -848,7 +848,7 @@ io.on("connection", (socket) => {
       const invoice = await cryptoPay.createInvoice({
         amountUsdt: chipsToUsdt(amountChips),
         payload: String(user.telegramId),
-        description: `Deposit ${amountChips} chips`,
+        description: describeDepositInvoice('Deposit', amountChips),
       });
       // Record the pending deposit keyed by invoiceId (@unique → webhook idempotency).
       await UserRepository.createPendingDeposit(user.telegramId, amountChips, invoice.invoiceId);

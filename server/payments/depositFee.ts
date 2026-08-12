@@ -21,6 +21,7 @@
  * webhook in index.ts) — this module never touches money.
  */
 import type { CryptoPayClient } from './cryptoPay.js';
+import { chipsToUsdt } from './peg.js';
 
 /** Observed rate on testnet + mainnet as of 2026-07-25: 3%. */
 export const DEFAULT_DEPOSIT_FEE_BPS = 300;
@@ -81,6 +82,31 @@ export function depositFeeChips(grossChips: number, bps: number = getDepositFeeB
 /** Chips that will actually reach the balance for a `grossChips` invoice. */
 export function netDepositChips(grossChips: number, bps: number = getDepositFeeBps()): number {
   return Math.max(0, Math.trunc(grossChips) - depositFeeChips(grossChips, bps));
+}
+
+/** "3%" / "2.75%" — mirrors client/src/utils/depositFee.ts. */
+export function formatFeePercent(bps: number = getDepositFeeBps()): string {
+  const pct = bps / 100;
+  return `${Number.isInteger(pct) ? pct : pct.toFixed(2)}%`;
+}
+
+/**
+ * The description line on a Crypto Pay invoice — the last thing a player reads
+ * before paying, and the first thing they compare against their new balance.
+ *
+ * Quotes NET for the same reason the deposit screen does. The 2026-08-12 smoke
+ * minted "Deposit 2000 chips" and credited 1940: both call sites built the text
+ * themselves from the gross amount, so the fix is one helper rather than two
+ * corrected strings. Anything that needs this sentence should call this.
+ *
+ * The rate can change between minting and payment, so the text names the fee it
+ * assumed instead of presenting the number as a promise. The ledger is
+ * unaffected either way — it credits what actually arrived.
+ */
+export function describeDepositInvoice(prefix: string, grossChips: number): string {
+  const bps = getDepositFeeBps();
+  const net = netDepositChips(grossChips, bps);
+  return `${prefix} $${chipsToUsdt(grossChips)} → ${net.toLocaleString('en-US')} chips (after ${formatFeePercent(bps)} Crypto Pay fee)`;
 }
 
 /**
