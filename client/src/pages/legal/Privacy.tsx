@@ -115,6 +115,12 @@ export const Privacy: React.FC<LegalPageProps> = ({ onBack }) => {
             inside Crypto Pay, and we only ever see that a payment of a given amount
             succeeded. We do not ask for identity documents, we do not collect your
             phone number or email address, and we do not track your location.
+            <br />
+            <br />
+            One exception, and it is a narrow one: if we suspect fraud, or that an
+            account is not being used by the person who owns it, we may ask you to
+            confirm control of that Telegram account — never a passport, an address,
+            or a photo of you.
           </Section>
 
           <Section title="3. Table Chat">

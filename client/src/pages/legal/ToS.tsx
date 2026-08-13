@@ -129,6 +129,12 @@ export const ToS: React.FC<LegalPageProps> = ({ onBack }) => {
             not a deposit in the banking sense, is not an investment, earns nothing,
             and is not protected by any deposit-guarantee scheme. Play only with
             money you can afford to lose — see Responsible Gaming.
+            <br />
+            <br />
+            NightRiver is a poker room, not a currency service. We do not buy, sell,
+            or exchange digital assets for you, and we do not offer wallets or
+            custody as a service. Chips exist to be played at our tables; deposits
+            and withdrawals move USDT for that purpose and no other.
           </Section>
 
           <Section title="3. Eligibility">
@@ -199,6 +205,7 @@ export const ToS: React.FC<LegalPageProps> = ({ onBack }) => {
                 'Every payout is reviewed by a person before it is sent. This is normally done within 24 hours.',
                 'On approval the USDT is sent through Crypto Pay to the same Telegram account that requested it. Payouts to anyone else, or to an external address, are not possible — by design, not by policy.',
                 'If a request is rejected, the full amount is returned to your balance. We charge no fee for a withdrawal, whether it is approved or rejected.',
+                'If we suspect fraud, or that an account is not being used by the person who owns it, we may ask you to confirm control of that Telegram account before a payout is sent — never a passport, an address, or a photo of you.',
               ]}
             />
             We may hold a payout while we look into a request — for example when the
@@ -229,6 +236,11 @@ export const ToS: React.FC<LegalPageProps> = ({ onBack }) => {
                 'Harassing other players in chat.',
               ]}
             />
+            We review play to find this: hands, ledger entries, and links between
+            accounts are examined both automatically and by hand. Playing here means
+            accepting that review.
+            <br />
+            <br />
             Where we find that any of these happened, we may end your sessions, hold
             payouts while we investigate, suspend the account, and withhold a balance
             that we can show was obtained this way. A balance that was not obtained
@@ -277,7 +289,19 @@ export const ToS: React.FC<LegalPageProps> = ({ onBack }) => {
             playing. Smaller corrections take effect when published.
           </Section>
 
-          <Section title="15. Contact">
+          <Section title="15. Governing Law and Disputes">
+            These Terms are governed by the law of the jurisdiction in which
+            NightRiver operates.
+            <br />
+            <br />
+            If something goes wrong, write to support first — most things are settled
+            there, and we will answer. If it cannot be settled that way, both sides
+            will attempt mediation in good faith before going further. A dispute that
+            mediation does not resolve is subject to the courts of the place where
+            NightRiver operates.
+          </Section>
+
+          <Section title="16. Contact">
             Questions, complaints, and account requests go to NightRiver support via
             the Telegram bot that launched this Mini App. Tell us your Telegram
             account and, for anything about a payment, the amount and approximate
